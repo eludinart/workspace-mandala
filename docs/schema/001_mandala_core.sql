@@ -28,5 +28,4 @@ INSERT IGNORE INTO mdl_mandala_communities (slug, name, tagline, accent_color, l
   ('shambhala', 'Shambhala', 'Lieu cœur — Inde', '#d97706', '🕉️'),
   ('sivana', 'Sivanà', 'Communauté Sivanà', '#7c3aed', '🌸');
 
--- Tables users WordPress-style : créées par db-auth au premier register si absentes
--- Voir Fleur db-auth pour mdl_users, mdl_usermeta, mdl_mandala_app_roles
+-- Tables auth : voir 002_mandala_auth.sql (ou ensureAuthTables() au runtime)
