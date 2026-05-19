@@ -20,8 +20,18 @@ cd c:\workspace-mandala
 
 ## GitHub
 
-- **Pas encore en ligne** — créer : https://github.com/new → `eludinart/workspace-mandala` (privé)
-- Puis : `git remote add origin https://github.com/eludinart/workspace-mandala.git` · `git push -u origin main`
+```powershell
+gh auth login
+.\scripts\setup-github.ps1
+```
+
+→ dépôt **https://github.com/eludinart/Mandala** (privé). Guide : [docs/GUIDE-DEV-ET-DEPLOI.md](docs/GUIDE-DEV-ET-DEPLOI.md) §6.
+
+## Coolify (prod)
+
+Guide : [docs/COOLIFY-MANDALA-SETUP.md](docs/COOLIFY-MANDALA-SETUP.md)
+
+Variables prod prêtes sur le VPS : `/root/mandala-coolify-production.env` (SSH root, copier dans l’UI Coolify).
 
 ## Secrets (hors Git)
 

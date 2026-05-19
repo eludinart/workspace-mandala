@@ -163,28 +163,23 @@ Script local : `scripts/setup-mariadb-tunnel-mandala.sh` (à exécuter sur le VP
 - Le dossier `c:\workspace-mandala` est un dépôt Git local.
 - **Aucun dépôt GitHub Mandala** n'existe encore sous `eludinart` (à créer).
 
-### Créer le dépôt sur GitHub
-
-1. Aller sur https://github.com/new
-2. **Owner** : `eludinart`
-3. **Repository name** : `workspace-mandala` (ou `mandala`)
-4. **Private** recommandé
-5. **Ne pas** cocher « Add README » (le code existe déjà en local)
-6. Créer le dépôt
-
-### Lier et pousser (première fois)
+### Créer le dépôt et pousser (automatique)
 
 ```powershell
-cd c:\workspace-mandala
+# Une fois : installer GitHub CLI (winget install GitHub.cli) puis :
+gh auth login
 
-git remote add origin https://github.com/eludinart/workspace-mandala.git
-git branch -M main
-git push -u origin main
+cd c:\workspace-mandala
+.\scripts\setup-github.ps1
 ```
 
-*(Adapter l’URL si vous avez choisi un autre nom de repo.)*
+Crée le dépôt privé **`eludinart/Mandala`** et pousse `main`.
 
-Authentification : PAT GitHub ou Git Credential Manager (même méthode que pour `fleur-amours`).
+### Manuel (alternative)
+
+1. https://github.com/new → `eludinart` / **Mandala** / Private / sans README
+2. `git remote add origin https://github.com/eludinart/Mandala.git`
+3. `git push -u origin main`
 
 ---
 
