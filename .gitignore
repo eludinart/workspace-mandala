@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+.env.local
+sync-config.env
+docker-compose.env
+nogit/
+*.log
+.DS_Store

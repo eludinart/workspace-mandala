@@ -1,0 +1,509 @@
+/**
+ * Opérations auth/account sur MariaDB (tables WordPress).
+ */
+import type { RowDataPacket } from 'mysql2'
+import { getPool, table } from './db'
+import { verifyWordPressPassword } from './auth-wordpress'
+import { hash } from 'bcryptjs'
+
+export type UserRecord = {
+  id: number
+  email: string
+  login: string
+  name: string
+  wp_role: string
+  app_role: string
+  registered: string
+  pseudo?: string | null
+  bio?: string | null
+  avatar?: string | null
+  avatar_emoji?: string | null
+  profile_public?: boolean
+  points_de_rosee?: number
+  avatar_graine_id?: string | null
+  coach_headline?: string | null
+  coach_short_bio?: string | null
+  coach_long_bio?: string | null
+  coach_specialties?: string[]
+  coach_languages?: string[]
+  coach_response_time_label?: string | null
+  coach_response_time_hours?: number | null
+  coach_is_listed?: boolean
+  coach_years_experience?: number | null
+  coach_reviews_label?: string | null
+  coach_verified?: boolean
+  coach_request_status?: string | null
+  coach_request_at?: string | null
+  coach_request_message?: string | null
+}
+
+async function getWpRole(userId: number): Promise<string> {
+  const pool = getPool()
+  const prefix = process.env.DB_PREFIX || 'wp_'
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${prefix}usermeta WHERE user_id = ? AND meta_key = ?`,
+    [userId, `${prefix}capabilities`]
+  )
+  const val = rows[0]?.meta_value
+  if (!val) return 'subscriber'
+  try {
+    const caps = parseWpSerializedCaps(val) as Record<string, number>
+    if (!caps || typeof caps !== 'object') return 'subscriber'
+    const priority = ['administrator', 'editor', 'author', 'contributor', 'subscriber']
+    for (const r of priority) {
+      if (caps[r]) return r
+    }
+    return (Object.keys(caps)[0] as string) || 'subscriber'
+  } catch {
+    return 'subscriber'
+  }
+}
+
+async function getAppRole(userId: number, wpRole: string): Promise<string> {
+  const pool = getPool()
+  const prefix = process.env.DB_PREFIX || 'wp_'
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT app_role FROM ${prefix}mandala_app_roles WHERE user_id = ?`,
+      [userId]
+    )
+    const role = rows[0]?.app_role
+    if (role) return String(role)
+  } catch {
+    // Table might not exist
+  }
+  return wpRole === 'administrator' ? 'admin' : 'user'
+}
+
+/** Parse WordPress serialized capabilities a:1:{s:10:"administrator";i:1;} */
+function parseWpSerializedCaps(s: string): Record<string, number> | null {
+  if (!s || typeof s !== 'string') return null
+  const out: Record<string, number> = {}
+  const re = /s:(\d+):"([^"]+)";i:(\d+);/g
+  let m
+  while ((m = re.exec(s)) !== null) {
+    out[m[2]] = parseInt(m[3], 10)
+  }
+  return Object.keys(out).length ? out : null
+}
+
+async function appendProfileMeta(userId: number, out: Record<string, unknown>): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  const keys = [
+    'mdl_pseudo',
+    'mdl_bio',
+    'mdl_avatar',
+    'mdl_avatar_emoji',
+    'mdl_profile_public',
+    'mdl_points_de_rosee',
+    'mdl_avatar_graine_id',
+    'mdl_coach_headline',
+    'mdl_coach_short_bio',
+    'mdl_coach_long_bio',
+    'mdl_coach_specialties',
+    'mdl_coach_languages',
+    'mdl_coach_response_time_label',
+    'mdl_coach_response_time_hours',
+    'mdl_coach_is_listed',
+    'mdl_coach_years_experience',
+    'mdl_coach_reviews_label',
+    'mdl_coach_verified',
+    'mdl_coach_request_status',
+    'mdl_coach_request_at',
+    'mdl_coach_request_message',
+  ]
+  const placeholders = keys.map(() => '?').join(', ')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_key, meta_value FROM ${tbl} WHERE user_id = ? AND meta_key IN (${placeholders})`,
+    [userId, ...keys]
+  )
+  const meta: Record<string, string> = {}
+  for (const r of rows) {
+    meta[r.meta_key] = r.meta_value
+  }
+  ;(out as Record<string, unknown>).pseudo = meta.mdl_pseudo || null
+  ;(out as Record<string, unknown>).bio = meta.mdl_bio || null
+  ;(out as Record<string, unknown>).avatar = meta.mdl_avatar || null
+  ;(out as Record<string, unknown>).avatar_emoji = meta.mdl_avatar_emoji || null
+  ;(out as Record<string, unknown>).profile_public = (meta.mdl_profile_public ?? '') === '1'
+  ;(out as Record<string, unknown>).points_de_rosee = parseInt(meta.mdl_points_de_rosee ?? '5', 10)
+  ;(out as Record<string, unknown>).avatar_graine_id = meta.mdl_avatar_graine_id || null
+  ;(out as Record<string, unknown>).coach_headline = meta.mdl_coach_headline || null
+  ;(out as Record<string, unknown>).coach_short_bio = meta.mdl_coach_short_bio || null
+  ;(out as Record<string, unknown>).coach_long_bio = meta.mdl_coach_long_bio || null
+  try {
+    ;(out as Record<string, unknown>).coach_specialties = meta.mdl_coach_specialties
+      ? JSON.parse(meta.mdl_coach_specialties)
+      : []
+  } catch {
+    ;(out as Record<string, unknown>).coach_specialties = []
+  }
+  try {
+    ;(out as Record<string, unknown>).coach_languages = meta.mdl_coach_languages
+      ? JSON.parse(meta.mdl_coach_languages)
+      : []
+  } catch {
+    ;(out as Record<string, unknown>).coach_languages = []
+  }
+  ;(out as Record<string, unknown>).coach_response_time_label = meta.mdl_coach_response_time_label || null
+  ;(out as Record<string, unknown>).coach_response_time_hours = meta.mdl_coach_response_time_hours
+    ? parseInt(meta.mdl_coach_response_time_hours, 10)
+    : null
+  ;(out as Record<string, unknown>).coach_is_listed = (meta.mdl_coach_is_listed ?? '1') !== '0'
+  ;(out as Record<string, unknown>).coach_years_experience = meta.mdl_coach_years_experience
+    ? parseInt(meta.mdl_coach_years_experience, 10)
+    : null
+  ;(out as Record<string, unknown>).coach_reviews_label = meta.mdl_coach_reviews_label || null
+  ;(out as Record<string, unknown>).coach_verified = (meta.mdl_coach_verified ?? '0') === '1'
+  ;(out as Record<string, unknown>).coach_request_status = meta.mdl_coach_request_status || null
+  ;(out as Record<string, unknown>).coach_request_at = meta.mdl_coach_request_at || null
+  ;(out as Record<string, unknown>).coach_request_message = meta.mdl_coach_request_message || null
+}
+
+export async function authLogin(login: string, password: string): Promise<UserRecord> {
+  const pool = getPool()
+  const tbl = table('users')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT ID, user_login, user_email, display_name, user_pass, user_registered, user_status
+     FROM ${tbl} WHERE user_email = ? OR user_login = ? LIMIT 1`,
+    [login, login]
+  )
+  const user = rows[0]
+  if (!user) throw new Error('Identifiant ou mot de passe incorrect')
+
+  const ok = await verifyWordPressPassword(password, user.user_pass || '')
+  if (!ok) throw new Error('Identifiant ou mot de passe incorrect')
+
+  const userId = Number(user.ID)
+  await updateLastLogin(userId)
+
+  const wpRole = await getWpRole(userId)
+  const appRole = await getAppRole(userId, wpRole)
+  const out: UserRecord = {
+    id: userId,
+    email: user.user_email || '',
+    login: user.user_login || '',
+    name: user.display_name || '',
+    wp_role: wpRole,
+    app_role: appRole,
+    registered: user.user_registered || '',
+  }
+  await appendProfileMeta(userId, out as unknown as Record<string, unknown>)
+  return out
+}
+
+async function updateLastLogin(userId: number): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT umeta_id FROM ${tbl} WHERE user_id = ? AND meta_key = ?`,
+    [userId, 'mdl_last_login']
+  )
+  if (existing.length > 0) {
+    await pool.execute(
+      `UPDATE ${tbl} SET meta_value = ? WHERE user_id = ? AND meta_key = ?`,
+      [now, userId, 'mdl_last_login']
+    )
+  } else {
+    await pool.execute(
+      `INSERT INTO ${tbl} (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+      [userId, 'mdl_last_login', now]
+    )
+  }
+}
+
+export async function authMe(userId: number): Promise<UserRecord> {
+  const pool = getPool()
+  const tbl = table('users')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT ID, user_login, user_email, display_name, user_registered FROM ${tbl} WHERE ID = ?`,
+    [userId]
+  )
+  const user = rows[0]
+  if (!user) throw new Error('Utilisateur introuvable')
+
+  const uid = Number(user.ID)
+  const wpRole = await getWpRole(uid)
+  const appRole = await getAppRole(uid, wpRole)
+  const out: UserRecord = {
+    id: uid,
+    email: user.user_email || '',
+    login: user.user_login || '',
+    name: user.display_name || '',
+    wp_role: wpRole,
+    app_role: appRole,
+    registered: user.user_registered || '',
+  }
+  await appendProfileMeta(uid, out as unknown as Record<string, unknown>)
+  return out
+}
+
+function wpRoleFromCapsMeta(capsSerialized: string | null): string {
+  if (!capsSerialized || typeof capsSerialized !== 'string') return 'subscriber'
+  const re = /s:\d+:"([^"]+)";i:\d+;/g
+  const roles: string[] = []
+  let m
+  while ((m = re.exec(capsSerialized)) !== null) roles.push(m[1])
+  const priority = ['administrator', 'editor', 'author', 'contributor', 'subscriber']
+  for (const r of priority) {
+    if (roles.includes(r)) return r
+  }
+  return roles[0] || 'subscriber'
+}
+
+function effectiveAppRoleFromCapsRow(appRoleRow: string | null | undefined, capsSerialized: string | null): string {
+  const ar = appRoleRow ? String(appRoleRow).trim() : ''
+  if (ar) return ar
+  const wp = wpRoleFromCapsMeta(capsSerialized)
+  return wp === 'administrator' ? 'admin' : 'user'
+}
+
+/** IDs avec rôle effectif admin (mandala_app_roles ou WP administrator), pour classifier les messages coach. */
+export async function batchUserIdsWithAdminAccess(userIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(userIds.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0))]
+  if (ids.length === 0) return new Set()
+  const pool = getPool()
+  const prefix = process.env.DB_PREFIX || 'wp_'
+  const usersTbl = table('users')
+  const rolesTbl = table('mandala_app_roles')
+  const metaTbl = table('usermeta')
+  const capKey = `${prefix}capabilities`
+  const placeholders = ids.map(() => '?').join(', ')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT u.ID as id, r.app_role as app_role,
+            (SELECT meta_value FROM ${metaTbl} WHERE user_id = u.ID AND meta_key = ? LIMIT 1) as caps
+     FROM ${usersTbl} u
+     LEFT JOIN ${rolesTbl} r ON r.user_id = u.ID
+     WHERE u.ID IN (${placeholders})`,
+    [capKey, ...ids]
+  )
+  const admins = new Set<number>()
+  for (const r of rows) {
+    const eff = effectiveAppRoleFromCapsRow(r.app_role as string | null, r.caps as string | null)
+    if (eff === 'admin' || eff === 'administrator') admins.add(Number(r.id))
+  }
+  return admins
+}
+
+export async function authRegister(
+  email: string,
+  password: string,
+  name: string
+): Promise<UserRecord> {
+  const pool = getPool()
+  const tbl = table('users')
+  const prefix = process.env.DB_PREFIX || 'wp_'
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Adresse email invalide')
+  }
+  if (password.length < 6) {
+    throw new Error('Le mot de passe doit contenir au moins 6 caractères')
+  }
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT 1 FROM ${tbl} WHERE user_email = ? LIMIT 1`,
+    [email]
+  )
+  if (existing.length > 0) throw new Error('Cet email est déjà utilisé')
+
+  const baseLogin = (email.split('@')[0] || 'user').toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'user'
+  let userLogin = baseLogin
+  let n = 0
+  while (true) {
+    const [dup] = await pool.execute<RowDataPacket[]>(
+      `SELECT 1 FROM ${tbl} WHERE user_login = ? OR user_email = ? LIMIT 1`,
+      [userLogin, email]
+    )
+    if (dup.length === 0) break
+    userLogin = baseLogin + ++n
+  }
+
+  const userPass = await hash(password, 10)
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  const nicename = (name || userLogin).replace(/[^a-z0-9\s\-_]/gi, '').slice(0, 50) || userLogin
+  const displayName = name || userLogin
+
+  await pool.execute(
+    `INSERT INTO ${tbl} (user_login, user_pass, user_nicename, user_email, user_registered, user_status, display_name)
+     VALUES (?, ?, ?, ?, ?, 0, ?)`,
+    [userLogin, userPass, nicename, email, now, displayName]
+  )
+  const [ins] = await pool.execute<RowDataPacket[]>('SELECT LAST_INSERT_ID() as id')
+  const userId = Number(ins[0]?.id)
+
+  // Première connexion: l'inscription connecte immédiatement, donc on fixe aussi le last_login.
+  await updateLastLogin(userId)
+
+  await pool.execute(
+    `INSERT INTO ${prefix}usermeta (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+    [userId, `${prefix}capabilities`, `a:1:{s:10:"subscriber";i:1;}`]
+  )
+  await pool.execute(
+    `INSERT INTO ${prefix}usermeta (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+    [userId, `${prefix}user_level`, '0']
+  )
+  // Par défaut, tout nouvel utilisateur est visible dans le Grand Jardin.
+  // (Comportement inversable dans "Mon compte".)
+  await pool.execute(
+    `INSERT INTO ${prefix}usermeta (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+    [userId, 'mdl_profile_public', '1']
+  )
+
+  const wpRole = await getWpRole(userId)
+  const appRole = await getAppRole(userId, wpRole)
+  const out: UserRecord = {
+    id: userId,
+    email,
+    login: userLogin,
+    name: displayName,
+    wp_role: wpRole,
+    app_role: appRole,
+    registered: now,
+  }
+  await appendProfileMeta(userId, out as unknown as Record<string, unknown>)
+  return out
+}
+
+async function upsertUsermeta(userId: number, metaKey: string, metaValue: string): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT umeta_id FROM ${tbl} WHERE user_id = ? AND meta_key = ?`,
+    [userId, metaKey]
+  )
+  if (existing.length > 0) {
+    await pool.execute(
+      `UPDATE ${tbl} SET meta_value = ? WHERE user_id = ? AND meta_key = ?`,
+      [metaValue, userId, metaKey]
+    )
+  } else {
+    await pool.execute(
+      `INSERT INTO ${tbl} (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+      [userId, metaKey, metaValue]
+    )
+  }
+}
+
+async function forceUsermeta(userId: number, metaKey: string, metaValue: string): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  await pool.execute(`DELETE FROM ${tbl} WHERE user_id = ? AND meta_key = ?`, [userId, metaKey])
+  await pool.execute(
+    `INSERT INTO ${tbl} (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
+    [userId, metaKey, metaValue]
+  )
+}
+
+export async function updateProfile(
+  userId: number,
+  body: Record<string, unknown>
+): Promise<UserRecord> {
+  const pool = getPool()
+  const tbl = table('users')
+  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+    const name = String(body.name ?? '').trim()
+    await pool.execute(`UPDATE ${tbl} SET display_name = ? WHERE ID = ?`, [name, userId])
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'pseudo')) {
+    const pseudo = String(body.pseudo ?? '')
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .trim()
+    if (pseudo && !/^[a-z0-9_-]{3,30}$/.test(pseudo)) {
+      throw new Error('Pseudo invalide : 3 à 30 caractères, lettres, chiffres, tirets et underscores uniquement')
+    }
+    if (pseudo) {
+      const [dup] = await pool.execute<RowDataPacket[]>(
+        `SELECT user_id FROM ${table('usermeta')} WHERE meta_key = ? AND meta_value = ? AND user_id != ?`,
+        ['mdl_pseudo', pseudo, userId]
+      )
+      if (dup.length > 0) throw new Error('Ce pseudo est déjà pris')
+    }
+    await upsertUsermeta(userId, 'mdl_pseudo', pseudo)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'bio')) {
+    const bio = String(body.bio ?? '').trim().slice(0, 500)
+    await upsertUsermeta(userId, 'mdl_bio', bio)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'avatar')) {
+    const avatar = body.avatar
+    if (avatar === null || avatar === '') {
+      await upsertUsermeta(userId, 'mdl_avatar', '')
+    } else if (typeof avatar === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/i.test(avatar)) {
+      const raw = Buffer.from(avatar.replace(/^data:image\/\w+;base64,/, ''), 'base64')
+      if (raw.length <= 100000) {
+        await upsertUsermeta(userId, 'mdl_avatar', avatar)
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'avatar_emoji')) {
+    const emoji = String(body.avatar_emoji ?? '').trim().slice(0, 8)
+    await upsertUsermeta(userId, 'mdl_avatar_emoji', emoji)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'profile_public')) {
+    const pub = body.profile_public ? '1' : '0'
+    await forceUsermeta(userId, 'mdl_profile_public', pub)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'avatar_graine_id')) {
+    const gid = String(body.avatar_graine_id ?? '').trim().slice(0, 50)
+    await upsertUsermeta(userId, 'mdl_avatar_graine_id', gid)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_headline')) {
+    const v = String(body.coach_headline ?? '').trim().slice(0, 120)
+    await upsertUsermeta(userId, 'mdl_coach_headline', v)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_short_bio')) {
+    const v = String(body.coach_short_bio ?? '').trim().slice(0, 280)
+    await upsertUsermeta(userId, 'mdl_coach_short_bio', v)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_long_bio')) {
+    const v = String(body.coach_long_bio ?? '').trim().slice(0, 2500)
+    await upsertUsermeta(userId, 'mdl_coach_long_bio', v)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_specialties')) {
+    const src = Array.isArray(body.coach_specialties) ? body.coach_specialties : []
+    const values = src
+      .map((x) => String(x ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 12)
+      .map((x) => x.slice(0, 80))
+    await upsertUsermeta(userId, 'mdl_coach_specialties', JSON.stringify(values))
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_languages')) {
+    const src = Array.isArray(body.coach_languages) ? body.coach_languages : []
+    const values = src
+      .map((x) => String(x ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 8)
+      .map((x) => x.slice(0, 40))
+    await upsertUsermeta(userId, 'mdl_coach_languages', JSON.stringify(values))
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_response_time_label')) {
+    const v = String(body.coach_response_time_label ?? '').trim().slice(0, 60)
+    await upsertUsermeta(userId, 'mdl_coach_response_time_label', v)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_response_time_hours')) {
+    const n = parseInt(String(body.coach_response_time_hours ?? ''), 10)
+    const safe = !isNaN(n) && n >= 1 && n <= 168 ? n : 24
+    await upsertUsermeta(userId, 'mdl_coach_response_time_hours', String(safe))
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_is_listed')) {
+    await upsertUsermeta(userId, 'mdl_coach_is_listed', body.coach_is_listed ? '1' : '0')
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_years_experience')) {
+    const n = parseInt(String(body.coach_years_experience ?? ''), 10)
+    const safe = !isNaN(n) && n >= 0 && n <= 60 ? n : 0
+    await upsertUsermeta(userId, 'mdl_coach_years_experience', String(safe))
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_reviews_label')) {
+    const v = String(body.coach_reviews_label ?? '').trim().slice(0, 120)
+    await upsertUsermeta(userId, 'mdl_coach_reviews_label', v)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'coach_verified')) {
+    await upsertUsermeta(userId, 'mdl_coach_verified', body.coach_verified ? '1' : '0')
+  }
+  return authMe(userId)
+}
