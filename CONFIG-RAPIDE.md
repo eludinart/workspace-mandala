@@ -25,7 +25,7 @@ gh auth login
 .\scripts\setup-github.ps1
 ```
 
-→ dépôt **https://github.com/eludinart/Mandala** (privé). Guide : [docs/GUIDE-DEV-ET-DEPLOI.md](docs/GUIDE-DEV-ET-DEPLOI.md) §6.
+→ dépôt **https://github.com/eludinart/workspace-mandala** (privé). Guide : [docs/GUIDE-DEV-ET-DEPLOI.md](docs/GUIDE-DEV-ET-DEPLOI.md) §6.
 
 ## Coolify (prod)
 

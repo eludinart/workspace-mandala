@@ -11,7 +11,7 @@ Document de référence rapide pour travailler en local (Cursor) avec la **base 
 | | **Fleur d'Amour** | **Mandala** |
 |---|-------------------|-------------|
 | Dossier local | `c:\workspace` | `c:\workspace-mandala` |
-| GitHub (existant) | `eludinart/fleur-amours` | **À créer** → `eludinart/workspace-mandala` (recommandé) |
+| GitHub | `eludinart/fleur-amours` | **`eludinart/workspace-mandala`** |
 | Next.js dev | port **3001** | port **3002** |
 | Base Coolify | MariaDB Fleur | MariaDB **Mandala-db** |
 | Conteneur Docker DB | `t46uf7n66xkz0hwxp6pb23ax` (Fleur) | `p11nw75ijqbg4lfzmwbw2m3m` |
@@ -173,12 +173,12 @@ cd c:\workspace-mandala
 .\scripts\setup-github.ps1
 ```
 
-Crée le dépôt privé **`eludinart/Mandala`** et pousse `main`.
+Crée le dépôt **`eludinart/workspace-mandala`** et pousse `main`.
 
 ### Manuel (alternative)
 
-1. https://github.com/new → `eludinart` / **Mandala** / Private / sans README
-2. `git remote add origin https://github.com/eludinart/Mandala.git`
+1. https://github.com/new → `eludinart` / **workspace-mandala** / Private / sans README
+2. `git remote add origin https://github.com/eludinart/workspace-mandala.git`
 3. `git push -u origin main`
 
 ---

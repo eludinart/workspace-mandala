@@ -14,11 +14,11 @@ if ($LASTEXITCODE -ne 0) {
   exit 1
 }
 
-$repo = "eludinart/Mandala"
+$repo = "eludinart/workspace-mandala"
 $exists = gh repo view $repo 2>$null
 if (-not $exists) {
   Write-Host "Création du dépôt privé $repo ..."
-  gh repo create Mandala --private --source . --remote origin --description "Mandala — plateforme multi-communautés (Next.js + MariaDB)"
+  gh repo create workspace-mandala --private --source . --remote origin --description "Mandala — plateforme multi-communautés (Next.js + MariaDB)"
 } else {
   Write-Host "Dépôt $repo existe déjà."
   git remote remove origin 2>$null

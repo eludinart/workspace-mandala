@@ -1,13 +1,13 @@
 # Coolify — déployer l’application Mandala
 
-À faire **après** le push GitHub (`eludinart/Mandala`).
+À faire **après** le push GitHub (`eludinart/workspace-mandala`).
 
 ## 1. Nouvelle application dans le projet Mandala-db
 
 1. Ouvrir **https://cp.eludein.art** (Coolify).
 2. Projet **Mandala-db** → environnement **production**.
 3. **+ New** → **Application** → **Public Repository** (ou GitHub App si configurée).
-4. URL Git : `https://github.com/eludinart/Mandala`
+4. URL Git : `https://github.com/eludinart/workspace-mandala`
 5. Branche : `main`
 6. **Build Pack** : `Dockerfile`
 7. **Dockerfile location** : `/Dockerfile.next`
