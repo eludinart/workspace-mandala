@@ -9,8 +9,8 @@
 3. **+ New** → **Application** → **Public Repository** (ou GitHub App si configurée).
 4. URL Git : `https://github.com/eludinart/workspace-mandala`
 5. Branche : `main`
-6. **Build Pack** : `Dockerfile`
-7. **Dockerfile location** : `/Dockerfile.next`
+6. **Build Pack** : `Dockerfile` (**obligatoire** — ne pas laisser Nixpacks)
+7. **Dockerfile location** : `/Dockerfile` (ou `/Dockerfile.next`)
 8. **Port** (exposes) : `3000`
 9. **Domaine** : `https://mandala.eludein.art` (ou sous-domaine de votre choix)
 10. Réseau : **coolify** (déjà le cas si même serveur que Fleur).

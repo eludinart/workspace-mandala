@@ -1,0 +1,17 @@
+# Coolify : préférer Build Pack « Dockerfile » (Dockerfile à la racine).
+# Si Nixpacks est forcé, ce fichier évite l’échec « suivant: introuvable » (locale FR + commande `next`).
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "npm-9_x"]
+
+[phases.install]
+cmds = ["cd next && npm ci"]
+
+[phases.build]
+cmds = [
+  "node scripts/check-invalid-jsx.mjs",
+  "cd next && node ./node_modules/next/dist/bin/next build",
+]
+
+[start]
+cmd = "cd next && node ./node_modules/next/dist/bin/next start -p ${PORT:-3000}"

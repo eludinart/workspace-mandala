@@ -1,3 +1,5 @@
+# Mandala — image de production (Coolify : Build Pack = Dockerfile, ce fichier à la racine).
+# Équivalent à Dockerfile.next — ne pas utiliser Nixpacks (conflit locale « next » → « suivant »).
 FROM node:22-slim AS next-build
 WORKDIR /app
 ARG NEXT_PUBLIC_APP_URL=http://localhost:3002

@@ -28,8 +28,8 @@ Vérifier sur GitHub que `main` contient le dernier commit.
 2. Si l’app n’existe pas : **+ New** → **Application**
    - Repo : `eludinart/workspace-mandala`
    - Branche : `main`
-   - Build pack : **Dockerfile**
-   - Dockerfile : `/Dockerfile.next`
+   - Build pack : **Dockerfile** (⚠️ **pas Nixpacks** — sinon erreur `suivant: introuvable`)
+   - Dockerfile : `/Dockerfile` ou `/Dockerfile.next` (même contenu)
    - Port : **3000**
    - Domaine : `https://mandala.eludein.art` (ou votre choix)
    - Réseau Docker : **coolify**
@@ -130,7 +130,8 @@ Coolify → Application → **Webhooks** → activer deploy sur push `main`.
 
 | Symptôme | Action |
 |----------|--------|
-| Build échoue | Supprimer cache Coolify, revérifier `Dockerfile.next` |
+| Build échoue | Build Pack = **Dockerfile**, pas Nixpacks ; logs doivent montrer `Dockerfile.next` ou `Dockerfile`, pas `nixpacks plan` |
+| `suivant: introuvable` | Nixpacks + locale FR : passer en **Dockerfile** et redeploy |
 | `db: disconnected` | `MARIADB_HOST` = hostname interne, réseau **coolify**, mot de passe OK |
 | 502 / app crash | Logs runtime Coolify ; `JWT_SECRET` défini en prod |
 | Ancienne version | Vérifier SHA déployé = dernier commit GitHub |
