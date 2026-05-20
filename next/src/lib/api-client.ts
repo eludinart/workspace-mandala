@@ -158,15 +158,22 @@ async function request(
 
   let res: Response
   try {
+    const timeoutMs = 25_000
     res = await fetch(url, {
       ...options,
       headers,
       credentials: 'include', // envoie le cookie httpOnly sur web + cookies Capacitor
+      signal: options.signal ?? AbortSignal.timeout(timeoutMs),
     })
   } catch (networkErr) {
-    const msg = base
-      ? `Impossible de joindre le serveur (${url}). Vérifiez votre connexion.`
-      : 'Impossible de joindre le serveur. Vérifiez votre connexion.'
+    const isTimeout =
+      networkErr instanceof Error &&
+      (networkErr.name === 'TimeoutError' || networkErr.name === 'AbortError')
+    const msg = isTimeout
+      ? 'Le serveur met trop de temps à répondre. Réessayez ou redémarrez le serveur de dev.'
+      : base
+        ? `Impossible de joindre le serveur (${url}). Vérifiez votre connexion.`
+        : 'Impossible de joindre le serveur. Vérifiez votre connexion.'
     if (typeof window !== 'undefined') {
       const durationMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - startedAt
       void import('@/lib/telemetry/client')

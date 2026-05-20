@@ -5,8 +5,10 @@
   "scripts": {
     "dev": "npm run dev --prefix next",
     "dev.vps": "node scripts/dev-vps.js",
-    "build": "npm run build --prefix next",
+    "dev:clean": "node -e \"require('fs').rmSync('next/.next',{recursive:true,force:true})\" && npm run dev.vps",
+    "build": "node scripts/check-invalid-jsx.mjs && npm run build --prefix next",
     "build:next": "npm run build --prefix next",
+    "check:jsx": "node scripts/check-invalid-jsx.mjs",
     "start": "npm run start --prefix next"
   }
 }

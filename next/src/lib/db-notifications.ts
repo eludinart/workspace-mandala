@@ -12,25 +12,27 @@
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 
-const T_NOTIF = () => table('mdl_notifications')
-const T_DELIV = () => table('mdl_notification_deliveries')
-const T_PREF = () => table('mdl_notification_preferences')
+const T_NOTIF = () => table('notifications')
+const T_DELIV = () => table('notification_deliveries')
+const T_PREF = () => table('notification_preferences')
 
-// Singleton : évite les CREATE TABLE IF NOT EXISTS concurrents (metadata lock MariaDB)
-let _ensureTablesPromise: Promise<void> | null = null
+// Singleton : CREATE TABLE une seule fois ; migrations ALTER idempotentes à chaque appel
+let _createTablesPromise: Promise<void> | null = null
+let _notificationsHasLegacyUserId: boolean | null = null
 
-export function ensureNotificationsTables(): Promise<void> {
-  if (!isDbConfigured()) return Promise.resolve()
-  if (!_ensureTablesPromise) {
-    _ensureTablesPromise = _doEnsureNotificationsTables().catch((err) => {
-      _ensureTablesPromise = null // reset pour permettre un retry
+export async function ensureNotificationsTables(): Promise<void> {
+  if (!isDbConfigured()) return
+  if (!_createTablesPromise) {
+    _createTablesPromise = _createNotificationsTables().catch((err) => {
+      _createTablesPromise = null
       throw err
     })
   }
-  return _ensureTablesPromise
+  await _createTablesPromise
+  await _migrateNotificationsTables()
 }
 
-async function _doEnsureNotificationsTables(): Promise<void> {
+async function _createNotificationsTables(): Promise<void> {
   const pool = getPool()
   const tN = T_NOTIF()
   const tD = T_DELIV()
@@ -85,21 +87,45 @@ async function _doEnsureNotificationsTables(): Promise<void> {
       UNIQUE KEY uk_user (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+}
 
-  // Migrations idempotentes : ajout des colonnes manquantes sur tables existantes
-  // (MariaDB >= 10.0.2 supporte ADD COLUMN IF NOT EXISTS)
+async function _migrateNotificationsTables(): Promise<void> {
+  const pool = getPool()
+  const tN = T_NOTIF()
+  const tD = T_DELIV()
+
+  // Table créée avant V2 (docs/schema/003) : colonnes manquantes vs modèle actuel
   const migrations = [
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS read_at DATETIME DEFAULT NULL`,
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS user_email VARCHAR(255) DEFAULT NULL`,
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS channel_id INT DEFAULT NULL`,
-    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS channel_id INT DEFAULT NULL`,
-    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS expires_at DATETIME DEFAULT NULL`,
+    `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS body TEXT DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS action_url VARCHAR(255) DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS action_label VARCHAR(80) DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS recipient_type VARCHAR(20) NOT NULL DEFAULT 'all'`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS recipient_id INT DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS recipient_role VARCHAR(40) DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS priority VARCHAR(20) NOT NULL DEFAULT 'normal'`,
     `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS source_type VARCHAR(40) DEFAULT NULL`,
     `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS source_id INT DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS channel_id INT DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS created_by INT DEFAULT NULL`,
+    `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS expires_at DATETIME DEFAULT NULL`,
+    // Schéma 003 : user_id NOT NULL sur la notification (V1) — rendre optionnel pour annonces broadcast V2
+    `ALTER TABLE ${tN} MODIFY COLUMN user_id INT NULL DEFAULT NULL`,
   ]
   for (const sql of migrations) {
     await pool.execute(sql).catch(() => {/* ignorer si colonne déjà présente */})
   }
+}
+
+async function notificationsHasLegacyUserIdColumn(pool: Awaited<ReturnType<typeof getPool>>): Promise<boolean> {
+  if (_notificationsHasLegacyUserId !== null) return _notificationsHasLegacyUserId
+  const tN = T_NOTIF()
+  const [rows] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tN} LIKE 'user_id'`)
+  _notificationsHasLegacyUserId = (rows?.length ?? 0) > 0
+  return _notificationsHasLegacyUserId
 }
 
 function normalizeEmail(v: unknown): string {
@@ -169,7 +195,9 @@ async function resolveRecipients(input: NotificationCreateInput): Promise<Array<
   return rows.map((r) => ({ user_id: Number(r.user_id), email: normalizeEmail(r.email) })).filter((r) => r.email)
 }
 
-export async function createNotification(input: NotificationCreateInput): Promise<{ notification_id: number; deliveries: number }> {
+export async function createNotification(
+  input: NotificationCreateInput
+): Promise<{ notification_id: number; deliveries: number; deduplicated?: boolean }> {
   if (!isDbConfigured()) throw new Error('DB non configurée')
   await ensureNotificationsTables()
   const pool = getPool()
@@ -189,26 +217,75 @@ export async function createNotification(input: NotificationCreateInput): Promis
   const createdBy = input.created_by != null ? Number(input.created_by) : null
   const expiresAt = input.expires_at ? String(input.expires_at).replace('T', ' ').slice(0, 19) : null
 
+  const hasLegacyUserId = await notificationsHasLegacyUserIdColumn(pool)
+  const legacyUserId =
+    hasLegacyUserId && createdBy != null && createdBy > 0 ? createdBy : hasLegacyUserId ? null : undefined
+
+  // Évite un doublon si double-clic ou double requête quasi simultanée
+  if (createdBy != null && createdBy > 0) {
+    const [dup] = await pool.execute<RowDataPacket[]>(
+      `SELECT n.id,
+              (SELECT COUNT(*) FROM ${tD} d WHERE d.notification_id = n.id) AS delivery_count
+       FROM ${tN} n
+       WHERE n.title = ? AND n.type = ? AND n.created_by = ?
+         AND n.recipient_type = ?
+         AND COALESCE(n.recipient_role, '') = COALESCE(?, '')
+         AND n.created_at >= DATE_SUB(NOW(), INTERVAL 20 SECOND)
+       ORDER BY n.id DESC
+       LIMIT 1`,
+      [title, type, createdBy, recipientType, recipientRole ?? '']
+    )
+    if (dup.length) {
+      return {
+        notification_id: Number(dup[0].id),
+        deliveries: Number(dup[0].delivery_count ?? 0),
+        deduplicated: true,
+      }
+    }
+  }
+
   const [insRes] = await pool.execute(
-    `INSERT INTO ${tN}
-      (type, title, body, action_url, action_label, recipient_type, recipient_id, recipient_role, priority, source_type, source_id, channel_id, created_by, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      type,
-      title,
-      body,
-      actionUrl,
-      actionLabel,
-      recipientType,
-      recipientId,
-      recipientRole,
-      priority,
-      input.source_type ?? null,
-      input.source_id ?? null,
-      input.channel_id ?? null,
-      createdBy,
-      expiresAt,
-    ]
+    hasLegacyUserId
+      ? `INSERT INTO ${tN}
+          (user_id, type, title, body, action_url, action_label, recipient_type, recipient_id, recipient_role, priority, source_type, source_id, channel_id, created_by, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO ${tN}
+          (type, title, body, action_url, action_label, recipient_type, recipient_id, recipient_role, priority, source_type, source_id, channel_id, created_by, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    hasLegacyUserId
+      ? [
+          legacyUserId ?? null,
+          type,
+          title,
+          body,
+          actionUrl,
+          actionLabel,
+          recipientType,
+          recipientId,
+          recipientRole,
+          priority,
+          input.source_type ?? null,
+          input.source_id ?? null,
+          input.channel_id ?? null,
+          createdBy,
+          expiresAt,
+        ]
+      : [
+          type,
+          title,
+          body,
+          actionUrl,
+          actionLabel,
+          recipientType,
+          recipientId,
+          recipientRole,
+          priority,
+          input.source_type ?? null,
+          input.source_id ?? null,
+          input.channel_id ?? null,
+          createdBy,
+          expiresAt,
+        ]
   )
   const notificationId = Number((insRes as ResultSetHeader).insertId)
 

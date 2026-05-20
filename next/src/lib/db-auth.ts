@@ -5,6 +5,7 @@ import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import { verifyWordPressPassword } from './auth-wordpress'
 import { hash } from 'bcryptjs'
+import { isBootstrapAdminEmail } from './admin-bootstrap'
 
 let _authTablesEnsured = false
 
@@ -111,12 +112,13 @@ async function getWpRole(userId: number): Promise<string> {
   }
 }
 
-async function getAppRole(userId: number, wpRole: string): Promise<string> {
+async function getAppRole(userId: number, wpRole: string, email?: string): Promise<string> {
+  if (isBootstrapAdminEmail(email)) return 'admin'
   const pool = getPool()
-  const prefix = process.env.DB_PREFIX || 'wp_'
+  const tRoles = table('mandala_app_roles')
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT app_role FROM ${prefix}mandala_app_roles WHERE user_id = ?`,
+      `SELECT app_role FROM ${tRoles} WHERE user_id = ?`,
       [userId]
     )
     const role = rows[0]?.app_role
@@ -232,7 +234,7 @@ export async function authLogin(login: string, password: string): Promise<UserRe
   await updateLastLogin(userId)
 
   const wpRole = await getWpRole(userId)
-  const appRole = await getAppRole(userId, wpRole)
+  const appRole = await getAppRole(userId, wpRole, user.user_email || '')
   const out: UserRecord = {
     id: userId,
     email: user.user_email || '',
@@ -280,7 +282,7 @@ export async function authMe(userId: number): Promise<UserRecord> {
 
   const uid = Number(user.ID)
   const wpRole = await getWpRole(uid)
-  const appRole = await getAppRole(uid, wpRole)
+  const appRole = await getAppRole(uid, wpRole, user.user_email || '')
   const out: UserRecord = {
     id: uid,
     email: user.user_email || '',
@@ -408,7 +410,7 @@ export async function authRegister(
   )
 
   const wpRole = await getWpRole(userId)
-  const appRole = await getAppRole(userId, wpRole)
+  const appRole = await getAppRole(userId, wpRole, email)
   const out: UserRecord = {
     id: userId,
     email,
@@ -489,9 +491,15 @@ export async function updateProfile(
       await upsertUsermeta(userId, 'mdl_avatar', '')
     } else if (typeof avatar === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/i.test(avatar)) {
       const raw = Buffer.from(avatar.replace(/^data:image\/\w+;base64,/, ''), 'base64')
-      if (raw.length <= 100000) {
-        await upsertUsermeta(userId, 'mdl_avatar', avatar)
+      const maxAvatarBytes = 150_000
+      if (raw.length > maxAvatarBytes) {
+        throw new Error(
+          `Photo trop volumineuse (${Math.round(raw.length / 1024)} Ko). Maximum : ${Math.round(maxAvatarBytes / 1024)} Ko.`
+        )
       }
+      await upsertUsermeta(userId, 'mdl_avatar', avatar)
+    } else if (typeof avatar === 'string' && avatar.length > 0) {
+      throw new Error('Format de photo non supporté')
     }
   }
   if (Object.prototype.hasOwnProperty.call(body, 'avatar_emoji')) {
@@ -561,4 +569,102 @@ export async function updateProfile(
     await upsertUsermeta(userId, 'mdl_coach_verified', body.coach_verified ? '1' : '0')
   }
   return authMe(userId)
+}
+
+export type AdminUserListItem = {
+  id: number
+  login: string
+  email: string
+  name: string
+  registered: string
+  wp_role: string
+  app_role: string
+  pseudo: string | null
+}
+
+export async function listUsersAdmin(params: {
+  search?: string
+  role?: string
+  limit?: number
+}): Promise<{ items: AdminUserListItem[]; total: number }> {
+  if (!isDbConfigured()) return { items: [], total: 0 }
+  await ensureAuthTables()
+  const pool = getPool()
+  const usersTbl = table('users')
+  const rolesTbl = table('mandala_app_roles')
+  const metaTbl = table('usermeta')
+  const prefix = process.env.DB_PREFIX || 'wp_'
+  const capKey = `${prefix}capabilities`
+  const limit = Math.min(500, Math.max(1, params.limit ?? 200))
+  const search = String(params.search ?? '').trim().toLowerCase()
+  const roleFilter = String(params.role ?? '').trim().toLowerCase()
+
+  let where = '1=1'
+  const values: (string | number)[] = []
+  if (search) {
+    where += ` AND (LOWER(u.user_email) LIKE ? OR LOWER(u.user_login) LIKE ? OR LOWER(u.display_name) LIKE ?)`
+    const q = `%${search}%`
+    values.push(q, q, q)
+  }
+
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT u.ID as id, u.user_login as login, u.user_email as email, u.display_name as name,
+            u.user_registered as registered, r.app_role,
+            (SELECT meta_value FROM ${metaTbl} WHERE user_id = u.ID AND meta_key = ? LIMIT 1) as caps,
+            (SELECT meta_value FROM ${metaTbl} WHERE user_id = u.ID AND meta_key = 'mdl_pseudo' LIMIT 1) as pseudo
+     FROM ${usersTbl} u
+     LEFT JOIN ${rolesTbl} r ON r.user_id = u.ID
+     WHERE ${where}
+     ORDER BY u.user_registered DESC
+     LIMIT ?`,
+    [...values, capKey, limit]
+  )
+
+  const items: AdminUserListItem[] = []
+  for (const r of rows) {
+    const caps = r.caps ? parseWpSerializedCaps(String(r.caps)) : null
+    let wpRole = 'subscriber'
+    if (caps) {
+      const priority = ['administrator', 'editor', 'author', 'contributor', 'subscriber']
+      for (const role of priority) {
+        if (caps[role]) {
+          wpRole = role
+          break
+        }
+      }
+    }
+    const appRole = r.app_role
+      ? String(r.app_role)
+      : wpRole === 'administrator'
+        ? 'admin'
+        : 'user'
+    if (roleFilter && appRole !== roleFilter && wpRole !== roleFilter) continue
+    items.push({
+      id: Number(r.id),
+      login: String(r.login ?? ''),
+      email: String(r.email ?? ''),
+      name: String(r.name ?? ''),
+      registered: r.registered ? String(r.registered) : '',
+      wp_role: wpRole,
+      app_role: appRole,
+      pseudo: r.pseudo ? String(r.pseudo) : null,
+    })
+  }
+  return { items, total: items.length }
+}
+
+export async function updateUserAppRole(userId: number, appRole: string): Promise<void> {
+  if (!isDbConfigured()) throw new Error('DB non configurée')
+  await ensureAuthTables()
+  const role = String(appRole ?? 'user').trim().slice(0, 32)
+  if (!['user', 'coach', 'admin'].includes(role)) {
+    throw new Error('Rôle invalide')
+  }
+  const pool = getPool()
+  const rolesTbl = table('mandala_app_roles')
+  await pool.execute(
+    `INSERT INTO ${rolesTbl} (user_id, app_role) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE app_role = ?`,
+    [userId, role, role]
+  )
 }

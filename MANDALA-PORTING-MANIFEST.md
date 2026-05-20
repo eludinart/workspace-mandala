@@ -14,7 +14,8 @@
 | A | `db.ts`, `jwt`, `api-auth`, `db-auth`, `api-client`, auth API, health |
 | B | `db-social`, `db-prairie`, `db-notifications`, social/prairie/notifications API |
 | Multi | `db-communities`, `CommunityContext`, sélecteur UI |
-| UI MVP | Login, Home, Events (démo), Members (prairie), Messages (placeholder), Account |
+| UI MVP | Login, Home, Events (liste + détail + équipe + tâches), Members, Messages, Account |
+| Schéma | `001`–`004` (core, auth, social, events) |
 
 ## À repiocher depuis Fleur (chemins relatifs `next/src`)
 

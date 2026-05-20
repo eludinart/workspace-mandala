@@ -1,0 +1,7 @@
+-- Profil enrichi des communautés (avatar, description, contact)
+ALTER TABLE mdl_mandala_communities
+  ADD COLUMN IF NOT EXISTS description TEXT DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS website VARCHAR(255) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS contact_email VARCHAR(120) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS avatar MEDIUMTEXT DEFAULT NULL;

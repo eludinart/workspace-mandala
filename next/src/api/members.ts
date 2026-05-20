@@ -1,12 +1,35 @@
 import { api } from '@/lib/api-client'
 
-export const prairieApi = {
-  getFleurs: () => api.get('/api/prairie/fleurs'),
-  checkVisibility: () => api.get('/api/prairie/check-visibility'),
-  arroser: (toUserId: string) => api.post('/api/prairie/arroser', { to_user_id: toUserId }),
-  pollen: (toUserId: string, cardSlug: string) =>
-    api.post('/api/prairie/pollen', { to_user_id: toUserId, card_slug: cardSlug }),
-  addLink: (toUserId: string) => api.post('/api/prairie/add-link', { to_user_id: toUserId }),
-  removeLink: (toUserId: string) => api.post('/api/prairie/remove-link', { to_user_id: toUserId }),
-  forceVisible: (email: string) => api.post('/api/admin/prairie/force-visible', { email }),
+export type MemberDirectoryCommunity = {
+  id: number
+  slug: string
+  name: string
+  logo_emoji: string | null
+  member_count: number
+}
+
+export type MemberDirectoryEntry = {
+  user_id: number
+  pseudo: string
+  display_name: string
+  avatar_emoji: string
+  avatar: string | null
+  profile_public: boolean
+  is_me: boolean
+  communities: Array<{
+    slug: string
+    name: string
+    logo_emoji: string | null
+    role: string
+  }>
+}
+
+export const membersApi = {
+  listCommunity: (communitySlug: string) =>
+    api.get(`/api/members/community?community_slug=${encodeURIComponent(communitySlug)}`),
+  directory: () =>
+    api.get('/api/members/directory') as Promise<{
+      communities?: MemberDirectoryCommunity[]
+      members?: MemberDirectoryEntry[]
+    }>,
 }

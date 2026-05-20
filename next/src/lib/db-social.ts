@@ -51,6 +51,33 @@ export async function recordSocialPresenceHeartbeat(userId: number): Promise<voi
   await touchSocialPresence(pool, userId)
 }
 
+async function fetchUsersAvatarMap(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  userIds: number[]
+): Promise<Map<number, { avatar: string | null; avatarEmoji: string }>> {
+  const map = new Map<number, { avatar: string | null; avatarEmoji: string }>()
+  const ids = [...new Set(userIds.filter((id) => id > 0))]
+  if (!ids.length) return map
+  for (const id of ids) map.set(id, { avatar: null, avatarEmoji: '🌸' })
+  const tMeta = table('usermeta')
+  const placeholders = ids.map(() => '?').join(',')
+  const [metaRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id, meta_key, meta_value FROM ${tMeta}
+     WHERE user_id IN (${placeholders}) AND meta_key IN ('mdl_avatar', 'mdl_avatar_emoji')`,
+    ids
+  )
+  for (const row of metaRows ?? []) {
+    const uid = Number(row.user_id)
+    const cur = map.get(uid)
+    if (!cur) continue
+    const key = String(row.meta_key ?? '')
+    const val = row.meta_value != null ? String(row.meta_value).trim() : ''
+    if (key === 'mdl_avatar' && val) cur.avatar = val
+    if (key === 'mdl_avatar_emoji' && val) cur.avatarEmoji = val
+  }
+  return map
+}
+
 /** Récupère les canaux de dialogue (La Clairière) de l'utilisateur */
 export async function getMyChannels(
   userId: string
@@ -59,6 +86,8 @@ export async function getMyChannels(
     channelId: number
     otherUserId: number
     otherPseudo: string
+    otherAvatar: string | null
+    otherAvatarEmoji: string
     otherIsOnline: boolean
     otherLastSeenAt: string | null
     unreadCount: number
@@ -70,8 +99,8 @@ export async function getMyChannels(
 
   await touchSocialPresence(pool, uid)
 
-  const tChannels = table('mdl_chat_channels')
-  const tLinks = table('mdl_prairie_links')
+  const tChannels = table('chat_channels')
+  const tLinks = table('prairie_links')
   const tMeta = table('usermeta')
   const tUsers = table('users')
 
@@ -123,10 +152,17 @@ export async function getMyChannels(
     channelId: number
     otherUserId: number
     otherPseudo: string
+    otherAvatar: string | null
+    otherAvatarEmoji: string
     otherIsOnline: boolean
     otherLastSeenAt: string | null
     unreadCount: number
   }> = []
+
+  const otherIds = rows.map((r) =>
+    Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
+  )
+  const avatarMap = await fetchUsersAvatarMap(pool, otherIds)
 
   for (const r of rows) {
     const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
@@ -166,10 +202,13 @@ export async function getMyChannels(
       )
       unreadCount = Number(cRows?.[0]?.c ?? 0)
     }
+    const av = avatarMap.get(otherId) ?? { avatar: null, avatarEmoji: '🌸' }
     list.push({
       channelId,
       otherUserId: otherId,
       otherPseudo: pseudo,
+      otherAvatar: av.avatar,
+      otherAvatarEmoji: av.avatarEmoji,
       otherIsOnline: lastSeenAt ? isOnlineFromLastSeen(lastSeenAt) : false,
       otherLastSeenAt: lastSeenAt || null,
       unreadCount,
@@ -180,7 +219,7 @@ export async function getMyChannels(
 }
 
 /** Table dédiée P2P (évite conflit avec mdl_chat_messages du chat coach qui utilise conversation_id) */
-const P2P_MESSAGES_TABLE = 'mdl_chat_channel_messages'
+const P2P_MESSAGES_TABLE = 'chat_channel_messages'
 
 // Singleton DDL : CREATE TABLE ne s'exécute qu'une fois par process (évite les metadata locks)
 let _ensureMessagesTablePromise: Promise<void> | null = null
@@ -225,7 +264,7 @@ export async function getChannelMessages(
 
   await touchSocialPresence(pool, uid)
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
   const [chRows] = await pool.execute<RowDataPacket[]>(
@@ -265,7 +304,7 @@ export async function getChannelLastMessageAt(channelId: number, userId: string)
   // Maintenir la cohérence présence (même logique que getChannelMessages)
   await touchSocialPresence(pool, uid)
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
   const [chRows] = await pool.execute<RowDataPacket[]>(
@@ -303,7 +342,7 @@ export async function getChannelMessagesSince(
 
   await touchSocialPresence(pool, uid)
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
   const [chRows] = await pool.execute<RowDataPacket[]>(
@@ -349,7 +388,7 @@ export async function sendChannelMessage(
 
   await touchSocialPresence(pool, senderId)
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
   const [chRows] = await pool.execute<RowDataPacket[]>(
@@ -394,7 +433,7 @@ export async function getClairiereUnreadCount(userId: string): Promise<number> {
   const uid = parseInt(userId, 10)
   if (!uid) return 0
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
   const tMeta = table('usermeta')
   const metaPrefix = CHANNEL_READ_META_PREFIX
@@ -429,7 +468,7 @@ export async function getOtherUserIdInChannel(
   currentUserId: number
 ): Promise<number | null> {
   const pool = getPool()
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_a, user_b FROM ${tCh} WHERE id = ? LIMIT 1`,
     [channelId]
@@ -451,8 +490,8 @@ export async function createClairiereMessageNotification(
   cardSlug: string | null
 ): Promise<void> {
   const pool = getPool()
-  const tNotif = table('mdl_notifications')
-  const tDeliv = table('mdl_notification_deliveries')
+  const tNotif = table('notifications')
+  const tDeliv = table('notification_deliveries')
   const tUsers = table('users')
   const tMeta = table('usermeta')
 
@@ -542,7 +581,7 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
   const uid = parseInt(userId, 10)
   if (!uid || !channelId) return
 
-  const tCh = table('mdl_chat_channels')
+  const tCh = table('chat_channels')
   const tMeta = table('usermeta')
   const metaKey = `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
@@ -570,9 +609,9 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
 
 /** Crée les tables seeds et prairie_links si besoin */
 async function ensureSeedsAndLinksTables(pool: Awaited<ReturnType<typeof getPool>>): Promise<void> {
-  const tSeeds = table('mdl_social_seeds')
-  const tLinks = table('mdl_prairie_links')
-  const tChannels = table('mdl_chat_channels')
+  const tSeeds = table('social_seeds')
+  const tLinks = table('prairie_links')
+  const tChannels = table('chat_channels')
   try {
     await pool.execute(`
       CREATE TABLE IF NOT EXISTS ${tSeeds} (
@@ -632,7 +671,7 @@ export async function sendSeed(
   if (!intentionId?.trim()) throw new Error('intentionId requis')
 
   await ensureSeedsAndLinksTables(pool)
-  const tSeeds = table('mdl_social_seeds')
+  const tSeeds = table('social_seeds')
 
   const [existing] = await pool.execute<RowDataPacket[]>(
     `SELECT id FROM ${tSeeds} WHERE from_user_id = ? AND to_user_id = ? AND status = 'pending'`,
@@ -659,9 +698,9 @@ export async function acceptSeedConnection(
   if (!seedId || !acceptorUserId) throw new Error('seedId et acceptorUserId requis')
 
   await ensureSeedsAndLinksTables(pool)
-  const tSeeds = table('mdl_social_seeds')
-  const tLinks = table('mdl_prairie_links')
-  const tChannels = table('mdl_chat_channels')
+  const tSeeds = table('social_seeds')
+  const tLinks = table('prairie_links')
+  const tChannels = table('chat_channels')
 
   const [seedRows] = await pool.execute<RowDataPacket[]>(
     `SELECT id, from_user_id, to_user_id, status FROM ${tSeeds} WHERE id = ?`,
@@ -696,6 +735,9 @@ export type PendingSeed = {
   to_user_id: number
   intention_id: string
   created_at: string | null
+  from_pseudo?: string
+  from_avatar?: string | null
+  from_avatar_emoji?: string
 }
 
 export async function listPendingSeedsIncoming(params: {
@@ -707,21 +749,30 @@ export async function listPendingSeedsIncoming(params: {
   if (!uid) throw new Error('userId requis')
   const pool = getPool()
   await ensureSeedsAndLinksTables(pool)
-  const tSeeds = table('mdl_social_seeds')
+  const tSeeds = table('social_seeds')
+  const tMeta = table('usermeta')
+  const tUsers = table('users')
   const limit = Math.min(200, Math.max(1, Number(params.limit ?? 50)))
   const intentionIds = (params.intentionIds ?? []).map((s) => String(s).trim()).filter(Boolean)
 
-  let where = `to_user_id = ? AND status = 'pending'`
+  let where = `s.to_user_id = ? AND s.status = 'pending'`
   const args: Array<string | number> = [uid]
   if (intentionIds.length > 0) {
-    where += ` AND intention_id IN (${intentionIds.map(() => '?').join(',')})`
+    where += ` AND s.intention_id IN (${intentionIds.map(() => '?').join(',')})`
     args.push(...intentionIds)
   }
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, from_user_id, to_user_id, intention_id, created_at
-     FROM ${tSeeds}
+    `SELECT s.id, s.from_user_id, s.to_user_id, s.intention_id, s.created_at,
+            COALESCE(p.meta_value, u.display_name, CONCAT('user_', s.from_user_id)) AS from_pseudo,
+            COALESCE(a.meta_value, '') AS from_avatar,
+            COALESCE(e.meta_value, '🌸') AS from_avatar_emoji
+     FROM ${tSeeds} s
+     JOIN ${tUsers} u ON u.ID = s.from_user_id
+     LEFT JOIN ${tMeta} p ON p.user_id = s.from_user_id AND p.meta_key = 'mdl_pseudo'
+     LEFT JOIN ${tMeta} a ON a.user_id = s.from_user_id AND a.meta_key = 'mdl_avatar'
+     LEFT JOIN ${tMeta} e ON e.user_id = s.from_user_id AND e.meta_key = 'mdl_avatar_emoji'
      WHERE ${where}
-     ORDER BY created_at DESC
+     ORDER BY s.created_at DESC
      LIMIT ?`,
     [...args, limit]
   )
@@ -731,6 +782,9 @@ export async function listPendingSeedsIncoming(params: {
     to_user_id: Number(r.to_user_id),
     intention_id: String(r.intention_id ?? '').trim(),
     created_at: r.created_at ? String(r.created_at) : null,
+    from_pseudo: r.from_pseudo ? String(r.from_pseudo) : undefined,
+    from_avatar: r.from_avatar ? String(r.from_avatar) : null,
+    from_avatar_emoji: String(r.from_avatar_emoji ?? '🌸'),
   }))
 }
 
@@ -743,7 +797,7 @@ export async function rejectSeedConnection(params: {
   if (!seedId || !rejector) throw new Error('seedId et rejectorUserId requis')
   const pool = getPool()
   await ensureSeedsAndLinksTables(pool)
-  const tSeeds = table('mdl_social_seeds')
+  const tSeeds = table('social_seeds')
   const [seedRows] = await pool.execute<RowDataPacket[]>(
     `SELECT id, to_user_id, status FROM ${tSeeds} WHERE id = ?`,
     [seedId]
@@ -762,6 +816,7 @@ export async function visitLisiere(
 ): Promise<{
   userId: string
   pseudo: string
+  avatar: string | null
   avatarEmoji: string
   fleurMoyenne: { petals: number[]; lastUpdated?: string }
   relationStatusWithVisitor: 'none' | 'pending_out' | 'pending_in' | 'accepted'
@@ -775,17 +830,19 @@ export async function visitLisiere(
 
   const tMeta = table('usermeta')
   const tUsers = table('users')
-  const tRes = table('mdl_amour_results')
-  const tLinks = table('mdl_prairie_links')
-  const tSeeds = table('mdl_social_seeds')
+  const tRes = table('amour_results')
+  const tLinks = table('prairie_links')
+  const tSeeds = table('social_seeds')
 
   const [userRows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.ID, u.display_name,
       COALESCE(um_pseudo.meta_value, '') AS pseudo,
+      COALESCE(um_avatar.meta_value, '') AS avatar,
       COALESCE(um_emoji.meta_value, '🌸') AS avatar_emoji
     FROM ${tUsers} u
     INNER JOIN ${tMeta} um_pub ON um_pub.user_id = u.ID AND um_pub.meta_key = 'mdl_profile_public' AND um_pub.meta_value = '1'
     LEFT JOIN ${tMeta} um_pseudo ON um_pseudo.user_id = u.ID AND um_pseudo.meta_key = 'mdl_pseudo'
+    LEFT JOIN ${tMeta} um_avatar ON um_avatar.user_id = u.ID AND um_avatar.meta_key = 'mdl_avatar'
     LEFT JOIN ${tMeta} um_emoji ON um_emoji.user_id = u.ID AND um_emoji.meta_key = 'mdl_avatar_emoji'
     WHERE u.ID = ?`,
     [targetUserId]
@@ -796,6 +853,8 @@ export async function visitLisiere(
     String(target.pseudo ?? '').trim() ||
     String(target.display_name ?? '').trim() ||
     `jardinier_${Buffer.from(String(targetUserId)).toString('hex').slice(0, 6)}`
+  const avatarRaw = target.avatar ? String(target.avatar).trim() : ''
+  const avatar = avatarRaw || null
   const avatarEmoji = String(target.avatar_emoji ?? '🌸').trim() || '🌸'
 
   const petals = ['agape', 'philautia', 'mania', 'storge', 'pragma', 'philia', 'ludus', 'eros'] as const
@@ -848,6 +907,7 @@ export async function visitLisiere(
   return {
     userId: String(targetUserId),
     pseudo,
+    avatar,
     avatarEmoji,
     fleurMoyenne: { petals: petalsNorm, lastUpdated },
     relationStatusWithVisitor: relationStatus,

@@ -17,7 +17,10 @@ export const AUTH_COOKIE_NAME = 'auth_token'
 
 const EXPIRE_HOURS = parseInt(process.env.JWT_EXPIRE_HOURS || '720', 10)
 const IS_PROD = process.env.NODE_ENV === 'production'
-const COOKIE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+/** Path `/` pour que le cookie soit envoyé à toutes les routes API (pas seulement `/api/auth/*`). */
+const COOKIE_PATH = process.env.NEXT_PUBLIC_BASE_PATH
+  ? `${process.env.NEXT_PUBLIC_BASE_PATH.replace(/\/$/, '')}/`
+  : '/'
 
 /** Définit le cookie d'auth sur une réponse NextResponse existante. */
 export function setAuthCookie(res: NextResponse, token: string): void {

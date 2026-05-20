@@ -12,8 +12,8 @@
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 
-const T_BROADCAST = () => table('mdl_broadcasts')
-const T_DELIV = () => table('mdl_broadcast_deliveries')
+const T_BROADCAST = () => table('broadcasts')
+const T_DELIV = () => table('broadcast_deliveries')
 
 export type BroadcastStatus =
   | 'draft'

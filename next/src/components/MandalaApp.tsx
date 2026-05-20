@@ -9,28 +9,63 @@ import { MembersPage } from '@/views/MembersPage'
 import { MessagesPage } from '@/views/MessagesPage'
 import { EventsPage } from '@/views/EventsPage'
 import { AccountPage } from '@/views/AccountPage'
-import { useMemo, useState } from 'react'
+import { AdminPage } from '@/views/AdminPage'
+import { NotificationsPage } from '@/views/NotificationsPage'
+import { PushNotificationPriming } from '@/components/PushNotificationPriming'
+import { TelemetryTracker } from '@/components/TelemetryTracker'
+import { useCallback, useMemo, useState } from 'react'
 
-export type MandalaPage = 'home' | 'events' | 'members' | 'messages' | 'account'
+export type MandalaPage =
+  | 'home'
+  | 'events'
+  | 'members'
+  | 'messages'
+  | 'notifications'
+  | 'account'
+  | 'admin'
+
+export type MandalaNavigate = (
+  p: MandalaPage,
+  opts?: { messagesUserId?: string; eventId?: number | null }
+) => void
 
 export function MandalaApp() {
   const { user, loading } = useAuth()
   const [page, setPage] = useState<MandalaPage>('home')
+  const [messagesOpenUserId, setMessagesOpenUserId] = useState<string | null>(null)
+  const [openEventId, setOpenEventId] = useState<number | null>(null)
+
+  const navigate = useCallback<MandalaNavigate>((p, opts) => {
+    if (opts?.messagesUserId) setMessagesOpenUserId(opts.messagesUserId)
+    else if (p !== 'messages') setMessagesOpenUserId(null)
+    if (opts?.eventId !== undefined) setOpenEventId(opts.eventId)
+    else if (p !== 'events') setOpenEventId(null)
+    setPage(p)
+  }, [])
 
   const content = useMemo(() => {
     switch (page) {
       case 'events':
-        return <EventsPage />
+        return (
+          <EventsPage
+            openEventId={openEventId}
+            onOpenEvent={(id) => setOpenEventId(id)}
+          />
+        )
       case 'members':
-        return <MembersPage />
+        return <MembersPage onOpenMessages={(userId) => navigate('messages', { messagesUserId: userId })} />
       case 'messages':
-        return <MessagesPage />
+        return <MessagesPage openWithUserId={messagesOpenUserId} />
+      case 'notifications':
+        return <NotificationsPage onNavigate={navigate} />
       case 'account':
-        return <AccountPage />
+        return <AccountPage onNavigate={navigate} />
+      case 'admin':
+        return <AdminPage />
       default:
-        return <HomePage onNavigate={setPage} />
+        return <HomePage onNavigate={navigate} />
     }
-  }, [page])
+  }, [page, messagesOpenUserId, openEventId, navigate])
 
   if (loading) {
     return (
@@ -44,7 +79,9 @@ export function MandalaApp() {
 
   return (
     <CommunityProvider>
-      <Layout page={page} onNavigate={setPage}>
+      <TelemetryTracker page={page} />
+      <PushNotificationPriming />
+      <Layout page={page} onNavigate={navigate}>
         {content}
       </Layout>
     </CommunityProvider>

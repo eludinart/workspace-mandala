@@ -53,6 +53,8 @@ Sinon `MARIADB_HOST` pointe déjà vers le hostname interne du conteneur.
 1. **Deploy** (premier build peut prendre plusieurs minutes).
 2. Logs : build `Dockerfile.next` → `npm ci` → `npm run build` → image Node 22.
 3. Vérifier : `GET https://mandala.eludein.art/api/health` → `"db":"connected"`.
+4. Migrations SQL : `node scripts/apply-all-schemas.mjs` (tunnel ou VPS). Voir [DEPLOY-COOLIFY-PROD.md](./DEPLOY-COOLIFY-PROD.md).
+5. Admin : `node scripts/grant-admin.mjs votre@email.com` puis reconnexion.
 
 ## 5. Relais socat dev (déjà fait)
 

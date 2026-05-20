@@ -1,16 +1,20 @@
 'use client'
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { api } from '@/lib/api-client'
+import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
-
 export type Community = {
   id: number
   slug: string
   name: string
   tagline?: string | null
+  description?: string | null
+  location?: string | null
+  website?: string | null
+  contact_email?: string | null
   accent_color?: string | null
   logo_emoji?: string | null
+  avatar?: string | null
   role?: string
 }
 
@@ -20,6 +24,7 @@ type CommunityContextValue = {
   setActiveSlug: (slug: string) => void
   loading: boolean
   refresh: () => Promise<void>
+  joinCommunity: (slug: string) => Promise<void>
 }
 
 const STORAGE_KEY = 'mandala_active_community'
@@ -39,7 +44,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(true)
     try {
-      const res = (await api.get('/api/communities/mine')) as { items?: Community[] }
+      const res = (await communitiesApi.mine()) as { items?: Community[] }
       const items = res?.items ?? []
       setCommunities(items)
       const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
@@ -66,14 +71,23 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, slug)
   }, [])
 
+  const joinCommunity = useCallback(
+    async (slug: string) => {
+      await communitiesApi.join(slug)
+      await refresh()
+      setActiveSlug(slug)
+    },
+    [refresh, setActiveSlug]
+  )
+
   const active = useMemo(
     () => communities.find((c) => c.slug === activeSlug) ?? communities[0] ?? null,
     [communities, activeSlug]
   )
 
   const value = useMemo(
-    () => ({ communities, active, setActiveSlug, loading, refresh }),
-    [communities, active, setActiveSlug, loading, refresh]
+    () => ({ communities, active, setActiveSlug, loading, refresh, joinCommunity }),
+    [communities, active, setActiveSlug, loading, refresh, joinCommunity]
   )
 
   return <CommunityContext.Provider value={value}>{children}</CommunityContext.Provider>

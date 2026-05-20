@@ -7,3 +7,5 @@ docker-compose.env
 nogit/
 *.log
 .DS_Store
+tsconfig.tsbuildinfo
+next/tsconfig.tsbuildinfo

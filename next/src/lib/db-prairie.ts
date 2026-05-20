@@ -74,12 +74,12 @@ export async function getFleurs(
   const presencePromise = touchSocialPresence(pool, uid)
 
   const tMeta  = table('usermeta')
-  const tRes   = table('mdl_amour_results')
-  const tSess  = table('mdl_sessions')
-  const tTarot = table('mdl_tarot_readings')
+  const tRes   = table('amour_results')
+  const tSess  = table('sessions')
+  const tTarot = table('tarot_readings')
   const tUsers = table('users')
-  const tRosee  = table('mdl_rosee_events')
-  const tPollen = table('mdl_pollen')
+  const tRosee  = table('rosee_events')
+  const tPollen = table('pollen')
 
   const userCols = `u.ID, u.user_email, u.display_name,
     COALESCE(um_pseudo.meta_value, '') AS pseudo,
@@ -124,8 +124,11 @@ export async function getFleurs(
   // ── Batch queries (toutes parallèles) ─────────────────────────────────────
 
   // Requête 3 : derniers scores Fleur par user_id
-  const fleurResultsPromise = pool.execute<RowDataPacket[]>(
-    `SELECT r.user_id, r.agape, r.philautia, r.mania, r.storge, r.pragma, r.philia, r.ludus, r.eros, r.created_at
+  const emptyRows = Promise.resolve([[] as RowDataPacket[], [] as unknown] as [RowDataPacket[], unknown])
+
+  const fleurResultsPromise = pool
+    .execute<RowDataPacket[]>(
+      `SELECT r.user_id, r.agape, r.philautia, r.mania, r.storge, r.pragma, r.philia, r.ludus, r.eros, r.created_at
      FROM ${tRes} r
      INNER JOIN (
        SELECT user_id, MAX(created_at) AS max_at
@@ -134,22 +137,26 @@ export async function getFleurs(
        GROUP BY user_id
      ) latest ON r.user_id = latest.user_id AND r.created_at = latest.max_at
      WHERE r.parent_id IS NULL`,
-    allIds
-  )
+      allIds
+    )
+    .catch(() => [[] as RowDataPacket[], [] as unknown] as [RowDataPacket[], unknown])
 
-  // Requête 4 : dernière session par email
-  const sessionsPromise = allEmails.length > 0
-    ? pool.execute<RowDataPacket[]>(
-        `SELECT email, MAX(created_at) AS mx FROM ${tSess} WHERE email IN (${ph(allEmails.length)}) GROUP BY email`,
-        allEmails
-      )
-    : Promise.resolve([[] as RowDataPacket[], [] as any] as [RowDataPacket[], any])
+  const sessionsPromise =
+    allEmails.length > 0
+      ? pool
+          .execute<RowDataPacket[]>(
+            `SELECT email, MAX(created_at) AS mx FROM ${tSess} WHERE email IN (${ph(allEmails.length)}) GROUP BY email`,
+            allEmails
+          )
+          .catch(() => [[] as RowDataPacket[], [] as unknown] as [RowDataPacket[], unknown])
+      : emptyRows
 
-  // Requête 5 : dernier tirage tarot par user_id
-  const tarotPromise = pool.execute<RowDataPacket[]>(
-    `SELECT user_id, MAX(created_at) AS mx FROM ${tTarot} WHERE user_id IN (${ph(allIds.length)}) GROUP BY user_id`,
-    allIds
-  )
+  const tarotPromise = pool
+    .execute<RowDataPacket[]>(
+      `SELECT user_id, MAX(created_at) AS mx FROM ${tTarot} WHERE user_id IN (${ph(allIds.length)}) GROUP BY user_id`,
+      allIds
+    )
+    .catch(() => [[] as RowDataPacket[], [] as unknown] as [RowDataPacket[], unknown])
 
   // Requête 6 : stats rosée
   const roseePromise = pool.execute<RowDataPacket[]>(
@@ -294,7 +301,7 @@ export async function getFleurs(
     } catch { /* ignore */ }
 
     try {
-      const tLinks = table('mdl_prairie_links')
+      const tLinks = table('prairie_links')
       const [plRows] = await pool.execute<RowDataPacket[]>(
         `SELECT user_a, user_b FROM ${tLinks} WHERE user_a IN (${placeholders}) AND user_b IN (${placeholders})`,
         params

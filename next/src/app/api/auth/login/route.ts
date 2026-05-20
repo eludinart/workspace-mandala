@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isDbConfigured } from '@/lib/db'
 import { authLogin } from '@/lib/db-auth'
+import { formatDbConnectionError } from '@/lib/db-errors'
 import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
 
@@ -33,11 +34,16 @@ export async function POST(req: NextRequest) {
     setAuthCookie(res, token)
     return res
   } catch (err: unknown) {
-    const e = err as Error
-    const status = (e as Error & { status?: number }).status || 401
-    return NextResponse.json(
-      { error: e.message || 'Identifiant ou mot de passe incorrect' },
-      { status }
-    )
+    const e = err as Error & { status?: number; code?: string }
+    const isDb =
+      e.code === 'ECONNREFUSED' ||
+      e.code === 'ETIMEDOUT' ||
+      e.code === 'PROTOCOL_CONNECTION_LOST' ||
+      String(e.message ?? '').includes('ECONNREFUSED')
+    const status = isDb ? 503 : e.status || 401
+    const message = isDb
+      ? formatDbConnectionError(err)
+      : e.message || 'Identifiant ou mot de passe incorrect'
+    return NextResponse.json({ error: message }, { status })
   }
 }
