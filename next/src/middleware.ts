@@ -5,7 +5,9 @@ import type { NextRequest } from 'next/server'
 export function middleware(req: NextRequest) {
   if (process.env.NODE_ENV !== 'production') return NextResponse.next()
 
-  const proto = req.headers.get('x-forwarded-proto')
+  const forwarded = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const proto =
+    forwarded || (req.headers.get('x-forwarded-ssl') === 'on' ? 'https' : '')
   if (proto === 'http') {
     const url = req.nextUrl.clone()
     url.protocol = 'https:'

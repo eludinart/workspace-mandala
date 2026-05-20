@@ -138,7 +138,8 @@ Ce message vient en général du **proxy Coolify/Traefik**, pas de l’app Next.
 4. **Logs** (runtime, pas build) : doit afficher `[mandala] PORT=3000` puis pas de crash. Si redémarrage en boucle → variables manquantes (`JWT_SECRET`, `MARIADB_PASSWORD`).
 5. Tester l’URL Coolify générée (`*.sslip.io`) avant le domaine custom.
 6. **HTTPS** : Coolify → domaine → activer **HTTPS** / Let’s Encrypt + **Force HTTPS**.
-7. Si Chrome affiche **« Non sécurisé »** mais **« Certificat valide »** : vous êtes en **HTTP** — ouvrir `https://mandala.eludein.art` ou activer la redirection (Coolify + middleware app).
+7. Si Chrome affiche **« Non sécurisé »** mais **« Certificat valide »** : la page est encore servie en **HTTP** (pas de HSTS aujourd’hui). Ouvrir `https://mandala.eludein.art`, activer **Force HTTPS** dans Coolify, redeploy (headers HSTS dans l’app). Test navigation privée.
+8. **Hostinger** : pas de proxy « Flexible SSL » / Cloudflare orange si Mandala est sur le VPS direct (sinon boucle ou HTTP).
 8. Santé : `https://mandala.eludein.art/api/health` → `{"ok":true,"db":"connected"}`.
 
 | Symptôme | Action |
