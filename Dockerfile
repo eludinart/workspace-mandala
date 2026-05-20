@@ -21,5 +21,9 @@ WORKDIR /app
 COPY --from=next-build /app/next/.next/standalone ./
 COPY --from=next-build /app/next/.next/static ./.next/static
 COPY --from=next-build /app/next/public ./public
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 EXPOSE 3000
-CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["/app/docker-entrypoint.sh"]

@@ -128,10 +128,23 @@ Coolify → Application → **Webhooks** → activer deploy sur push `main`.
 
 ## Dépannage
 
+### « Page 404 introuvable » (texte noir, pas l’UI Mandala)
+
+Ce message vient en général du **proxy Coolify/Traefik**, pas de l’app Next.js : le conteneur ne tourne pas ou le **port** est faux.
+
+1. **Configuration → General → Build Pack** = **Dockerfile** (pas Nixpacks).
+2. **Ports / Network** → **Port exposé** = `3000` (identique au `EXPOSE` du Dockerfile).
+3. **Domains** → `mandala.eludein.art` bien rattaché à **cette** application (pas une autre ressource).
+4. **Logs** (runtime, pas build) : doit afficher `[mandala] PORT=3000` puis pas de crash. Si redémarrage en boucle → variables manquantes (`JWT_SECRET`, `MARIADB_PASSWORD`).
+5. Tester l’URL Coolify générée (`*.sslip.io`) avant le domaine custom.
+6. **HTTPS** : Coolify → domaine → activer **HTTPS** / Let’s Encrypt (sinon « Non sécurisé » en HTTP et 503 possible en HTTPS sans backend sain).
+7. Santé : `https://mandala.eludein.art/api/health` → `{"ok":true,"db":"connected"}`.
+
 | Symptôme | Action |
 |----------|--------|
 | Build échoue | Build Pack = **Dockerfile**, pas Nixpacks ; logs doivent montrer `Dockerfile.next` ou `Dockerfile`, pas `nixpacks plan` |
 | `suivant: introuvable` | Nixpacks + locale FR : passer en **Dockerfile** et redeploy |
+| 404 / 503 au domaine | Port **3000**, conteneur **Running**, variables env, redeploy dernier `main` |
 | `db: disconnected` | `MARIADB_HOST` = hostname interne, réseau **coolify**, mot de passe OK |
 | 502 / app crash | Logs runtime Coolify ; `JWT_SECRET` défini en prod |
 | Ancienne version | Vérifier SHA déployé = dernier commit GitHub |
