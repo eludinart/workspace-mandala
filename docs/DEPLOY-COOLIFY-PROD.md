@@ -148,6 +148,7 @@ Ce message vient en général du **proxy Coolify/Traefik**, pas de l’app Next.
 | `suivant: introuvable` | Nixpacks + locale FR : passer en **Dockerfile** et redeploy |
 | 404 / 503 au domaine | Port **3000**, conteneur **Running**, variables env, redeploy dernier `main` |
 | `db: disconnected` | `MARIADB_HOST` = hostname interne, réseau **coolify**, mot de passe OK |
+| Healthcheck « unhealthy » / rollback | Redeploy après fix `docker-healthcheck.mjs` ; ou Coolify → désactiver health check custom ; sonde `/api/health/live` |
 | 502 / app crash | Logs runtime Coolify ; `JWT_SECRET` défini en prod |
 | Ancienne version | Vérifier SHA déployé = dernier commit GitHub |
 | Erreur colonne SQL | `node scripts/apply-all-schemas.mjs` |
