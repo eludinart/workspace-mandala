@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSocialStore, type ChannelMessage } from '@/store/useSocialStore'
 import { TemperatureIndicator } from './TemperatureIndicator'
+import { GroupParticipantsPreview } from './GroupParticipantsPreview'
+import { MessageBubble } from './MessageBubble'
 import { UserAvatar } from '@/components/UserAvatar'
 
 export function DialogueStream({
@@ -12,17 +14,42 @@ export function DialogueStream({
   otherAvatar,
   otherAvatarEmoji,
   otherIsOnline = false,
+  isGroup = false,
+  memberCount,
+  memberIds = [],
+  participantsById = {},
 }: {
   channelId: number
   otherPseudo?: string
   otherAvatar?: string | null
   otherAvatarEmoji?: string
   otherIsOnline?: boolean
+  isGroup?: boolean
+  memberCount?: number
+  memberIds?: number[]
+  participantsById?: Record<number, { pseudo: string; avatar?: string | null; avatarEmoji?: string }>
 }) {
   const { user } = useAuth()
-  const meId = user?.id ? Number(user.id) : null
-  const { messagesByChannel, temperatureByChannel, loadChannelMessages, sendMessage, markChannelRead } =
-    useSocialStore()
+  const u = user as {
+    id?: number
+    pseudo?: string
+    name?: string
+    avatar?: string
+    avatar_emoji?: string
+  } | null
+  const meId = u?.id ? Number(u.id) : null
+  const mePseudo = u?.pseudo || u?.name || 'Vous'
+  const meAvatar = u?.avatar
+  const meAvatarEmoji = u?.avatar_emoji
+
+  const {
+    messagesByChannel,
+    temperatureByChannel,
+    loadChannelMessages,
+    sendMessage,
+    toggleMessageReaction,
+    markChannelRead,
+  } = useSocialStore()
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [pendingMessages, setPendingMessages] = useState<ChannelMessage[]>([])
@@ -74,13 +101,72 @@ export function DialogueStream({
     })
   }, [visibleMessages.length])
 
+  const resolveSender = useCallback(
+    (msg: ChannelMessage, isMe: boolean) => {
+      if (isMe) {
+        return {
+          displayName: `${mePseudo} (vous)`,
+          avatar: meAvatar,
+          avatarEmoji: meAvatarEmoji,
+        }
+      }
+      if (msg.senderPseudo) {
+        return {
+          displayName: msg.senderPseudo,
+          avatar: msg.senderAvatar,
+          avatarEmoji: msg.senderAvatarEmoji ?? undefined,
+        }
+      }
+      const fromParticipants =
+        msg.senderId != null ? participantsById[msg.senderId] : undefined
+      if (fromParticipants) {
+        return {
+          displayName: fromParticipants.pseudo,
+          avatar: fromParticipants.avatar,
+          avatarEmoji: fromParticipants.avatarEmoji,
+        }
+      }
+      if (!isGroup) {
+        return {
+          displayName: otherPseudo || 'Interlocuteur',
+          avatar: otherAvatar,
+          avatarEmoji: otherAvatarEmoji,
+        }
+      }
+      return {
+        displayName: msg.senderId ? `Membre #${msg.senderId}` : 'Membre',
+        avatar: null,
+        avatarEmoji: '🌸',
+      }
+    },
+    [
+      mePseudo,
+      meAvatar,
+      meAvatarEmoji,
+      participantsById,
+      isGroup,
+      otherPseudo,
+      otherAvatar,
+      otherAvatarEmoji,
+    ],
+  )
+
   const handleSendText = async () => {
     const text = input.trim()
     if (!text || sending) return
     const tempId = `tmp-${Date.now()}`
     setPendingMessages((prev) => [
       ...prev,
-      { id: tempId as unknown as number, senderId: meId ?? undefined, body: text, createdAt: new Date().toISOString() },
+      {
+        id: tempId as unknown as number,
+        senderId: meId ?? undefined,
+        body: text,
+        createdAt: new Date().toISOString(),
+        senderPseudo: mePseudo,
+        senderAvatar: meAvatar,
+        senderAvatarEmoji: meAvatarEmoji,
+        reactions: [],
+      },
     ])
     setInput('')
     setSending(true)
@@ -92,43 +178,65 @@ export function DialogueStream({
     }
   }
 
+  const handleReact = (messageId: number, emoji: string) => {
+    void toggleMessageReaction(channelId, messageId, emoji)
+  }
+
   return (
     <div className="flex-1 min-h-[min(70vh,600px)] flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-      <header className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-slate-800">
-        <TemperatureIndicator temperature={temperature} className="shrink-0" />
-        <UserAvatar
-          avatar={otherAvatar}
-          avatarEmoji={otherAvatarEmoji}
-          size="sm"
-          alt={otherPseudo}
-        />
-        <span
-          className={`inline-block w-2 h-2 rounded-full shrink-0 ${otherIsOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}
-        />
-        <span className="text-sm font-medium truncate">{otherPseudo || 'Dialogue'}</span>
-        <span className="text-[11px] text-slate-500 shrink-0">{otherIsOnline ? 'En ligne' : 'Hors ligne'}</span>
+      <header className="shrink-0 px-3 py-2 border-b border-slate-800">
+        <div className="flex items-center gap-2">
+          <TemperatureIndicator temperature={temperature} className="shrink-0" />
+          <UserAvatar
+            avatar={otherAvatar}
+            avatarEmoji={otherAvatarEmoji ?? (isGroup ? '👥' : undefined)}
+            size="sm"
+            alt={otherPseudo}
+          />
+          {!isGroup && (
+            <span
+              className={`inline-block w-2 h-2 rounded-full shrink-0 ${otherIsOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <span className="text-sm font-medium truncate block">{otherPseudo || 'Dialogue'}</span>
+            <span className="text-[11px] text-slate-500">
+              {isGroup
+                ? `${memberCount ?? (memberIds.length || Object.keys(participantsById).length)} participants`
+                : otherIsOnline
+                  ? 'En ligne'
+                  : 'Hors ligne'}
+            </span>
+          </div>
+        </div>
+        {isGroup && memberIds.length > 0 && (
+          <GroupParticipantsPreview
+            memberIds={memberIds}
+            participantsById={participantsById}
+            meId={meId}
+          />
+        )}
       </header>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 space-y-3 min-h-0">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 space-y-4 min-h-0">
         {visibleMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500 py-8">Envoyez le premier message.</p>
         )}
         {visibleMessages.map((msg, index) => {
           const isMe = msg.senderId === meId
           const itemKey = String(msg.id ?? msg.messageId ?? index)
-          const body = msg.body || (msg.cardSlug ? `🃏 ${msg.cardSlug}` : '')
+          const sender = resolveSender(msg, isMe)
           return (
-            <div key={itemKey} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                  isMe
-                    ? 'bg-violet-600/30 text-violet-100'
-                    : 'bg-slate-800 text-slate-200 border border-slate-700'
-                }`}
-              >
-                {body}
-              </div>
-            </div>
+            <MessageBubble
+              key={itemKey}
+              msg={msg}
+              isMe={isMe}
+              displayName={sender.displayName}
+              avatar={sender.avatar}
+              avatarEmoji={sender.avatarEmoji}
+              meId={meId}
+              onReact={handleReact}
+            />
           )
         })}
       </div>
@@ -154,5 +262,3 @@ export function DialogueStream({
     </div>
   )
 }
-
-

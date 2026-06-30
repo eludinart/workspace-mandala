@@ -27,7 +27,51 @@ export type CommunityMemberAdmin = {
   joined_at: string | null
 }
 
+export type AdminManagedUser = {
+  id: number
+  email: string
+  login: string
+  name: string
+  pseudo?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  show_full_last_name?: boolean
+  app_role?: string
+  profile_public?: boolean
+  bio?: string | null
+  registered?: string
+  communities?: Array<{
+    id: number
+    slug: string
+    name: string
+    role: string
+    logo_emoji?: string | null
+  }>
+}
+
 export const adminApi = {
+  users: {
+    get: (userId: number, communitySlug?: string) => {
+      const qs = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''
+      return api.get(`/api/admin/users/${userId}${qs}`) as Promise<AdminManagedUser>
+    },
+    update: (userId: number, body: Record<string, unknown>) =>
+      api.patch(`/api/admin/users/${userId}`, body) as Promise<AdminManagedUser>,
+    resetPassword: (
+      userId: number,
+      body: { password?: string; send_email?: boolean; community_slug?: string }
+    ) =>
+      api.post(`/api/admin/users/${userId}/reset-password`, body) as Promise<{
+        ok: boolean
+        temporary_password: string
+        email_sent: boolean
+        email_configured: boolean
+      }>,
+    removeFromCommunity: (userId: number, communitySlug: string) =>
+      api.post(`/api/admin/users/${userId}/remove-from-community`, {
+        community_slug: communitySlug,
+      }) as Promise<{ ok: boolean; community_slug: string; community_name: string }>,
+  },
   communities: {
     list: () => api.get('/api/admin/communities') as Promise<{ items: CommunityAdmin[] }>,
     get: (id: number) =>

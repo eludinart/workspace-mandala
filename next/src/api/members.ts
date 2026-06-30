@@ -21,7 +21,22 @@ export type MemberDirectoryEntry = {
     name: string
     logo_emoji: string | null
     role: string
+    weather_status?: string | null
+    weather_note?: string | null
   }>
+}
+
+export type CommunityMember = {
+  user_id: number
+  pseudo: string
+  display_name: string
+  avatar_emoji: string
+  avatar: string | null
+  profile_public: boolean
+  is_me: boolean
+  role?: string
+  weather_status?: string | null
+  weather_note?: string | null
 }
 
 export const membersApi = {

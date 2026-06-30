@@ -197,8 +197,8 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
                       onClick={() => setFilter(tab.id)}
                       className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${
                         filter === tab.id
-                          ? 'bg-violet-600/40 text-violet-200 font-medium'
-                          : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
+                          ? 'bg-violet-600/40 text-slate-100 font-medium'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                       }`}
                     >
                       {tab.label}

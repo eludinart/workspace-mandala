@@ -1,15 +1,16 @@
-export type ActingRole = 'admin' | 'coach' | 'user'
+export type ActingRole = 'admin' | 'site_manager' | 'user'
 
 export const ACTING_ROLE_STORAGE_KEY = 'mdl_admin_acting_role'
 
 export const ACTING_ROLE_LABELS: Record<ActingRole, string> = {
   admin: 'Administrateur',
-  coach: 'Coach',
+  site_manager: 'Gestionnaire',
   user: 'Utilisateur',
 }
 
 export function parseActingRole(raw: string | null): ActingRole {
-  if (raw === 'coach' || raw === 'user') return raw
+  if (raw === 'site_manager' || raw === 'coach') return 'site_manager'
+  if (raw === 'user') return 'user'
   return 'admin'
 }
 

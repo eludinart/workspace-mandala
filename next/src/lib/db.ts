@@ -56,6 +56,7 @@ export function getPool(): mysql.Pool {
       user: DB_USER,
       password: DB_PASSWORD,
       charset: 'utf8mb4',
+      connectTimeout: 8_000,
       waitForConnections: true,
       connectionLimit: POOL_CONNECTION_LIMIT,
       // Avoid keeping many idle sockets open when MariaDB has a low max_connections.

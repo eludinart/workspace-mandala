@@ -3,8 +3,14 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, table } from './db'
+import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
 
 const PRESENCE_ONLINE_SECONDS = 300
+
+/** Table dédiée P2P / groupes (évite conflit avec mdl_chat_messages du chat coach). */
+const P2P_MESSAGES_TABLE = 'chat_channel_messages'
+const MESSAGE_REACTIONS_TABLE = 'chat_message_reactions'
+const CHANNEL_READ_META_PREFIX = 'mdl_chat_channel_'
 
 function isOnlineFromLastSeen(lastSeenAt: string): boolean {
   if (!lastSeenAt) return false
@@ -78,46 +84,366 @@ async function fetchUsersAvatarMap(
   return map
 }
 
+export type MyChannelRecord = {
+  channelId: number
+  channelType: 'direct' | 'group'
+  communityId?: number | null
+  otherUserId?: number
+  otherPseudo: string
+  otherAvatar: string | null
+  otherAvatarEmoji: string
+  otherIsOnline: boolean
+  otherLastSeenAt: string | null
+  unreadCount: number
+  memberCount?: number
+  memberIds?: number[]
+}
+
+let _ensureGroupChannelPromise: Promise<void> | null = null
+
+async function dropChatChannelsCheckConstraints(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  tableName: string
+): Promise<void> {
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_TYPE = 'CHECK'`,
+      [tableName.replace(/^.*\./, '')]
+    )
+    for (const row of rows ?? []) {
+      const name = String(row.CONSTRAINT_NAME ?? '').trim()
+      if (!name) continue
+      try {
+        await pool.execute(`ALTER TABLE ${tableName} DROP CHECK \`${name}\``)
+      } catch {
+        try {
+          await pool.execute(`ALTER TABLE ${tableName} DROP CONSTRAINT \`${name}\``)
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* information_schema indisponible */
+  }
+}
+
+async function ensureGroupChannelSupport(pool: Awaited<ReturnType<typeof getPool>>): Promise<void> {
+  if (!_ensureGroupChannelPromise) {
+    _ensureGroupChannelPromise = (async () => {
+      const tChannels = table('chat_channels')
+      const tMembers = table('chat_channel_members')
+      try {
+        await pool.execute(`
+          CREATE TABLE IF NOT EXISTS ${tChannels} (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_a INT NOT NULL,
+            user_b INT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_pair (user_a, user_b)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `)
+      } catch {
+        /* exists */
+      }
+      await dropChatChannelsCheckConstraints(pool, tChannels)
+      for (const [col, def] of [
+        ['channel_type', "VARCHAR(20) NOT NULL DEFAULT 'direct'"],
+        ['community_id', 'INT NULL'],
+        ['channel_name', 'VARCHAR(255) NULL'],
+        ['member_fingerprint', 'VARCHAR(512) NULL'],
+        ['created_by', 'INT NULL'],
+      ] as const) {
+        try {
+          await pool.execute(`ALTER TABLE ${tChannels} ADD COLUMN ${col} ${def}`)
+        } catch {
+          /* exists */
+        }
+      }
+      try {
+        await pool.execute(`ALTER TABLE ${tChannels} DROP INDEX uk_pair`)
+      } catch {
+        /* already dropped */
+      }
+      try {
+        await pool.execute(
+          `ALTER TABLE ${tChannels} ADD UNIQUE KEY uk_direct_pair (user_a, user_b, channel_type)`
+        )
+      } catch {
+        /* exists */
+      }
+      try {
+        await pool.execute(
+          `ALTER TABLE ${tChannels} ADD UNIQUE KEY uk_group_fp (community_id, member_fingerprint)`
+        )
+      } catch {
+        /* exists */
+      }
+      try {
+        await pool.execute(`
+          CREATE TABLE IF NOT EXISTS ${tMembers} (
+            channel_id INT NOT NULL,
+            user_id INT NOT NULL,
+            joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (channel_id, user_id),
+            INDEX idx_user (user_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `)
+      } catch {
+        /* exists */
+      }
+    })().catch(() => {
+      _ensureGroupChannelPromise = null
+    })
+  }
+  await _ensureGroupChannelPromise
+  await dropChatChannelsCheckConstraints(pool, table('chat_channels'))
+}
+
+async function verifyUsersInCommunity(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  communityId: number,
+  userIds: number[]
+): Promise<void> {
+  const ids = [...new Set(userIds.filter((id) => id > 0))]
+  if (!ids.length) throw new Error('Aucun membre sélectionné')
+  const tM = table('mandala_community_members')
+  const placeholders = ids.map(() => '?').join(',')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${tM} WHERE community_id = ? AND user_id IN (${placeholders})`,
+    [communityId, ...ids]
+  )
+  if ((rows ?? []).length !== ids.length) {
+    throw Object.assign(new Error('Tous les participants doivent être membres du lieu'), { status: 403 })
+  }
+}
+
+function memberFingerprint(userIds: number[]): string {
+  return [...new Set(userIds.filter((id) => id > 0))].sort((a, b) => a - b).join(',')
+}
+
+async function assertChannelAccess(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number,
+  userId: number
+): Promise<RowDataPacket> {
+  await ensureGroupChannelSupport(pool)
+  const tCh = table('chat_channels')
+  const tMembers = table('chat_channel_members')
+  const [chRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id, user_a, user_b, COALESCE(channel_type, 'direct') AS channel_type,
+            community_id, channel_name, member_fingerprint, created_by
+     FROM ${tCh} WHERE id = ?`,
+    [channelId]
+  )
+  if (!chRows?.length) throw new Error('Canal introuvable')
+  const ch = chRows[0]
+  const channelType = String(ch.channel_type ?? 'direct')
+  if (channelType === 'group') {
+    const [memberRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT 1 FROM ${tMembers} WHERE channel_id = ? AND user_id = ? LIMIT 1`,
+      [channelId, userId]
+    )
+    if (!memberRows?.length) throw new Error('Accès non autorisé à ce canal')
+    return ch
+  }
+  const ua = Number(ch.user_a)
+  const ub = Number(ch.user_b)
+  if (userId !== ua && userId !== ub) throw new Error('Accès non autorisé à ce canal')
+  return ch
+}
+
+async function countUnreadForChannel(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number,
+  userId: number,
+  channelType: 'direct' | 'group',
+  otherUserId?: number
+): Promise<number> {
+  const t = table(P2P_MESSAGES_TABLE)
+  const tMeta = table('usermeta')
+  await ensureMessagesTable(pool)
+  const [readMetaRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [userId, `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`]
+  )
+  const lastReadAt = readMetaRows?.[0]?.meta_value ? String(readMetaRows[0].meta_value).trim() : null
+  if (channelType === 'group') {
+    if (lastReadAt) {
+      const [cRows] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id != ? AND created_at > ?`,
+        [channelId, userId, lastReadAt]
+      )
+      return Number(cRows?.[0]?.c ?? 0)
+    }
+    const [cRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id != ?`,
+      [channelId, userId]
+    )
+    return Number(cRows?.[0]?.c ?? 0)
+  }
+  const otherId = otherUserId ?? 0
+  if (lastReadAt) {
+    const [cRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id = ? AND created_at > ?`,
+      [channelId, otherId, lastReadAt]
+    )
+    return Number(cRows?.[0]?.c ?? 0)
+  }
+  const [cRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id = ?`,
+    [channelId, otherId]
+  )
+  return Number(cRows?.[0]?.c ?? 0)
+}
+
+/** Ouvre ou crée un dialogue 1:1 (membres du même lieu). */
+export async function openDirectChannel(
+  userId: number,
+  targetUserId: number,
+  communityId?: number
+): Promise<{ channelId: number }> {
+  const pool = getPool()
+  if (!userId || !targetUserId) throw new Error('Utilisateurs requis')
+  if (userId === targetUserId) throw new Error('Impossible de discuter avec soi-même')
+  if (communityId) await verifyUsersInCommunity(pool, communityId, [userId, targetUserId])
+
+  await ensureGroupChannelSupport(pool)
+  await ensureSeedsAndLinksTables(pool)
+  const tLinks = table('prairie_links')
+  const tChannels = table('chat_channels')
+  const ua = Math.min(userId, targetUserId)
+  const ub = Math.max(userId, targetUserId)
+  await pool.execute(`INSERT IGNORE INTO ${tLinks} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
+  await pool.execute(
+    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type) VALUES (?, ?, 'direct')`,
+    [ua, ub]
+  )
+  const [chanRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${tChannels} WHERE user_a = ? AND user_b = ? AND COALESCE(channel_type, 'direct') = 'direct' LIMIT 1`,
+    [ua, ub]
+  )
+  const channelId = chanRows?.[0] ? Number(chanRows[0].id) : 0
+  if (!channelId) throw new Error('Impossible de créer le dialogue')
+  return { channelId }
+}
+
+/** Ouvre ou crée un dialogue de groupe pour un lieu. */
+export async function openGroupChannel(params: {
+  creatorUserId: number
+  communityId: number
+  memberUserIds: number[]
+  name?: string | null
+}): Promise<{ channelId: number; isNew: boolean }> {
+  const pool = getPool()
+  const creatorId = params.creatorUserId
+  if (!creatorId || !params.communityId) throw new Error('Paramètres requis')
+  const others = params.memberUserIds.filter((id) => id > 0 && id !== creatorId)
+  const allIds = [...new Set([creatorId, ...others])]
+  if (allIds.length < 2) throw new Error('Sélectionnez au moins un autre membre')
+  await verifyUsersInCommunity(pool, params.communityId, allIds)
+
+  await ensureGroupChannelSupport(pool)
+  const tChannels = table('chat_channels')
+  const tMembers = table('chat_channel_members')
+  const fingerprint = memberFingerprint(allIds)
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${tChannels}
+     WHERE channel_type = 'group' AND community_id = ? AND member_fingerprint = ? LIMIT 1`,
+    [params.communityId, fingerprint]
+  )
+  if (existing?.length) {
+    return { channelId: Number(existing[0].id), isNew: false }
+  }
+
+  const memberCount = allIds.length
+  const defaultName =
+    memberCount <= 3
+      ? `Groupe (${memberCount} membres)`
+      : `Groupe — ${memberCount} membres`
+  const channelName = params.name?.trim() || defaultName
+
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    const [insertRes] = await conn.execute(
+      `INSERT INTO ${tChannels}
+        (user_a, user_b, channel_type, community_id, channel_name, member_fingerprint, created_by)
+       VALUES (0, 1, 'group', ?, ?, ?, ?)`,
+      [params.communityId, channelName, fingerprint, creatorId]
+    )
+    const channelId = Number((insertRes as { insertId?: number })?.insertId ?? 0)
+    if (!channelId) throw new Error('Impossible de créer le groupe')
+    await conn.execute(
+      `UPDATE ${tChannels} SET user_b = ? WHERE id = ? AND channel_type = 'group'`,
+      [channelId, channelId]
+    )
+    for (const uid of allIds) {
+      await conn.execute(`INSERT IGNORE INTO ${tMembers} (channel_id, user_id) VALUES (?, ?)`, [
+        channelId,
+        uid,
+      ])
+    }
+    await conn.commit()
+    return { channelId, isNew: true }
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+}
+
+/** IDs des autres participants (notifications). */
+export async function getChannelRecipientIds(
+  channelId: number,
+  senderId: number
+): Promise<number[]> {
+  const pool = getPool()
+  await ensureGroupChannelSupport(pool)
+  const tCh = table('chat_channels')
+  const tMembers = table('chat_channel_members')
+  const [chRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_a, user_b, COALESCE(channel_type, 'direct') AS channel_type FROM ${tCh} WHERE id = ?`,
+    [channelId]
+  )
+  if (!chRows?.length) return []
+  const ch = chRows[0]
+  if (String(ch.channel_type) === 'group') {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT user_id FROM ${tMembers} WHERE channel_id = ? AND user_id != ?`,
+      [channelId, senderId]
+    )
+    return (rows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
+  }
+  const ua = Number(ch.user_a)
+  const ub = Number(ch.user_b)
+  if (senderId === ua) return ub > 0 ? [ub] : []
+  if (senderId === ub) return ua > 0 ? [ua] : []
+  return []
+}
+
 /** Récupère les canaux de dialogue (La Clairière) de l'utilisateur */
 export async function getMyChannels(
-  userId: string
-): Promise<{
-  channels: Array<{
-    channelId: number
-    otherUserId: number
-    otherPseudo: string
-    otherAvatar: string | null
-    otherAvatarEmoji: string
-    otherIsOnline: boolean
-    otherLastSeenAt: string | null
-    unreadCount: number
-  }>
-}> {
+  userId: string,
+  options?: { communityId?: number }
+): Promise<{ channels: MyChannelRecord[] }> {
   const pool = getPool()
   const uid = parseInt(userId, 10)
   if (!uid) throw new Error('user_id requis')
+  const communityId = options?.communityId
 
   await touchSocialPresence(pool, uid)
+  await ensureGroupChannelSupport(pool)
 
   const tChannels = table('chat_channels')
   const tLinks = table('prairie_links')
   const tMeta = table('usermeta')
   const tUsers = table('users')
-
-  try {
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS ${tChannels} (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        user_a INT NOT NULL,
-        user_b INT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uk_pair (user_a, user_b),
-        CHECK (user_a < user_b)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `)
-  } catch {
-    /* table exists */
-  }
+  const tMembers = table('chat_channel_members')
+  const tCommMembers = table('mandala_community_members')
 
   try {
     const [linkRows] = await pool.execute<RowDataPacket[]>(
@@ -133,7 +459,10 @@ export async function getMyChannels(
           ua = ub
           ub = tmp
         }
-        await pool.execute(`INSERT IGNORE INTO ${tChannels} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
+        await pool.execute(
+          `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type) VALUES (?, ?, 'direct')`,
+          [ua, ub]
+        )
       }
     }
   } catch {
@@ -141,30 +470,42 @@ export async function getMyChannels(
   }
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, user_a, user_b FROM ${tChannels} WHERE user_a = ? OR user_b = ?`,
+    `SELECT id, user_a, user_b FROM ${tChannels}
+     WHERE (user_a = ? OR user_b = ?) AND COALESCE(channel_type, 'direct') = 'direct'`,
     [uid, uid]
   )
 
-  const t = table(P2P_MESSAGES_TABLE)
   await ensureMessagesTable(pool)
 
-  const list: Array<{
-    channelId: number
-    otherUserId: number
-    otherPseudo: string
-    otherAvatar: string | null
-    otherAvatarEmoji: string
-    otherIsOnline: boolean
-    otherLastSeenAt: string | null
-    unreadCount: number
-  }> = []
+  const list: MyChannelRecord[] = []
 
-  const otherIds = rows.map((r) =>
+  let directRows = rows
+  if (communityId) {
+    const otherIds = directRows
+      .map((r) => (Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)))
+      .filter((id) => id > 0)
+    if (!otherIds.length) {
+      directRows = []
+    } else {
+      const placeholders = otherIds.map(() => '?').join(',')
+      const [memberRows] = await pool.execute<RowDataPacket[]>(
+        `SELECT user_id FROM ${tCommMembers} WHERE community_id = ? AND user_id IN (${placeholders})`,
+        [communityId, ...otherIds]
+      )
+      const allowed = new Set((memberRows ?? []).map((r) => Number(r.user_id)))
+      directRows = directRows.filter((r) => {
+        const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
+        return allowed.has(otherId)
+      })
+    }
+  }
+
+  const otherIds = directRows.map((r) =>
     Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
   )
   const avatarMap = await fetchUsersAvatarMap(pool, otherIds)
 
-  for (const r of rows) {
+  for (const r of directRows) {
     const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
     const [uRows] = await pool.execute<RowDataPacket[]>(`SELECT display_name FROM ${tUsers} WHERE ID = ?`, [otherId])
     const u = uRows[0]
@@ -183,28 +524,11 @@ export async function getMyChannels(
     )
     const lastSeenAt = seenRows[0]?.meta_value ? String(seenRows[0].meta_value).trim() : ''
     const channelId = Number(r.id)
-    const [readMetaRows] = await pool.execute<RowDataPacket[]>(
-      `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
-      [uid, `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`]
-    )
-    const lastReadAt = readMetaRows?.[0]?.meta_value ? String(readMetaRows[0].meta_value).trim() : null
-    let unreadCount = 0
-    if (lastReadAt) {
-      const [cRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id = ? AND created_at > ?`,
-        [channelId, otherId, lastReadAt]
-      )
-      unreadCount = Number(cRows?.[0]?.c ?? 0)
-    } else {
-      const [cRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT COUNT(*) as c FROM ${t} WHERE channel_id = ? AND sender_id = ?`,
-        [channelId, otherId]
-      )
-      unreadCount = Number(cRows?.[0]?.c ?? 0)
-    }
+    const unreadCount = await countUnreadForChannel(pool, channelId, uid, 'direct', otherId)
     const av = avatarMap.get(otherId) ?? { avatar: null, avatarEmoji: '🌸' }
     list.push({
       channelId,
+      channelType: 'direct',
       otherUserId: otherId,
       otherPseudo: pseudo,
       otherAvatar: av.avatar,
@@ -215,11 +539,46 @@ export async function getMyChannels(
     })
   }
 
+  let groupSql = `
+    SELECT c.id, c.community_id, c.channel_name, c.member_fingerprint
+    FROM ${tChannels} c
+    INNER JOIN ${tMembers} m ON m.channel_id = c.id AND m.user_id = ?
+    WHERE c.channel_type = 'group'`
+  const groupArgs: Array<number> = [uid]
+  if (communityId) {
+    groupSql += ` AND c.community_id = ?`
+    groupArgs.push(communityId)
+  }
+  const [groupRows] = await pool.execute<RowDataPacket[]>(groupSql, groupArgs)
+
+  for (const gr of groupRows ?? []) {
+    const channelId = Number(gr.id)
+    const [memberIdRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT user_id FROM ${tMembers} WHERE channel_id = ? ORDER BY user_id`,
+      [channelId]
+    )
+    const memberIds = (memberIdRows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
+    const unreadCount = await countUnreadForChannel(pool, channelId, uid, 'group')
+    const groupName = String(gr.channel_name ?? '').trim() || `Groupe (${memberIds.length})`
+    list.push({
+      channelId,
+      channelType: 'group',
+      communityId: gr.community_id ? Number(gr.community_id) : null,
+      otherPseudo: groupName,
+      otherAvatar: null,
+      otherAvatarEmoji: '👥',
+      otherIsOnline: false,
+      otherLastSeenAt: null,
+      unreadCount,
+      memberCount: memberIds.length,
+      memberIds,
+    })
+  }
+
   return { channels: list }
 }
 
 /** Table dédiée P2P (évite conflit avec mdl_chat_messages du chat coach qui utilise conversation_id) */
-const P2P_MESSAGES_TABLE = 'chat_channel_messages'
 
 // Singleton DDL : CREATE TABLE ne s'exécute qu'une fois par process (évite les metadata locks)
 let _ensureMessagesTablePromise: Promise<void> | null = null
@@ -243,6 +602,113 @@ function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise
   return _ensureMessagesTablePromise
 }
 
+let _ensureReactionsTablePromise: Promise<void> | null = null
+
+function ensureReactionsTable(pool: Awaited<ReturnType<typeof getPool>>): Promise<void> {
+  if (!_ensureReactionsTablePromise) {
+    const t = table(MESSAGE_REACTIONS_TABLE)
+    _ensureReactionsTablePromise = pool
+      .execute(`
+      CREATE TABLE IF NOT EXISTS ${t} (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        message_id INT NOT NULL,
+        user_id INT NOT NULL,
+        emoji VARCHAR(16) NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_message_user (message_id, user_id),
+        INDEX idx_message (message_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `)
+      .then(() => undefined)
+      .catch(() => {
+        _ensureReactionsTablePromise = null
+      })
+  }
+  return _ensureReactionsTablePromise
+}
+
+function aggregateReactions(
+  rows: RowDataPacket[],
+): Record<number, MessageReactionSummary[]> {
+  const byMessage = new Map<number, Map<string, number[]>>()
+  for (const r of rows) {
+    const messageId = Number(r.message_id)
+    const uid = Number(r.user_id)
+    const emoji = String(r.emoji ?? '')
+    if (!messageId || !uid || !emoji) continue
+    if (!byMessage.has(messageId)) byMessage.set(messageId, new Map())
+    const emojis = byMessage.get(messageId)!
+    if (!emojis.has(emoji)) emojis.set(emoji, [])
+    emojis.get(emoji)!.push(uid)
+  }
+  const out: Record<number, MessageReactionSummary[]> = {}
+  for (const [messageId, emojis] of byMessage) {
+    out[messageId] = [...emojis.entries()].map(([emoji, userIds]) => ({ emoji, userIds }))
+  }
+  return out
+}
+
+export async function getReactionsForMessageIds(
+  messageIds: number[],
+): Promise<Record<number, MessageReactionSummary[]>> {
+  if (messageIds.length === 0) return {}
+  const pool = getPool()
+  await ensureReactionsTable(pool)
+  const t = table(MESSAGE_REACTIONS_TABLE)
+  const placeholders = messageIds.map(() => '?').join(', ')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT message_id, user_id, emoji FROM ${t} WHERE message_id IN (${placeholders})`,
+    messageIds,
+  )
+  return aggregateReactions(rows ?? [])
+}
+
+export async function toggleMessageReaction(
+  messageId: number,
+  userId: number,
+  emoji: string,
+): Promise<{ reactions: MessageReactionSummary[]; myEmoji: string | null }> {
+  if (!isAllowedReactionEmoji(emoji)) throw new Error('Émoji non autorisé')
+  const pool = getPool()
+  await ensureMessagesTable(pool)
+  await ensureReactionsTable(pool)
+  const tMsg = table(P2P_MESSAGES_TABLE)
+  const tRx = table(MESSAGE_REACTIONS_TABLE)
+
+  const [msgRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT channel_id FROM ${tMsg} WHERE id = ? LIMIT 1`,
+    [messageId],
+  )
+  const channelId = Number(msgRows?.[0]?.channel_id)
+  if (!channelId) throw new Error('Message introuvable')
+
+  await assertChannelAccess(pool, channelId, userId)
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT id, emoji FROM ${tRx} WHERE message_id = ? AND user_id = ? LIMIT 1`,
+    [messageId, userId],
+  )
+  const row = existing?.[0]
+  if (row && String(row.emoji) === emoji) {
+    await pool.execute(`DELETE FROM ${tRx} WHERE id = ?`, [Number(row.id)])
+  } else if (row) {
+    await pool.execute(`UPDATE ${tRx} SET emoji = ?, created_at = NOW() WHERE id = ?`, [
+      emoji,
+      Number(row.id),
+    ])
+  } else {
+    await pool.execute(
+      `INSERT INTO ${tRx} (message_id, user_id, emoji) VALUES (?, ?, ?)`,
+      [messageId, userId, emoji],
+    )
+  }
+
+  const reactionsMap = await getReactionsForMessageIds([messageId])
+  const reactions = reactionsMap[messageId] ?? []
+  const mine = reactions.find((r) => r.userIds.includes(userId))
+  return { reactions, myEmoji: mine?.emoji ?? null }
+}
+
 export type ChannelMessage = {
   id: number
   senderId: number
@@ -250,6 +716,10 @@ export type ChannelMessage = {
   cardSlug: string | null
   temperature: string | null
   createdAt: string
+  senderPseudo?: string | null
+  senderAvatar?: string | null
+  senderAvatarEmoji?: string | null
+  reactions?: MessageReactionSummary[]
 }
 
 /** Récupère les messages d'un canal (La Clairière) */
@@ -267,30 +737,45 @@ export async function getChannelMessages(
   const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
-  const [chRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_a, user_b FROM ${tCh} WHERE id = ?`,
-    [channelId]
-  )
-  if (!chRows?.length) throw new Error('Canal introuvable')
-  const ch = chRows[0]
-  const ua = Number(ch.user_a)
-  const ub = Number(ch.user_b)
-  if (uid !== ua && uid !== ub) throw new Error('Accès non autorisé à ce canal')
+  await assertChannelAccess(pool, channelId, uid)
 
   await ensureMessagesTable(pool)
 
+  const tUsers = table('users')
+  const tMeta = table('usermeta')
+
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, sender_id, body, card_slug, temperature, created_at FROM ${t} WHERE channel_id = ? ORDER BY created_at ASC`,
-    [channelId]
+    `SELECT m.id, m.sender_id, m.body, m.card_slug, m.temperature, m.created_at,
+            COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.sender_id)) AS sender_pseudo,
+            av.meta_value AS sender_avatar,
+            COALESCE(em.meta_value, '🌸') AS sender_avatar_emoji
+     FROM ${t} m
+     JOIN ${tUsers} u ON u.ID = m.sender_id
+     LEFT JOIN ${tMeta} p ON p.user_id = m.sender_id AND p.meta_key = 'mdl_pseudo'
+     LEFT JOIN ${tMeta} av ON av.user_id = m.sender_id AND av.meta_key = 'mdl_avatar'
+     LEFT JOIN ${tMeta} em ON em.user_id = m.sender_id AND em.meta_key = 'mdl_avatar_emoji'
+     WHERE m.channel_id = ?
+     ORDER BY m.created_at ASC`,
+    [channelId],
   )
 
-  return (rows ?? []).map((r) => ({
+  const messages = (rows ?? []).map((r) => ({
     id: Number(r.id),
     senderId: Number(r.sender_id),
     body: r.body ? String(r.body) : null,
     cardSlug: r.card_slug ? String(r.card_slug) : null,
     temperature: r.temperature ? String(r.temperature) : null,
     createdAt: String(r.created_at ?? ''),
+    senderPseudo: r.sender_pseudo ? String(r.sender_pseudo) : null,
+    senderAvatar: r.sender_avatar ? String(r.sender_avatar) : null,
+    senderAvatarEmoji: r.sender_avatar_emoji ? String(r.sender_avatar_emoji) : null,
+  }))
+
+  const ids = messages.map((m) => m.id)
+  const reactionsMap = await getReactionsForMessageIds(ids)
+  return messages.map((m) => ({
+    ...m,
+    reactions: reactionsMap[m.id] ?? [],
   }))
 }
 
@@ -307,15 +792,7 @@ export async function getChannelLastMessageAt(channelId: number, userId: string)
   const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
-  const [chRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_a, user_b FROM ${tCh} WHERE id = ?`,
-    [channelId]
-  )
-  if (!chRows?.length) throw new Error('Canal introuvable')
-  const ch = chRows[0]
-  const ua = Number(ch.user_a)
-  const ub = Number(ch.user_b)
-  if (uid !== ua && uid !== ub) throw new Error('Accès non autorisé à ce canal')
+  await assertChannelAccess(pool, channelId, uid)
 
   await ensureMessagesTable(pool)
 
@@ -345,15 +822,7 @@ export async function getChannelMessagesSince(
   const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
-  const [chRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_a, user_b FROM ${tCh} WHERE id = ?`,
-    [channelId]
-  )
-  if (!chRows?.length) throw new Error('Canal introuvable')
-  const ch = chRows[0]
-  const ua = Number(ch.user_a)
-  const ub = Number(ch.user_b)
-  if (uid !== ua && uid !== ub) throw new Error('Accès non autorisé à ce canal')
+  await assertChannelAccess(pool, channelId, uid)
 
   await ensureMessagesTable(pool)
 
@@ -388,18 +857,9 @@ export async function sendChannelMessage(
 
   await touchSocialPresence(pool, senderId)
 
-  const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
 
-  const [chRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_a, user_b FROM ${tCh} WHERE id = ?`,
-    [channelId]
-  )
-  if (!chRows?.length) throw new Error('Canal introuvable')
-  const ch = chRows[0]
-  const ua = Number(ch.user_a)
-  const ub = Number(ch.user_b)
-  if (senderId !== ua && senderId !== ub) throw new Error('Accès non autorisé à ce canal')
+  await assertChannelAccess(pool, channelId, senderId)
 
   await ensureMessagesTable(pool)
 
@@ -425,7 +885,6 @@ export async function sendChannelMessage(
   }
 }
 
-const CHANNEL_READ_META_PREFIX = 'mdl_chat_channel_'
 
 /** Retourne le nombre de messages non lus (La Clairière) pour l'utilisateur */
 export async function getClairiereUnreadCount(userId: string): Promise<number> {
@@ -436,12 +895,14 @@ export async function getClairiereUnreadCount(userId: string): Promise<number> {
   const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
   const tMeta = table('usermeta')
+  const tMembers = table('chat_channel_members')
   const metaPrefix = CHANNEL_READ_META_PREFIX
 
+  await ensureGroupChannelSupport(pool)
   await ensureMessagesTable(pool)
 
-  // Single query: join channels + messages + usermeta to count all unread in one shot
-  const [rows] = await pool.execute<RowDataPacket[]>(
+  // Direct channels
+  const [directRows] = await pool.execute<RowDataPacket[]>(
     `SELECT COALESCE(SUM(sub.cnt), 0) AS total
      FROM (
        SELECT COUNT(m.id) AS cnt
@@ -453,13 +914,34 @@ export async function getClairiereUnreadCount(userId: string): Promise<number> {
          ON um.user_id = ?
          AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
        WHERE (c.user_a = ? OR c.user_b = ?)
+         AND COALESCE(c.channel_type, 'direct') = 'direct'
          AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
        GROUP BY c.id
      ) sub`,
     [uid, uid, metaPrefix, uid, uid]
   )
 
-  return Number(rows?.[0]?.total ?? 0)
+  // Group channels
+  const [groupRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COALESCE(SUM(sub.cnt), 0) AS total
+     FROM (
+       SELECT COUNT(m.id) AS cnt
+       FROM ${tCh} c
+       INNER JOIN ${tMembers} cm ON cm.channel_id = c.id AND cm.user_id = ?
+       JOIN ${t} m
+         ON m.channel_id = c.id
+         AND m.sender_id != ?
+       LEFT JOIN ${tMeta} um
+         ON um.user_id = ?
+         AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
+       WHERE c.channel_type = 'group'
+         AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
+       GROUP BY c.id
+     ) sub`,
+    [uid, uid, uid, metaPrefix]
+  )
+
+  return Number(directRows?.[0]?.total ?? 0) + Number(groupRows?.[0]?.total ?? 0)
 }
 
 /** Retourne l'ID de l'autre utilisateur dans un canal (pour notifications) */
@@ -581,20 +1063,11 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
   const uid = parseInt(userId, 10)
   if (!uid || !channelId) return
 
-  const tCh = table('chat_channels')
   const tMeta = table('usermeta')
   const metaKey = `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
-  const [chRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_a, user_b FROM ${tCh} WHERE id = ?`,
-    [channelId]
-  )
-  if (!chRows?.length) return
-  const ch = chRows[0]
-  const ua = Number(ch.user_a)
-  const ub = Number(ch.user_b)
-  if (uid !== ua && uid !== ub) return
+  await assertChannelAccess(pool, channelId, uid)
 
   const [existing] = await pool.execute<RowDataPacket[]>(
     `SELECT umeta_id FROM ${tMeta} WHERE user_id = ? AND meta_key = ?`,
@@ -651,8 +1124,7 @@ async function ensureSeedsAndLinksTables(pool: Awaited<ReturnType<typeof getPool
         user_a INT NOT NULL,
         user_b INT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY uk_pair (user_a, user_b),
-        CHECK (user_a < user_b)
+        UNIQUE KEY uk_pair (user_a, user_b)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `)
   } catch {
@@ -718,7 +1190,10 @@ export async function acceptSeedConnection(
 
   await pool.execute(`UPDATE ${tSeeds} SET status = 'accepted', updated_at = NOW() WHERE id = ?`, [seedId])
   await pool.execute(`INSERT IGNORE INTO ${tLinks} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
-  await pool.execute(`INSERT IGNORE INTO ${tChannels} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
+  await pool.execute(
+    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type) VALUES (?, ?, 'direct')`,
+    [ua, ub]
+  )
 
   const [chanRows] = await pool.execute<RowDataPacket[]>(
     `SELECT id FROM ${tChannels} WHERE user_a = ? AND user_b = ?`,

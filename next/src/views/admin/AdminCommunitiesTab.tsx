@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { adminApi, type CommunityAdmin, type CommunityMemberAdmin } from '@/api/admin'
+import { managerApi } from '@/api/manager'
 import { communitiesApi } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { useCommunity } from '@/contexts/CommunityContext'
@@ -11,9 +12,14 @@ import { isAvatarImageUrl } from '@/lib/user-avatar'
 
 export function AdminCommunitiesTab({
   onMessage,
+  scope = 'app-admin',
 }: {
   onMessage: (msg: string | null, ok?: boolean) => void
+  /** app-admin : tous les lieux (admin application). managed : lieux dont l'utilisateur est gestionnaire. */
+  scope?: 'app-admin' | 'managed'
 }) {
+  const isAppAdminScope = scope === 'app-admin'
+  const communitiesApiClient = isAppAdminScope ? adminApi.communities : managerApi.communities
   const { refresh } = useCommunity()
   const [list, setList] = useState<CommunityAdmin[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -45,7 +51,7 @@ export function AdminCommunitiesTab({
   const loadList = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await adminApi.communities.list()
+      const data = await communitiesApiClient.list()
       setList(data.items ?? [])
     } catch {
       setList([])
@@ -53,13 +59,13 @@ export function AdminCommunitiesTab({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [communitiesApiClient])
 
   const loadDetail = useCallback(async (id: number) => {
       setDetailLoading(true)
       try {
         setDetailError(null)
-        const data = await adminApi.communities.get(id)
+        const data = await communitiesApiClient.get(id)
         setDetail(data.community)
         setMembers(data.members ?? [])
         setEditName(data.community.name)
@@ -82,7 +88,7 @@ export function AdminCommunitiesTab({
       } finally {
         setDetailLoading(false)
       }
-  }, [])
+  }, [communitiesApiClient])
 
   useEffect(() => {
     void loadList()
@@ -103,7 +109,6 @@ export function AdminCommunitiesTab({
     try {
       const body: Record<string, unknown> = {
         name: editName,
-        slug: editSlug,
         tagline: editTagline || null,
         description: editDesc || null,
         location: editLocation || null,
@@ -111,14 +116,17 @@ export function AdminCommunitiesTab({
         contact_email: editEmail || null,
         logo_emoji: editEmoji,
         accent_color: editColor,
-        is_active: editActive,
+      }
+      if (isAppAdminScope) {
+        body.slug = editSlug
+        body.is_active = editActive
       }
       const loadedAvatar =
         detail?.avatar && isAvatarImageUrl(detail.avatar) ? detail.avatar : null
       if (editAvatar !== loadedAvatar) {
         body.avatar = editAvatar
       }
-      const { community } = await adminApi.communities.update(selectedId, body)
+      const { community } = await communitiesApiClient.update(selectedId, body)
       setDetail(community)
       onMessage('Communauté enregistrée')
       await loadDetail(selectedId)
@@ -135,7 +143,7 @@ export function AdminCommunitiesTab({
     if (!selectedId) return
     onMessage(null)
     try {
-      await adminApi.communities.setMemberRole(selectedId, userId, role)
+      await communitiesApiClient.setMemberRole(selectedId, userId, role)
       onMessage('Rôle membre mis à jour')
       void loadDetail(selectedId)
     } catch (e: unknown) {
@@ -177,7 +185,9 @@ export function AdminCommunitiesTab({
   return (
     <div className="grid lg:grid-cols-[220px_1fr] gap-4">
       <div className="space-y-2">
-        <p className="text-xs text-slate-500 uppercase tracking-wide">Communautés</p>
+        <p className="text-xs text-slate-500 uppercase tracking-wide">
+          {isAppAdminScope ? 'Communautés' : 'Mes lieux'}
+        </p>
         {loading && <p className="text-slate-500 text-sm">Chargement…</p>}
         <ul className="space-y-1">
           {list.map((c) => (
@@ -207,6 +217,15 @@ export function AdminCommunitiesTab({
           ))}
         </ul>
 
+        {!loading && list.length === 0 && (
+          <p className="text-slate-500 text-sm italic px-1">
+            {isAppAdminScope
+              ? 'Aucune communauté enregistrée.'
+              : 'Vous ne gérez aucun lieu pour le moment (rôle organizer ou admin sur une communauté).'}
+          </p>
+        )}
+
+        {isAppAdminScope && (
         <div className="pt-4 border-t border-slate-800 space-y-2">
           <p className="text-xs text-slate-500">Nouvelle communauté</p>
           <input
@@ -229,12 +248,15 @@ export function AdminCommunitiesTab({
             Créer
           </button>
         </div>
+        )}
       </div>
 
       <div className="min-h-[320px]">
-        {!selectedId && (
+        {!selectedId && list.length > 0 && (
           <p className="text-slate-500 text-sm italic">
-            Sélectionnez une communauté (ex. Shambhala) pour modifier son profil et ses membres.
+            {isAppAdminScope
+              ? 'Sélectionnez une communauté pour modifier son profil et ses membres.'
+              : 'Sélectionnez un lieu que vous administrez.'}
           </p>
         )}
 
@@ -299,6 +321,7 @@ export function AdminCommunitiesTab({
                     className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
                   />
                 </label>
+                {isAppAdminScope && (
                 <label className="block">
                   <span className="text-slate-500 text-xs">Slug (URL)</span>
                   <input
@@ -307,6 +330,7 @@ export function AdminCommunitiesTab({
                     className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
                   />
                 </label>
+                )}
                 <label className="block sm:col-span-2">
                   <span className="text-slate-500 text-xs">Accroche</span>
                   <input
@@ -372,6 +396,7 @@ export function AdminCommunitiesTab({
                 </label>
               </div>
 
+              {isAppAdminScope && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -381,6 +406,7 @@ export function AdminCommunitiesTab({
                 />
                 Communauté active (visible dans le sélecteur)
               </label>
+              )}
 
               <button
                 type="button"

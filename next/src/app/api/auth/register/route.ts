@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isDbConfigured } from '@/lib/db'
 import { authRegister } from '@/lib/db-auth'
+import { joinCommunity } from '@/lib/db-communities'
 import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
 
@@ -17,14 +18,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const email = (body.email || '').trim()
     const password = body.password || ''
-    const name = (body.name || body.display_name || '').trim()
+    const firstName = (body.first_name || '').trim()
+    const lastName = (body.last_name || '').trim()
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Email et mot de passe requis' },
         { status: 400 }
       )
     }
-    const user = await authRegister(email, password, name)
+    if (!firstName || !lastName) {
+      return NextResponse.json(
+        { error: 'Prénom et nom de famille requis' },
+        { status: 400 }
+      )
+    }
+    const user = await authRegister(email, password, firstName, lastName)
+
+    const communitySlug = String(body.community_slug ?? '').trim().toLowerCase()
+    if (communitySlug) {
+      await joinCommunity({ userId: user.id, slug: communitySlug })
+    }
 
     const token = jwtEncode({
       sub: String(user.id),

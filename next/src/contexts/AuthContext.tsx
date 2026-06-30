@@ -9,6 +9,7 @@ import {
   readActingRoleFromStorage,
   writeActingRoleToStorage,
 } from '@/lib/acting-role'
+import { isSiteManagerAppRole, normalizeAppRole } from '@/lib/app-roles'
 
 type User = Record<string, unknown> | null
 
@@ -16,7 +17,7 @@ type AuthContextValue = {
   user: User
   loading: boolean
   login: (loginId: string, password: string) => Promise<User>
-  register: (email: string, password: string, name?: string, inviteToken?: string) => Promise<User>
+  register: (email: string, password: string, firstName: string, lastName: string, inviteToken?: string) => Promise<User>
   logout: () => void
   refreshUser: () => Promise<void>
   /** Administrateur réel (droits serveur complets). */
@@ -28,6 +29,8 @@ type AuthContextValue = {
   showAdminUi: boolean
   /** Compat : équivalent à showAdminUi pour la navigation admin. */
   isAdmin: boolean
+  isSiteManager: boolean
+  /** @deprecated utiliser isSiteManager */
   isCoach: boolean
   roleSummary: string
 }
@@ -101,10 +104,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return
     }
     try {
+      const healthRes = await fetch(`${window.location.origin}/api/health`, {
+        credentials: 'include',
+        signal: AbortSignal.timeout(8_000),
+      }).catch(() => null)
+      if (!healthRes?.ok) {
+        throw new Error('Serveur indisponible')
+      }
       const u = (await Promise.race([
         authApi.me() as Promise<Record<string, unknown>>,
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Connexion au serveur trop lente')), 20_000)
+          setTimeout(() => reject(new Error('Connexion au serveur trop lente')), 12_000)
         ),
       ])) as Record<string, unknown>
       if (computeIsRealAdmin(u)) {
@@ -150,8 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return u
   }
 
-  const register = async (email: string, password: string, name = '', inviteToken?: string) => {
-    const { token, user: u } = (await authApi.register(email, password, name, inviteToken)) as {
+  const register = async (email: string, password: string, firstName: string, lastName: string, inviteToken?: string) => {
+    const { token, user: u } = (await authApi.register(email, password, firstName, lastName, inviteToken)) as {
       token: string
       user: Record<string, unknown>
     }
@@ -197,8 +207,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const showAdminUi = isRealAdmin && actingRole === 'admin'
-  const isCoach =
-    actingRole === 'coach' || (isRealAdmin && actingRole === 'admin') || (!isRealAdmin && String(user?.app_role) === 'coach')
+  const isSiteManager =
+    actingRole === 'site_manager' ||
+    (isRealAdmin && actingRole === 'admin') ||
+    (!isRealAdmin && isSiteManagerAppRole(user?.app_role))
 
   const roleSummary = useMemo(() => {
     if (!isRealAdmin) return ''
@@ -207,8 +219,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (actingRole === 'admin') {
       return `${real} — tous les droits (utilisateurs, annonces, télémétrie, communautés).`
     }
-    if (actingRole === 'coach') {
-      return `${real} — vue coach : messagerie et fonctions coach, sans panneau admin.`
+    if (actingRole === 'site_manager') {
+      return `${real} — vue gestionnaire : paramètres du lieu, calendrier, sans panneau admin global.`
     }
     return `${real} — vue utilisateur standard ; les API admin restent disponibles côté serveur.`
   }, [isRealAdmin, actingRole, user])
@@ -227,7 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setActingRole,
         showAdminUi,
         isAdmin: showAdminUi,
-        isCoach,
+        isSiteManager,
+        isCoach: isSiteManager,
         roleSummary,
       }}
     >

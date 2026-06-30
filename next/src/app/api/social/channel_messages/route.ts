@@ -36,7 +36,6 @@ export async function GET(req: NextRequest) {
     }
 
     const messages = await getChannelMessages(cid, userId)
-    // Format attendu par DialogueStream : id, senderId, body, cardSlug, temperature, createdAt
     const formatted = messages.map((m) => ({
       id: m.id,
       messageId: m.id,
@@ -45,6 +44,10 @@ export async function GET(req: NextRequest) {
       cardSlug: m.cardSlug,
       temperature: m.temperature,
       createdAt: m.createdAt,
+      senderPseudo: m.senderPseudo,
+      senderAvatar: m.senderAvatar,
+      senderAvatarEmoji: m.senderAvatarEmoji,
+      reactions: m.reactions ?? [],
     }))
     return NextResponse.json({ messages: formatted })
   } catch (err: unknown) {

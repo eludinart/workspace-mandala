@@ -2,6 +2,7 @@
 
 import { create } from 'zustand'
 import { socialApi } from '@/api/social'
+import type { MessageReactionSummary } from '@/lib/message-reactions'
 
 export type ChannelMessage = {
   id?: number
@@ -11,6 +12,10 @@ export type ChannelMessage = {
   cardSlug?: string
   temperature?: string
   createdAt?: string
+  senderPseudo?: string | null
+  senderAvatar?: string | null
+  senderAvatarEmoji?: string | null
+  reactions?: MessageReactionSummary[]
 }
 
 export interface LisiereData {
@@ -38,6 +43,11 @@ export interface SocialStoreState {
   acceptConnection: (seedId: number) => Promise<{ channelId: number }>
   loadChannelMessages: (channelId: number | string) => Promise<unknown[]>
   sendMessage: (channelId: number | string, payload: { body?: string; cardSlug?: string }) => Promise<unknown>
+  toggleMessageReaction: (
+    channelId: number | string,
+    messageId: number,
+    emoji: string,
+  ) => Promise<MessageReactionSummary[]>
   setTemperature: (channelId: number | string, value: string) => void
   clairiereUnreadCount: number
   fetchClairiereUnread: () => Promise<number>
@@ -150,6 +160,24 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
       }
     })
     return msg
+  },
+
+  toggleMessageReaction: async (channelId, messageId, emoji) => {
+    const res = await socialApi.toggleMessageReaction(messageId, emoji)
+    const reactions = res.reactions ?? []
+    set((s) => {
+      const key = String(channelId)
+      const list = s.messagesByChannel[key] || []
+      return {
+        messagesByChannel: {
+          ...s.messagesByChannel,
+          [key]: list.map((m) =>
+            Number(m.id ?? m.messageId) === messageId ? { ...m, reactions } : m,
+          ),
+        },
+      }
+    })
+    return reactions
   },
 
   setTemperature: (channelId, value) =>

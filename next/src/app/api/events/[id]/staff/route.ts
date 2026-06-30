@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api-auth'
-import { authMe } from '@/lib/db-auth'
+import { requireAuth, resolveCommunityManagerAccess } from '@/lib/api-auth'
 import { addEventStaff, removeEventStaff } from '@/lib/db-mandala-events'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
-
-async function isAppAdmin(userId: number): Promise<boolean> {
-  try {
-    const u = await authMe(userId)
-    const r = u.app_role || u.wp_role || ''
-    return r === 'admin' || r === 'administrator'
-  } catch {
-    return false
-  }
-}
 
 export async function POST(
   req: NextRequest,
@@ -33,14 +22,14 @@ export async function POST(
     if (!eventId || !targetUserId) {
       return NextResponse.json({ error: 'event_id et user_id requis' }, { status: 400 })
     }
-    const admin = await isAppAdmin(uid)
+    const { isAppAdmin } = await resolveCommunityManagerAccess(uid)
     await addEventStaff({
       userId: uid,
       eventId,
       targetUserId,
       role: String(body.role ?? 'volunteer'),
       note: body.note != null ? String(body.note) : undefined,
-      isAppAdmin: admin,
+      isAppAdmin,
     })
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {
@@ -65,8 +54,8 @@ export async function DELETE(
     if (!eventId || !targetUserId) {
       return NextResponse.json({ error: 'user_id requis' }, { status: 400 })
     }
-    const admin = await isAppAdmin(uid)
-    await removeEventStaff({ userId: uid, eventId, targetUserId, isAppAdmin: admin })
+    const { isAppAdmin } = await resolveCommunityManagerAccess(uid)
+    await removeEventStaff({ userId: uid, eventId, targetUserId, isAppAdmin })
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }

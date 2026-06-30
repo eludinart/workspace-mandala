@@ -7,7 +7,7 @@ import { isDbConfigured } from '@/lib/db'
 import {
   sendChannelMessage,
   createClairiereMessageNotification,
-  getOtherUserIdInChannel,
+  getChannelRecipientIds,
 } from '@/lib/db-social'
 import { addStubMessage } from '@/lib/social-stub-store'
 
@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
       body: text?.trim() || null,
       cardSlug: cardSlug?.trim() || null,
     })
-    const recipientId = await getOtherUserIdInChannel(channelId, senderId)
-    if (recipientId) {
+    const recipientIds = await getChannelRecipientIds(channelId, senderId)
+    for (const recipientId of recipientIds) {
       createClairiereMessageNotification(
         channelId,
         senderId,

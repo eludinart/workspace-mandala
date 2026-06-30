@@ -6,7 +6,6 @@ const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '') || ''
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath, assetPrefix: `${basePath}/` } : {}),
-  ...(appUrl ? { metadataBase: new URL(appUrl) } : {}),
   output: 'standalone',
   eslint: { ignoreDuringBuilds: true },
   outputFileTracingRoot: path.resolve(process.cwd()),

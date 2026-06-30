@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api-auth'
-import { authMe } from '@/lib/db-auth'
+import { requireAuth, resolveCommunityManagerAccess, userCanOrganizeEventsInCommunity } from '@/lib/api-auth'
 import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communities'
 import {
   createEvent,
@@ -11,16 +10,6 @@ import {
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
-
-async function isAppAdmin(userId: number): Promise<boolean> {
-  try {
-    const u = await authMe(userId)
-    const r = u.app_role || u.wp_role || ''
-    return r === 'admin' || r === 'administrator'
-  } catch {
-    return false
-  }
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,16 +28,8 @@ export async function GET(req: NextRequest) {
     }
     await seedDemoEventsIfEmpty(community.id, uid)
     const events = await listEventsForCommunity(community.id)
-    const admin = await isAppAdmin(uid)
-    let can_manage = admin
-    if (!can_manage) {
-      try {
-        const role = await requireCommunityMembership(uid, community.id)
-        can_manage = role === 'organizer' || role === 'admin'
-      } catch {
-        can_manage = false
-      }
-    }
+    const role = await requireCommunityMembership(uid, community.id)
+    const can_manage = await userCanOrganizeEventsInCommunity(uid, role)
     return NextResponse.json({ events, can_manage })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
@@ -64,11 +45,11 @@ export async function POST(req: NextRequest) {
     const { userId } = await requireAuth(req)
     const uid = parseInt(userId, 10)
     const body = await req.json()
-    const admin = await isAppAdmin(uid)
+    const { isAppAdmin } = await resolveCommunityManagerAccess(uid)
     const event = await createEvent({
       userId: uid,
       communitySlug: String(body.community_slug ?? '').trim(),
-      isAppAdmin: admin,
+      isAppAdmin,
       title: String(body.title ?? ''),
       description: body.description != null ? String(body.description) : undefined,
       location: body.location != null ? String(body.location) : undefined,

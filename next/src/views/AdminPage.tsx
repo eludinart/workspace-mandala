@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { telemetryApi, type TelemetryEventItem } from '@/api/telemetry'
 import { AdminCommunityBanner } from '@/components/admin/AdminCommunityBanner'
+import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { AdminCommunitiesTab } from '@/views/admin/AdminCommunitiesTab'
 import { authApi } from '@/api/auth'
 import { notificationsApi } from '@/api/notifications'
@@ -11,7 +12,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
 
-type AdminTab = 'people' | 'communications' | 'technical'
+import type { AdminTabId } from '@/lib/nav'
 type CommMode = 'announcement' | 'broadcast'
 
 type AdminUser = {
@@ -45,16 +46,26 @@ function isoDaysAgo(days: number) {
   return d.toISOString()
 }
 
-const TABS: { id: AdminTab; label: string }[] = [
+const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'people', label: 'Personnes' },
   { id: 'communications', label: 'Communications' },
-  { id: 'technical', label: 'Technique' },
+  { id: 'telemetry', label: 'Télémétrie' },
+  { id: 'places', label: 'Lieux & communautés' },
 ]
 
-export function AdminPage() {
+function normalizeAdminTab(tab?: AdminTabId | 'technical'): AdminTabId {
+  if (tab === 'technical') return 'telemetry'
+  return tab ?? 'people'
+}
+
+export function AdminPage({
+  initialTab = 'people',
+}: {
+  initialTab?: AdminTabId | 'technical'
+}) {
   const { isRealAdmin, showAdminUi, actingRole, setActingRole } = useAuth()
   useCommunity()
-  const [tab, setTab] = useState<AdminTab>('people')
+  const [tab, setTab] = useState<AdminTabId>(() => normalizeAdminTab(initialTab))
   const [commMode, setCommMode] = useState<CommMode>('announcement')
   const [msg, setMsg] = useState<string | null>(null)
   const [msgOk, setMsgOk] = useState(true)
@@ -62,6 +73,7 @@ export function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [userSearch, setUserSearch] = useState('')
   const [usersLoading, setUsersLoading] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
 
   const [adminNotifs, setAdminNotifs] = useState<AdminNotif[]>([])
   const [nTitle, setNTitle] = useState('')
@@ -79,6 +91,10 @@ export function AdminPage() {
 
   const [telemetry, setTelemetry] = useState<TelemetryEventItem[]>([])
   const [telemetryLoading, setTelemetryLoading] = useState(false)
+
+  useEffect(() => {
+    setTab(normalizeAdminTab(initialTab))
+  }, [initialTab])
 
   const loadUsers = useCallback(async () => {
     setUsersLoading(true)
@@ -134,7 +150,7 @@ export function AdminPage() {
       void loadAdminNotifs()
       void loadBroadcasts()
     }
-    if (tab === 'technical') void loadTelemetry()
+    if (tab === 'telemetry') void loadTelemetry()
   }, [tab, isRealAdmin, loadUsers, loadAdminNotifs, loadBroadcasts, loadTelemetry])
 
   if (!isRealAdmin) {
@@ -151,7 +167,7 @@ export function AdminPage() {
       <div className="max-w-lg space-y-3 rounded-xl border border-amber-800/50 bg-amber-950/20 p-4">
         <p className="text-sm text-amber-100">
           Vous êtes connecté en tant qu&apos;administrateur, mais la vue active est «{' '}
-          {actingRole === 'coach' ? 'Coach' : 'Utilisateur'} ».
+          {actingRole === 'site_manager' ? 'Gestionnaire' : 'Utilisateur'} ».
         </p>
         <p className="text-xs text-amber-200/80">
           Passez en mode Administrateur pour accéder à la télémétrie, aux utilisateurs et aux
@@ -324,32 +340,57 @@ export function AdminPage() {
                 <tr>
                   <th className="text-left p-2">ID</th>
                   <th className="text-left p-2">Email</th>
+                  <th className="text-left p-2">Nom</th>
                   <th className="text-left p-2">Pseudo</th>
                   <th className="text-left p-2">Rôle app</th>
+                  <th className="text-left p-2 w-20" />
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className="border-t border-slate-800">
+                  <tr key={u.id} className="border-t border-slate-800 hover:bg-slate-900/50">
                     <td className="p-2">{u.id}</td>
                     <td className="p-2">{u.email}</td>
+                    <td className="p-2">{u.name || '—'}</td>
                     <td className="p-2">{u.pseudo ?? '—'}</td>
                     <td className="p-2">
                       <select
-                        value={u.app_role}
+                        value={u.app_role === 'coach' ? 'site_manager' : u.app_role}
                         onChange={(e) => void setRole(u.id, e.target.value)}
                         className="rounded bg-slate-950 border border-slate-700 px-1 py-0.5"
                       >
                         <option value="user">user</option>
-                        <option value="coach">coach</option>
+                        <option value="site_manager">gestionnaire</option>
                         <option value="admin">admin</option>
                       </select>
+                    </td>
+                    <td className="p-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserId(u.id)}
+                        className="text-violet-300 hover:text-violet-200 text-[11px]"
+                      >
+                        Fiche →
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {selectedUserId != null && (
+            <AdminUserSheet
+              userId={selectedUserId}
+              canEditAppRole
+              canEditCommunityRoles
+              onClose={() => setSelectedUserId(null)}
+              onSaved={() => void loadUsers()}
+              onRemoved={() => {
+                setSelectedUserId(null)
+                void loadUsers()
+              }}
+            />
+          )}
         </div>
       )}
 
@@ -517,70 +558,77 @@ export function AdminPage() {
         </div>
       )}
 
-      {tab === 'technical' && (
-        <div className="space-y-6">
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Télémétrie</h2>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => void loadTelemetry()}
-                className="text-sm px-3 py-1 border border-slate-700 rounded-lg"
-              >
-                Rafraîchir
-              </button>
-              <button
-                type="button"
-                onClick={() => void telemetryApi.clear().then(() => loadTelemetry())}
-                className="text-sm px-3 py-1 border border-red-800 text-red-400 rounded-lg"
-              >
-                Purger
-              </button>
-            </div>
-            {telemetryLoading && <p className="text-slate-500 text-sm">Chargement…</p>}
-            {!telemetryLoading && telemetry.length === 0 && (
-              <p className="text-slate-500 text-sm italic">
-                Aucun événement enregistré sur les 7 derniers jours. Naviguez dans l&apos;app puis
-                cliquez Rafraîchir.
-              </p>
-            )}
-            <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-96 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-900 text-slate-400 sticky top-0">
-                  <tr>
-                    <th className="text-left p-2">Heure</th>
-                    <th className="text-left p-2">Événement</th>
-                    <th className="text-left p-2">Feature</th>
-                    <th className="text-left p-2">Durée</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {telemetry.map((it) => {
-                    const dur = (it.properties as { duration_ms?: number })?.duration_ms
-                    const isErr = it.name === 'api_error'
-                    return (
-                      <tr
-                        key={String(it.id)}
-                        className={`border-t border-slate-800 ${isErr ? 'text-red-300' : ''}`}
-                      >
-                        <td className="p-2 whitespace-nowrap">
-                          {new Date(it.ts).toLocaleString('fr-FR')}
-                        </td>
-                        <td className="p-2">{it.name}</td>
-                        <td className="p-2">{it.feature ?? '—'}</td>
-                        <td className="p-2">{dur != null ? `${dur} ms` : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Communautés</h2>
-            <AdminCommunitiesTab onMessage={onCommunitiesMessage} />
-          </section>
-        </div>
+      {tab === 'telemetry' && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Télémétrie</h2>
+          <p className="text-sm text-slate-400">
+            Événements d&apos;usage enregistrés sur les 7 derniers jours.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void loadTelemetry()}
+              className="text-sm px-3 py-1 border border-slate-700 rounded-lg"
+            >
+              Rafraîchir
+            </button>
+            <button
+              type="button"
+              onClick={() => void telemetryApi.clear().then(() => loadTelemetry())}
+              className="text-sm px-3 py-1 border border-red-800 text-red-400 rounded-lg"
+            >
+              Purger
+            </button>
+          </div>
+          {telemetryLoading && <p className="text-slate-500 text-sm">Chargement…</p>}
+          {!telemetryLoading && telemetry.length === 0 && (
+            <p className="text-slate-500 text-sm italic">
+              Aucun événement enregistré sur les 7 derniers jours. Naviguez dans l&apos;app puis
+              cliquez Rafraîchir.
+            </p>
+          )}
+          <div className="overflow-x-auto rounded-xl border border-slate-800 max-h-[32rem] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-900 text-slate-400 sticky top-0">
+                <tr>
+                  <th className="text-left p-2">Heure</th>
+                  <th className="text-left p-2">Événement</th>
+                  <th className="text-left p-2">Feature</th>
+                  <th className="text-left p-2">Durée</th>
+                </tr>
+              </thead>
+              <tbody>
+                {telemetry.map((it) => {
+                  const dur = (it.properties as { duration_ms?: number })?.duration_ms
+                  const isErr = it.name === 'api_error'
+                  return (
+                    <tr
+                      key={String(it.id)}
+                      className={`border-t border-slate-800 ${isErr ? 'text-red-300' : ''}`}
+                    >
+                      <td className="p-2 whitespace-nowrap">
+                        {new Date(it.ts).toLocaleString('fr-FR')}
+                      </td>
+                      <td className="p-2">{it.name}</td>
+                      <td className="p-2">{it.feature ?? '—'}</td>
+                      <td className="p-2">{dur != null ? `${dur} ms` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === 'places' && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Lieux &amp; communautés</h2>
+          <p className="text-sm text-slate-400">
+            Gestion des sites enregistrés, membres et paramètres par lieu.
+          </p>
+          <AdminCommunitiesTab scope="app-admin" onMessage={onCommunitiesMessage} />
+        </section>
       )}
     </div>
   )

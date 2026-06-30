@@ -4,10 +4,12 @@
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import {
+  canOrganizeCommunityEvents,
   getCommunityBySlug,
   requireCommunityMembership,
   type CommunityRole,
 } from './db-communities'
+import { assertEndsAfterStarts } from './event-dates'
 import { normalizeDbDateTime } from './format-datetime'
 
 import type { EventPhase } from './event-constants'
@@ -134,7 +136,7 @@ export async function ensureEventsTables(): Promise<void> {
 }
 
 function canManageEvents(role: CommunityRole, isAppAdmin: boolean): boolean {
-  return isAppAdmin || role === 'organizer' || role === 'admin'
+  return isAppAdmin || canOrganizeCommunityEvents(role)
 }
 
 async function getEventRow(eventId: number): Promise<EventRecord | null> {
@@ -182,7 +184,38 @@ async function requireEventManager(
   return role
 }
 
-export async function listEventsForCommunity(communityId: number): Promise<EventRecord[]> {
+export type EventListItem = EventRecord & {
+  media_count: number
+}
+
+export async function listEventsForCommunity(communityId: number): Promise<EventListItem[]> {
+  await ensureEventsTables()
+  const pool = getPool()
+  const tE = table('events')
+  const tM = table('event_media')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image,
+            COALESCE(mc.cnt, 0) AS media_count
+     FROM ${tE} e
+     LEFT JOIN (
+       SELECT event_id, COUNT(*) AS cnt FROM ${tM} GROUP BY event_id
+     ) mc ON mc.event_id = e.id
+     WHERE e.community_id = ? AND e.status != 'cancelled'
+     ORDER BY COALESCE(e.starts_at, e.created_at) ASC`,
+    [communityId]
+  )
+  return (rows ?? []).map((r) => ({
+    ...mapEvent(r),
+    media_count: Number(r.media_count ?? 0),
+  }))
+}
+
+/** Événements dont starts_at est dans [from, to) (DATETIME strings). */
+export async function listEventsForCommunityBetween(
+  communityId: number,
+  fromDateTime: string,
+  toDateTime: string
+): Promise<EventRecord[]> {
   await ensureEventsTables()
   const pool = getPool()
   const tE = table('events')
@@ -190,8 +223,14 @@ export async function listEventsForCommunity(communityId: number): Promise<Event
     `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at
      FROM ${tE}
      WHERE community_id = ? AND status != 'cancelled'
-     ORDER BY COALESCE(starts_at, created_at) ASC`,
-    [communityId]
+       AND starts_at IS NOT NULL
+       AND starts_at < ?
+       AND (
+         (ends_at IS NOT NULL AND ends_at >= ?)
+         OR (ends_at IS NULL AND starts_at >= ?)
+       )
+     ORDER BY starts_at ASC, id ASC`,
+    [communityId, toDateTime, fromDateTime, fromDateTime]
   )
   return (rows ?? []).map(mapEvent)
 }
@@ -295,10 +334,14 @@ export async function createEvent(params: {
 }): Promise<EventRecord> {
   const community = await getCommunityBySlug(params.communitySlug)
   if (!community) throw new Error('Communauté introuvable')
-  await requireCommunityMembership(params.userId, community.id)
+  const role = await requireCommunityMembership(params.userId, community.id)
+  if (!canManageEvents(role, params.isAppAdmin)) {
+    throw new Error('Droits organisateur requis pour créer un événement')
+  }
 
   const title = params.title?.trim()
   if (!title) throw new Error('Titre requis')
+  assertEndsAfterStarts(params.starts_at, params.ends_at)
 
   await ensureEventsTables()
   const pool = getPool()
@@ -333,9 +376,14 @@ export async function updateEvent(params: {
   if (!event) throw new Error('Événement introuvable')
   await requireEventManager(params.userId, event.community_id, params.isAppAdmin, event.created_by)
 
+  const p = params.patch
+  const nextStarts =
+    p.starts_at !== undefined ? (p.starts_at ? String(p.starts_at) : null) : event.starts_at
+  const nextEnds = p.ends_at !== undefined ? (p.ends_at ? String(p.ends_at) : null) : event.ends_at
+  assertEndsAfterStarts(nextStarts, nextEnds)
+
   const fields: string[] = []
   const values: unknown[] = []
-  const p = params.patch
 
   if (p.title !== undefined) {
     fields.push('title = ?')

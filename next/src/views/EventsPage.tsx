@@ -4,39 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { eventsApi } from '@/api/events'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { EventDetailPage } from '@/views/EventDetailPage'
+import { EventPreviewCard } from '@/components/events/EventPreviewCard'
+import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { EVENT_PHASES } from '@/lib/event-constants'
-import { formatMandalaDate, parseMandalaDateTime } from '@/lib/format-datetime'
+import { type HomeEventPreview, isEventUpcoming } from '@/lib/event-preview'
+import { parseMandalaDateTime } from '@/lib/format-datetime'
 import { ApiError } from '@/lib/api-client'
-
-type EventItem = {
-  id: number
-  title: string
-  phase: string
-  starts_at: string | null
-  location: string | null
-}
 
 function phaseLabel(id: string) {
   return EVENT_PHASES.find((p) => p.id === id)?.label ?? id
-}
-
-function phaseBadgeClass(phase: string) {
-  switch (phase) {
-    case 'day':
-      return 'bg-amber-950/60 text-amber-200 border-amber-700/40'
-    case 'after':
-      return 'bg-sky-950/60 text-sky-200 border-sky-700/40'
-    case 'closed':
-      return 'bg-slate-800/80 text-slate-400 border-slate-600/40'
-    default:
-      return 'bg-violet-950/60 text-violet-200 border-violet-700/40'
-  }
-}
-
-function isUpcoming(ev: EventItem): boolean {
-  const d = parseMandalaDateTime(ev.starts_at)
-  if (!d) return true
-  return d.getTime() >= Date.now()
 }
 
 function EventListSection({
@@ -45,34 +21,17 @@ function EventListSection({
   onSelect,
 }: {
   title: string
-  events: EventItem[]
+  events: HomeEventPreview[]
   onSelect: (id: number) => void
 }) {
   if (events.length === 0) return null
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">{title}</h2>
-      <ul className="space-y-3">
+      <ul className="space-y-4">
         {events.map((ev) => (
           <li key={ev.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(ev.id)}
-              className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex justify-between gap-4 text-left hover:border-violet-500/40 transition-colors"
-            >
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <p className="font-medium">{ev.title}</p>
-                <span
-                  className={`inline-block text-[10px] px-2 py-0.5 rounded-full border ${phaseBadgeClass(ev.phase)}`}
-                >
-                  {phaseLabel(ev.phase)}
-                </span>
-                {ev.location && <p className="text-xs text-slate-600">📍 {ev.location}</p>}
-              </div>
-              <span className="text-sm text-violet-300 whitespace-nowrap shrink-0 self-start">
-                {formatMandalaDate(ev.starts_at)}
-              </span>
-            </button>
+            <EventPreviewCard event={ev} onClick={() => onSelect(ev.id)} />
           </li>
         ))}
       </ul>
@@ -94,6 +53,7 @@ function CreateEventWizard({
   const [description, setDescription] = useState('')
   const [location, setLocation] = useState('')
   const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -110,6 +70,7 @@ function CreateEventWizard({
         description: description.trim() || undefined,
         location: location.trim() || undefined,
         starts_at: startsAt ? startsAt.replace('T', ' ') : undefined,
+        ends_at: endsAt ? endsAt.replace('T', ' ') : undefined,
         phase: 'preparation',
       })) as { event?: { id: number } }
       if (res.event?.id) onCreated(res.event.id)
@@ -178,6 +139,15 @@ function CreateEventWizard({
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
             />
           </label>
+          <label className="block text-xs text-slate-400">
+            Date et heure de fin (optionnel)
+            <input
+              type="datetime-local"
+              value={endsAt}
+              onChange={(e) => setEndsAt(e.target.value)}
+              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
+            />
+          </label>
         </div>
       )}
       {step === 3 && (
@@ -201,6 +171,10 @@ function CreateEventWizard({
             <div>
               <dt className="text-slate-500 text-xs">Début</dt>
               <dd>{startsAt ? startsAt.replace('T', ' ') : '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 text-xs">Fin</dt>
+              <dd>{endsAt ? endsAt.replace('T', ' ') : '—'}</dd>
             </div>
             <div>
               <dt className="text-slate-500 text-xs">Phase initiale</dt>
@@ -260,15 +234,22 @@ export function EventsPage({
   onOpenEvent?: (id: number | null) => void
 }) {
   const { active } = useCommunity()
-  const [events, setEvents] = useState<EventItem[]>([])
+  const [events, setEvents] = useState<HomeEventPreview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<number | null>(openEventId ?? null)
+  const [modalEventId, setModalEventId] = useState<number | null>(null)
+  const [fullPageId, setFullPageId] = useState<number | null>(openEventId ?? null)
   const [showCreate, setShowCreate] = useState(false)
   const [canManage, setCanManage] = useState(false)
 
-  const setSelected = (id: number | null) => {
-    setSelectedId(id)
+  const openModal = (id: number) => {
+    setModalEventId(id)
+    onOpenEvent?.(id)
+  }
+
+  const openFullPage = (id: number) => {
+    setModalEventId(null)
+    setFullPageId(id)
     onOpenEvent?.(id)
   }
 
@@ -277,7 +258,10 @@ export function EventsPage({
     setLoading(true)
     setError(null)
     try {
-      const res = (await eventsApi.list(active.slug)) as { events?: EventItem[]; can_manage?: boolean }
+      const res = (await eventsApi.list(active.slug)) as {
+        events?: HomeEventPreview[]
+        can_manage?: boolean
+      }
       setEvents(res.events ?? [])
       setCanManage(!!res.can_manage)
     } catch (e: unknown) {
@@ -293,17 +277,17 @@ export function EventsPage({
   }, [load])
 
   useEffect(() => {
-    if (openEventId) setSelectedId(openEventId)
+    if (openEventId) setModalEventId(openEventId)
   }, [openEventId])
 
   const { upcoming, past } = useMemo(() => {
-    const up: EventItem[] = []
-    const pa: EventItem[] = []
+    const up: HomeEventPreview[] = []
+    const pa: HomeEventPreview[] = []
     for (const ev of events) {
-      if (isUpcoming(ev)) up.push(ev)
+      if (isEventUpcoming(ev)) up.push(ev)
       else pa.push(ev)
     }
-    const byDate = (a: EventItem, b: EventItem) => {
+    const byDate = (a: HomeEventPreview, b: HomeEventPreview) => {
       const da = parseMandalaDateTime(a.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
       const db = parseMandalaDateTime(b.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
       return da - db
@@ -317,12 +301,15 @@ export function EventsPage({
     return { upcoming: up, past: pa }
   }, [events])
 
-  if (selectedId && active?.slug) {
+  if (fullPageId && active?.slug) {
     return (
       <EventDetailPage
-        eventId={selectedId}
+        eventId={fullPageId}
         communitySlug={active.slug}
-        onBack={() => setSelected(null)}
+        onBack={() => {
+          setFullPageId(null)
+          onOpenEvent?.(null)
+        }}
       />
     )
   }
@@ -332,7 +319,11 @@ export function EventsPage({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Événements — {active?.name}</h1>
-          <p className="text-sm text-slate-400 mt-1">Phases, équipe et tâches par événement</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {canManage
+              ? 'Créez et gérez les événements du lieu.'
+              : 'Consultez les événements du lieu — réservés aux membres de l’organisation pour les modifier.'}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -359,7 +350,7 @@ export function EventsPage({
           onClose={() => setShowCreate(false)}
           onCreated={(id) => {
             setShowCreate(false)
-            void load().then(() => setSelected(id))
+            void load().then(() => openModal(id))
           }}
         />
       )}
@@ -370,9 +361,20 @@ export function EventsPage({
       )}
       {!loading && !error && events.length > 0 && (
         <div className="space-y-6">
-          <EventListSection title="À venir" events={upcoming} onSelect={setSelected} />
-          <EventListSection title="Passés" events={past} onSelect={setSelected} />
+          <EventListSection title="À venir" events={upcoming} onSelect={openModal} />
+          <EventListSection title="Passés" events={past} onSelect={openModal} />
         </div>
+      )}
+
+      {modalEventId != null && (
+        <EventDetailModal
+          eventId={modalEventId}
+          onClose={() => {
+            setModalEventId(null)
+            onOpenEvent?.(null)
+          }}
+          onOpenFull={() => openFullPage(modalEventId)}
+        />
       )}
     </div>
   )

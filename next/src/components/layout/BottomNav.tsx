@@ -15,7 +15,7 @@ export function BottomNav({
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-md safe-area-pb"
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-slate-800 bg-slate-950/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)]"
       aria-label="Navigation principale"
     >
       <div className="flex items-stretch justify-around px-1 py-1">
@@ -25,7 +25,7 @@ export function BottomNav({
             type="button"
             onClick={() => onNavigate(item.id)}
             className={`flex flex-col items-center justify-center flex-1 min-h-[52px] gap-0.5 rounded-lg text-[10px] font-medium transition-colors ${
-              page === item.id ? 'text-violet-300' : 'text-slate-500'
+              page === item.id ? 'text-slate-100 font-semibold' : 'text-slate-400'
             }`}
           >
             <span className="text-lg relative" aria-hidden>

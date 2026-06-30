@@ -55,7 +55,7 @@ export function ProfileMenu({ onNavigate }: { onNavigate: MandalaNavigate }) {
                 onNavigate('admin')
                 setOpen(false)
               }}
-              className="w-full text-left px-3 py-2 hover:bg-slate-800 text-violet-200"
+              className="w-full text-left px-3 py-2 hover:bg-slate-800 text-slate-200"
             >
               Administration
             </button>

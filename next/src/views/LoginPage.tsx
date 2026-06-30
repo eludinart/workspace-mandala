@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { ThemePicker } from '@/components/theme/ThemePicker'
 
 export function LoginPage() {
   const { login, register } = useAuth()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -19,7 +21,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       if (mode === 'login') await login(email.trim(), password)
-      else await register(email.trim(), password, name.trim() || undefined)
+      else await register(email.trim(), password, firstName.trim(), lastName.trim())
     } catch (err: unknown) {
       setError((err as { message?: string })?.message ?? 'Erreur')
     } finally {
@@ -28,19 +30,40 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-violet-950/30 to-slate-950">
+    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950 relative">
+      <div className="absolute top-3 right-3 z-10">
+        <ThemePicker />
+      </div>
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl">
         <p className="text-3xl font-bold text-center mb-1">Mandala</p>
         <p className="text-center text-sm text-slate-400 mb-6">Lieux, communautés & événements</p>
+        {mode === 'register' && (
+          <p className="text-xs text-slate-500 text-center mb-4 -mt-2">
+            Après la création du compte, vous choisirez votre lieu puis lirez sa charte.
+          </p>
+        )}
         <form onSubmit={submit} className="space-y-4">
           {mode === 'register' && (
-            <input
-              type="text"
-              placeholder="Nom"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <input
+                type="text"
+                placeholder="Prénom *"
+                required
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                autoComplete="given-name"
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Nom *"
+                required
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                autoComplete="family-name"
+                className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
+              />
+            </div>
           )}
           <input
             type="email"
@@ -93,9 +116,12 @@ export function LoginPage() {
         <button
           type="button"
           className="mt-4 w-full text-sm text-slate-400 hover:text-violet-300"
-          onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+          onClick={() => {
+            setMode(mode === 'login' ? 'register' : 'login')
+            setError(null)
+          }}
         >
-          {mode === 'login' ? 'Pas encore de compte ? S\'inscrire' : 'Déjà inscrit ? Se connecter'}
+          {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà inscrit ? Se connecter'}
         </button>
       </div>
     </div>

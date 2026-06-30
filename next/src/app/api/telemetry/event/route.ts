@@ -36,6 +36,6 @@ export async function POST(req: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('[telemetry/event]', message, err)
     }
-    return NextResponse.json({ error: message, inserted: 0 }, { status: 500 })
+    return NextResponse.json({ ok: false, error: message, inserted: 0 })
   }
 }

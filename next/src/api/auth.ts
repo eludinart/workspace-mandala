@@ -3,8 +3,22 @@ import { api } from '@/lib/api-client'
 export const authApi = {
   login: (login: string, password: string) =>
     api.post('/api/auth/login', { login, password }) as Promise<{ token: string; user: Record<string, unknown> }>,
-  register: (email: string, password: string, name = '', inviteToken?: string) =>
-    api.post('/api/auth/register', { email, password, name, invite_token: inviteToken }) as Promise<{
+  register: (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+    inviteToken?: string,
+    communitySlug?: string
+  ) =>
+    api.post('/api/auth/register', {
+      email,
+      password,
+      first_name: firstName,
+      last_name: lastName,
+      invite_token: inviteToken,
+      community_slug: communitySlug,
+    }) as Promise<{
       token: string
       user: Record<string, unknown>
     }>,
@@ -22,7 +36,7 @@ export const authApi = {
   },
   updateUser: (data: Record<string, unknown>) => api.post('/api/auth/users/update', data),
   deleteUser: (id: string) => api.post('/api/auth/users/delete', { id }),
-  deleteMyAccount: () => api.post('/api/auth/account/delete'),
+  deleteMyAccount: () => api.post('/api/auth/account/delete', { confirm: true }),
   getMyProfile: () => api.get('/api/account/profile'),
   updateMyProfile: (data: Record<string, unknown>) => api.post('/api/account/profile', data),
   submitCoachRequest: (body: { message?: string }) =>

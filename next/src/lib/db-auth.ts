@@ -6,6 +6,14 @@ import { exec, getPool, isDbConfigured, table } from './db'
 import { verifyWordPressPassword } from './auth-wordpress'
 import { hash } from 'bcryptjs'
 import { isBootstrapAdminEmail } from './admin-bootstrap'
+import {
+  META_FIRST_NAME,
+  META_LAST_NAME,
+  META_SHOW_FULL_LAST_NAME,
+  formatFullName,
+  formatPublicDisplayName,
+  validatePersonName,
+} from './mandala-display-name'
 
 let _authTablesEnsured = false
 
@@ -68,6 +76,9 @@ export type UserRecord = {
   app_role: string
   registered: string
   pseudo?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  show_full_last_name?: boolean
   bio?: string | null
   avatar?: string | null
   avatar_emoji?: string | null
@@ -88,6 +99,8 @@ export type UserRecord = {
   coach_request_status?: string | null
   coach_request_at?: string | null
   coach_request_message?: string | null
+  theme_mode?: string | null
+  theme_palette?: string | null
 }
 
 async function getWpRole(userId: number): Promise<string> {
@@ -146,6 +159,9 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
   const tbl = table('usermeta')
   const keys = [
     'mdl_pseudo',
+    META_FIRST_NAME,
+    META_LAST_NAME,
+    META_SHOW_FULL_LAST_NAME,
     'mdl_bio',
     'mdl_avatar',
     'mdl_avatar_emoji',
@@ -166,6 +182,8 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
     'mdl_coach_request_status',
     'mdl_coach_request_at',
     'mdl_coach_request_message',
+    'mdl_theme_mode',
+    'mdl_theme_palette',
   ]
   const placeholders = keys.map(() => '?').join(', ')
   const [rows] = await pool.execute<RowDataPacket[]>(
@@ -177,6 +195,10 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
     meta[r.meta_key] = r.meta_value
   }
   ;(out as Record<string, unknown>).pseudo = meta.mdl_pseudo || null
+  ;(out as Record<string, unknown>).first_name = meta[META_FIRST_NAME] || null
+  ;(out as Record<string, unknown>).last_name = meta[META_LAST_NAME] || null
+  ;(out as Record<string, unknown>).show_full_last_name =
+    (meta[META_SHOW_FULL_LAST_NAME] ?? '') === '1'
   ;(out as Record<string, unknown>).bio = meta.mdl_bio || null
   ;(out as Record<string, unknown>).avatar = meta.mdl_avatar || null
   ;(out as Record<string, unknown>).avatar_emoji = meta.mdl_avatar_emoji || null
@@ -213,6 +235,9 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
   ;(out as Record<string, unknown>).coach_request_status = meta.mdl_coach_request_status || null
   ;(out as Record<string, unknown>).coach_request_at = meta.mdl_coach_request_at || null
   ;(out as Record<string, unknown>).coach_request_message = meta.mdl_coach_request_message || null
+  ;(out as Record<string, unknown>).theme_mode =
+    meta.mdl_theme_mode === 'light' ? 'light' : 'dark'
+  ;(out as Record<string, unknown>).theme_palette = meta.mdl_theme_palette || 'violet'
 }
 
 export async function authLogin(login: string, password: string): Promise<UserRecord> {
@@ -343,10 +368,31 @@ export async function batchUserIdsWithAdminAccess(userIds: number[]): Promise<Se
   return admins
 }
 
+async function syncUserDisplayIdentity(
+  userId: number,
+  firstName: string,
+  lastName: string,
+  showFullLastName: boolean
+): Promise<void> {
+  const pool = getPool()
+  const tbl = table('users')
+  const fullName = formatFullName(firstName, lastName)
+  const publicName = formatPublicDisplayName(firstName, lastName, showFullLastName)
+  await pool.execute(`UPDATE ${tbl} SET display_name = ? WHERE ID = ?`, [
+    fullName || publicName,
+    userId,
+  ])
+  await upsertUsermeta(userId, META_FIRST_NAME, firstName)
+  await upsertUsermeta(userId, META_LAST_NAME, lastName)
+  await upsertUsermeta(userId, META_SHOW_FULL_LAST_NAME, showFullLastName ? '1' : '0')
+  await upsertUsermeta(userId, 'mdl_pseudo', publicName)
+}
+
 export async function authRegister(
   email: string,
   password: string,
-  name: string
+  firstName: string,
+  lastName: string
 ): Promise<UserRecord> {
   await ensureAuthTables()
   const pool = getPool()
@@ -359,6 +405,9 @@ export async function authRegister(
   if (password.length < 6) {
     throw new Error('Le mot de passe doit contenir au moins 6 caractères')
   }
+
+  const safeFirst = validatePersonName(firstName, 'Prénom')
+  const safeLast = validatePersonName(lastName, 'Nom de famille')
 
   const [existing] = await pool.execute<RowDataPacket[]>(
     `SELECT 1 FROM ${tbl} WHERE user_email = ? LIMIT 1`,
@@ -380,8 +429,9 @@ export async function authRegister(
 
   const userPass = await hash(password, 10)
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
-  const nicename = (name || userLogin).replace(/[^a-z0-9\s\-_]/gi, '').slice(0, 50) || userLogin
-  const displayName = name || userLogin
+  const fullName = formatFullName(safeFirst, safeLast)
+  const nicename = fullName.replace(/[^a-z0-9\s\-_]/gi, '').slice(0, 50) || userLogin
+  const displayName = fullName || userLogin
 
   await pool.execute(
     `INSERT INTO ${tbl} (user_login, user_pass, user_nicename, user_email, user_registered, user_status, display_name)
@@ -408,6 +458,8 @@ export async function authRegister(
     `INSERT INTO ${prefix}usermeta (user_id, meta_key, meta_value) VALUES (?, ?, ?)`,
     [userId, 'mdl_profile_public', '1']
   )
+
+  await syncUserDisplayIdentity(userId, safeFirst, safeLast, false)
 
   const wpRole = await getWpRole(userId)
   const appRole = await getAppRole(userId, wpRole, email)
@@ -459,27 +511,53 @@ export async function updateProfile(
   body: Record<string, unknown>
 ): Promise<UserRecord> {
   const pool = getPool()
-  const tbl = table('users')
-  if (Object.prototype.hasOwnProperty.call(body, 'name')) {
-    const name = String(body.name ?? '').trim()
-    await pool.execute(`UPDATE ${tbl} SET display_name = ? WHERE ID = ?`, [name, userId])
+  const metaTbl = table('usermeta')
+  const readMeta = async (key: string): Promise<string> => {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT meta_value FROM ${metaTbl} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+      [userId, key]
+    )
+    return String(rows[0]?.meta_value ?? '')
   }
-  if (Object.prototype.hasOwnProperty.call(body, 'pseudo')) {
-    const pseudo = String(body.pseudo ?? '')
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .trim()
-    if (pseudo && !/^[a-z0-9_-]{3,30}$/.test(pseudo)) {
-      throw new Error('Pseudo invalide : 3 à 30 caractères, lettres, chiffres, tirets et underscores uniquement')
+
+  const touchesIdentity =
+    Object.prototype.hasOwnProperty.call(body, 'first_name') ||
+    Object.prototype.hasOwnProperty.call(body, 'last_name') ||
+    Object.prototype.hasOwnProperty.call(body, 'show_full_last_name') ||
+    Object.prototype.hasOwnProperty.call(body, 'name')
+
+  if (touchesIdentity) {
+    let first = await readMeta(META_FIRST_NAME)
+    let last = await readMeta(META_LAST_NAME)
+    let showFull = (await readMeta(META_SHOW_FULL_LAST_NAME)) === '1'
+
+    if (Object.prototype.hasOwnProperty.call(body, 'first_name')) {
+      first = validatePersonName(String(body.first_name ?? ''), 'Prénom')
     }
-    if (pseudo) {
-      const [dup] = await pool.execute<RowDataPacket[]>(
-        `SELECT user_id FROM ${table('usermeta')} WHERE meta_key = ? AND meta_value = ? AND user_id != ?`,
-        ['mdl_pseudo', pseudo, userId]
-      )
-      if (dup.length > 0) throw new Error('Ce pseudo est déjà pris')
+    if (Object.prototype.hasOwnProperty.call(body, 'last_name')) {
+      last = validatePersonName(String(body.last_name ?? ''), 'Nom de famille')
     }
-    await upsertUsermeta(userId, 'mdl_pseudo', pseudo)
+    if (Object.prototype.hasOwnProperty.call(body, 'show_full_last_name')) {
+      showFull = !!body.show_full_last_name
+    }
+    // Compat ancien champ « name » : ignoré si prénom/nom déjà renseignés
+    if (
+      Object.prototype.hasOwnProperty.call(body, 'name') &&
+      !Object.prototype.hasOwnProperty.call(body, 'first_name') &&
+      !Object.prototype.hasOwnProperty.call(body, 'last_name')
+    ) {
+      const legacy = String(body.name ?? '').trim()
+      if (legacy && !first && !last) {
+        const parts = legacy.split(/\s+/)
+        first = validatePersonName(parts[0] ?? '', 'Prénom')
+        last = validatePersonName(parts.slice(1).join(' ') || (parts[0] ?? ''), 'Nom de famille')
+      }
+    }
+
+    if (!first || !last) {
+      throw new Error('Prénom et nom de famille requis')
+    }
+    await syncUserDisplayIdentity(userId, first, last, showFull)
   }
   if (Object.prototype.hasOwnProperty.call(body, 'bio')) {
     const bio = String(body.bio ?? '').trim().slice(0, 500)
@@ -568,6 +646,24 @@ export async function updateProfile(
   if (Object.prototype.hasOwnProperty.call(body, 'coach_verified')) {
     await upsertUsermeta(userId, 'mdl_coach_verified', body.coach_verified ? '1' : '0')
   }
+  if (Object.prototype.hasOwnProperty.call(body, 'theme_mode')) {
+    const m = body.theme_mode === 'light' ? 'light' : 'dark'
+    await upsertUsermeta(userId, 'mdl_theme_mode', m)
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'theme_palette')) {
+    const allowed = new Set([
+      'violet',
+      'indigo',
+      'ocean',
+      'forest',
+      'amber',
+      'rose',
+      'stone',
+      'fuchsia',
+    ])
+    const p = String(body.theme_palette ?? '').toLowerCase()
+    if (allowed.has(p)) await upsertUsermeta(userId, 'mdl_theme_palette', p)
+  }
   return authMe(userId)
 }
 
@@ -653,11 +749,30 @@ export async function listUsersAdmin(params: {
   return { items, total: items.length }
 }
 
+export async function setUserPassword(userId: number, newPassword: string): Promise<void> {
+  if (!isDbConfigured()) throw new Error('DB non configurée')
+  await ensureAuthTables()
+  const pwd = String(newPassword ?? '')
+  if (pwd.length < 6) {
+    throw new Error('Le mot de passe doit contenir au moins 6 caractères')
+  }
+  if (pwd.length > 128) {
+    throw new Error('Mot de passe trop long')
+  }
+  const pool = getPool()
+  const tbl = table('users')
+  const userPass = await hash(pwd, 10)
+  const [res] = await pool.execute(`UPDATE ${tbl} SET user_pass = ? WHERE ID = ?`, [userPass, userId])
+  const affected = Number((res as { affectedRows?: number }).affectedRows ?? 0)
+  if (!affected) throw new Error('Utilisateur introuvable')
+}
+
 export async function updateUserAppRole(userId: number, appRole: string): Promise<void> {
   if (!isDbConfigured()) throw new Error('DB non configurée')
   await ensureAuthTables()
-  const role = String(appRole ?? 'user').trim().slice(0, 32)
-  if (!['user', 'coach', 'admin'].includes(role)) {
+  let stored = String(appRole ?? 'user').trim().slice(0, 32)
+  if (stored === 'coach') stored = 'site_manager'
+  if (!['user', 'site_manager', 'admin'].includes(stored)) {
     throw new Error('Rôle invalide')
   }
   const pool = getPool()
@@ -665,6 +780,42 @@ export async function updateUserAppRole(userId: number, appRole: string): Promis
   await pool.execute(
     `INSERT INTO ${rolesTbl} (user_id, app_role) VALUES (?, ?)
      ON DUPLICATE KEY UPDATE app_role = ?`,
-    [userId, role, role]
+    [userId, stored, stored]
   )
+}
+
+/** Suppression définitive du compte (tous les lieux puis utilisateur). */
+export async function deleteUserAccount(userId: number): Promise<void> {
+  if (!isDbConfigured()) throw new Error('DB non configurée')
+  if (!userId) throw new Error('Utilisateur invalide')
+  await ensureAuthTables()
+
+  const user = await authMe(userId)
+  if (isBootstrapAdminEmail(String(user.email ?? ''))) {
+    throw new Error('Ce compte système ne peut pas être supprimé')
+  }
+
+  const { listCommunitiesForUser, removeUserFromCommunity } = await import('./db-communities')
+  const communities = await listCommunitiesForUser(userId)
+  for (const c of communities) {
+    await removeUserFromCommunity(c.id, userId)
+  }
+
+  const pool = getPool()
+  const metaTbl = table('usermeta')
+  const rolesTbl = table('mandala_app_roles')
+  const usersTbl = table('users')
+
+  try {
+    const deliveriesTbl = table('mandala_notification_deliveries')
+    await pool.execute(`DELETE FROM ${deliveriesTbl} WHERE user_id = ?`, [userId])
+  } catch {
+    /* table optionnelle */
+  }
+
+  await pool.execute(`DELETE FROM ${metaTbl} WHERE user_id = ?`, [userId])
+  await pool.execute(`DELETE FROM ${rolesTbl} WHERE user_id = ?`, [userId])
+  const [res] = await pool.execute(`DELETE FROM ${usersTbl} WHERE ID = ?`, [userId])
+  const affected = Number((res as { affectedRows?: number }).affectedRows ?? 0)
+  if (!affected) throw new Error('Utilisateur introuvable')
 }

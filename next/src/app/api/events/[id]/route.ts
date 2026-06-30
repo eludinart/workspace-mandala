@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAuth } from '@/lib/api-auth'
-import { authMe } from '@/lib/db-auth'
-import { getEventDetail, updateEvent, type EventPhase } from '@/lib/db-mandala-events'
+import { requireAuth, resolveCommunityManagerAccess } from '@/lib/api-auth'
+import { getEventDetail, updateEvent } from '@/lib/db-mandala-events'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
-
-async function isAppAdmin(userId: number): Promise<boolean> {
-  try {
-    const u = await authMe(userId)
-    const r = u.app_role || u.wp_role || ''
-    return r === 'admin' || r === 'administrator'
-  } catch {
-    return false
-  }
-}
 
 export async function GET(
   req: NextRequest,
@@ -30,8 +19,8 @@ export async function GET(
     const eventId = parseInt(id, 10)
     if (!eventId) return NextResponse.json({ error: 'id invalide' }, { status: 400 })
 
-    const admin = await isAppAdmin(uid)
-    const data = await getEventDetail(eventId, uid, admin)
+    const { isAppAdmin } = await resolveCommunityManagerAccess(uid)
+    const data = await getEventDetail(eventId, uid, isAppAdmin)
     return NextResponse.json(data)
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
@@ -54,11 +43,11 @@ export async function PATCH(
     if (!eventId) return NextResponse.json({ error: 'id invalide' }, { status: 400 })
 
     const body = await req.json()
-    const admin = await isAppAdmin(uid)
+    const { isAppAdmin } = await resolveCommunityManagerAccess(uid)
     const event = await updateEvent({
       userId: uid,
       eventId,
-      isAppAdmin: admin,
+      isAppAdmin,
       patch: body,
     })
     return NextResponse.json({ event })

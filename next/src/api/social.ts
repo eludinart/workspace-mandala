@@ -16,7 +16,21 @@ export const socialApi = {
     const q = new URLSearchParams(clean as Record<string, string>).toString()
     return api.get(`/api/social/pending_seeds_incoming${q ? '?' + q : ''}`)
   },
-  getMyChannels: () => api.get('/api/social/my_channels'),
+  getMyChannels: (communitySlug?: string) => {
+    const q = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''
+    return api.get(`/api/social/my_channels${q}`)
+  },
+  openChannel: (targetUserId: number, communitySlug: string) =>
+    api.post('/api/social/open_channel', {
+      target_user_id: targetUserId,
+      community_slug: communitySlug,
+    }) as Promise<{ channelId: number }>,
+  openGroupChannel: (memberUserIds: number[], communitySlug: string, name?: string) =>
+    api.post('/api/social/open_group_channel', {
+      member_user_ids: memberUserIds,
+      community_slug: communitySlug,
+      name,
+    }) as Promise<{ channelId: number; isNew: boolean }>,
   getChannelMessages: (channelId: string) =>
     api.get(`/api/social/channel_messages?channel_id=${encodeURIComponent(channelId)}`),
   sendMessage: (channelId: string, payload: Record<string, unknown>) =>
@@ -26,6 +40,12 @@ export const socialApi = {
     api.get('/api/social/clairiere_unread_count') as Promise<{ count: number }>,
   markChannelRead: (channelId: number) =>
     api.post('/api/social/mark_channel_read', { channelId }),
+  toggleMessageReaction: (messageId: number, emoji: string) =>
+    api.post('/api/social/message_reaction', { messageId, emoji }) as Promise<{
+      messageId: number
+      reactions: { emoji: string; userIds: number[] }[]
+      myEmoji: string | null
+    }>,
 }
 
 export const INTENTIONS = [

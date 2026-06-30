@@ -1,21 +1,27 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { socialApi } from '@/api/social'
 import { DialogueStream } from '@/components/social/DialogueStream'
+import { ConversationMemberSidebar } from '@/components/social/ConversationMemberSidebar'
 import { useCommunity } from '@/contexts/CommunityContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useSocialStore } from '@/store/useSocialStore'
 import { ApiError } from '@/lib/api-client'
 import { UserAvatar } from '@/components/UserAvatar'
+import { membersApi, type CommunityMember } from '@/api/members'
 
 type Channel = {
   channelId: number
-  otherUserId: number
+  channelType: 'direct' | 'group'
+  otherUserId?: number
   otherPseudo: string
   otherAvatar?: string | null
   otherAvatarEmoji?: string
   otherIsOnline: boolean
   unreadCount: number
+  memberCount?: number
+  memberIds?: number[]
 }
 
 type PendingSeed = {
@@ -29,43 +35,72 @@ type PendingSeed = {
 
 export function MessagesPage({ openWithUserId }: { openWithUserId?: string | null }) {
   const { active } = useCommunity()
+  const { user } = useAuth()
   const fetchClairiereUnread = useSocialStore((s) => s.fetchClairiereUnread)
   const [channels, setChannels] = useState<Channel[]>([])
   const [pending, setPending] = useState<PendingSeed[]>([])
+  const [members, setMembers] = useState<CommunityMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const openedForRef = useRef<string | null>(null)
 
   const loadChannels = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [chData, seedsData] = await Promise.all([
-        socialApi.getMyChannels() as Promise<{ channels?: Channel[] }>,
+      const slug = active?.slug
+      const [chData, seedsData, membersData] = await Promise.all([
+        socialApi.getMyChannels(slug) as Promise<{ channels?: Channel[] }>,
         socialApi.pendingSeedsIncoming({ limit: 20 }) as Promise<{ items?: PendingSeed[] }>,
+        slug
+          ? (membersApi.listCommunity(slug) as Promise<{ members?: CommunityMember[] }>)
+          : Promise.resolve({ members: [] }),
       ])
       const list = chData?.channels ?? []
       setChannels(list)
       setPending(seedsData?.items ?? [])
-      if (openWithUserId) {
-        const ch = list.find((c) => String(c.otherUserId) === String(openWithUserId))
-        if (ch) setSelectedId(ch.channelId)
-      }
+      setMembers(membersData?.members ?? [])
       void fetchClairiereUnread()
+      return list
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
       setChannels([])
+      return []
     } finally {
       setLoading(false)
     }
-  }, [openWithUserId, fetchClairiereUnread])
+  }, [active?.slug, fetchClairiereUnread])
 
   useEffect(() => {
     void loadChannels()
     const t = setInterval(() => void loadChannels(), 60000)
     return () => clearInterval(t)
-  }, [loadChannels, active?.slug])
+  }, [loadChannels])
+
+  useEffect(() => {
+    if (!openWithUserId || !active?.slug) return
+    if (openedForRef.current === openWithUserId) return
+    openedForRef.current = openWithUserId
+
+    const openForUser = async () => {
+      try {
+        const list = await loadChannels()
+        const existing = list.find((c) => String(c.otherUserId) === String(openWithUserId))
+        if (existing) {
+          setSelectedId(existing.channelId)
+          return
+        }
+        const res = await socialApi.openChannel(Number(openWithUserId), active.slug)
+        setSelectedId(res.channelId)
+        await loadChannels()
+      } catch (e: unknown) {
+        setError(e instanceof ApiError ? e.detail : 'Impossible d\'ouvrir le dialogue')
+      }
+    }
+    void openForUser()
+  }, [openWithUserId, active?.slug, loadChannels])
 
   const acceptSeed = async (seedId: number) => {
     try {
@@ -89,42 +124,50 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
 
   const selected = channels.find((c) => c.channelId === selectedId)
 
-  if (selectedId && selected) {
-    return (
-      <div className="max-w-2xl h-full flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => setSelectedId(null)}
-          className="text-sm text-violet-400 hover:underline w-fit"
-        >
-          ← Retour aux dialogues
-        </button>
-        <DialogueStream
-          channelId={selectedId}
-          otherPseudo={selected.otherPseudo}
-          otherAvatar={selected.otherAvatar}
-          otherAvatarEmoji={selected.otherAvatarEmoji}
-          otherIsOnline={selected.otherIsOnline}
-        />
-      </div>
-    )
+  const participantsById = useMemo(() => {
+    const map: Record<
+      number,
+      { pseudo: string; avatar: string | null; avatarEmoji: string }
+    > = {}
+    for (const m of members) {
+      map[m.user_id] = {
+        pseudo: m.pseudo,
+        avatar: m.avatar,
+        avatarEmoji: m.avatar_emoji,
+      }
+    }
+    if (user?.id) {
+      const me = members.find((m) => m.is_me)
+      map[Number(user.id)] = {
+        pseudo:
+          me?.pseudo ??
+          (typeof user.pseudo === 'string' ? user.pseudo : 'Moi'),
+        avatar: me?.avatar ?? null,
+        avatarEmoji: me?.avatar_emoji ?? '🌸',
+      }
+    }
+    return map
+  }, [members, user])
+
+  const handleChannelOpened = (channelId: number) => {
+    setSelectedId(channelId)
+    void loadChannels()
   }
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="h-full min-h-[min(70vh,720px)] flex flex-col gap-3">
       <div>
-        <h1 className="text-2xl font-bold">Messages</h1>
+        <h1 className="text-xl sm:text-2xl font-bold">Messages</h1>
         <p className="text-slate-400 text-sm mt-1">
-          La Clairière — dialogues pour <strong className="text-slate-200">{active?.name}</strong>
+          Conversations entre membres — <strong className="text-slate-200">{active?.name}</strong>
         </p>
       </div>
 
       {msg && <p className="text-sm text-emerald-400">{msg}</p>}
-      {loading && <p className="text-slate-400 text-sm">Chargement…</p>}
       {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {pending.length > 0 && (
-        <section className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2">
+        <section className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2 shrink-0">
           <h2 className="text-sm font-semibold text-amber-200">Graines reçues ({pending.length})</h2>
           {pending.map((s) => (
             <div
@@ -132,11 +175,7 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
               className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-amber-900/30 last:border-0"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <UserAvatar
-                  avatar={s.from_avatar}
-                  avatarEmoji={s.from_avatar_emoji}
-                  size="sm"
-                />
+                <UserAvatar avatar={s.from_avatar} avatarEmoji={s.from_avatar_emoji} size="sm" />
                 <span className="text-sm truncate">
                   {s.from_pseudo ?? `Jardinier #${s.from_user_id}`} — {s.intention_id}
                 </span>
@@ -162,47 +201,87 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
         </section>
       )}
 
-      {!loading && channels.length === 0 && pending.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 p-6 space-y-2 text-center text-slate-500 text-sm">
-          <p>Aucun dialogue actif.</p>
-          <p>
-            Allez sur <strong className="text-slate-300">Membres</strong>, déposez une graine 🌱 ou
-            acceptez une demande ci-dessus pour démarrer un échange.
-          </p>
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] gap-3">
+        <div className="min-h-[220px] lg:min-h-0">
+          <ConversationMemberSidebar
+            onChannelOpened={handleChannelOpened}
+            highlightUserId={openWithUserId}
+          />
         </div>
-      )}
 
-      <ul className="space-y-2">
-        {channels.map((ch) => (
-          <li key={ch.channelId}>
-            <button
-              type="button"
-              onClick={() => setSelectedId(ch.channelId)}
-              className="w-full flex items-center gap-3 p-4 rounded-xl border border-slate-800 bg-slate-900/50 hover:border-violet-500/40 text-left"
-            >
-              <UserAvatar
-                avatar={ch.otherAvatar}
-                avatarEmoji={ch.otherAvatarEmoji}
-                size="md"
-                alt={ch.otherPseudo}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium flex items-center gap-2">
-                  <span
-                    className={`w-2 h-2 rounded-full ${ch.otherIsOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}
-                  />
-                  {ch.otherPseudo}
-                </p>
-              </div>
-              {ch.unreadCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-violet-600 text-xs text-white">
-                  {ch.unreadCount}
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
-      </ul>
+        <section className="flex flex-col min-h-[200px] lg:min-h-0 border border-slate-800 rounded-xl bg-slate-900/30 overflow-hidden">
+          <div className="shrink-0 px-3 py-2 border-b border-slate-800">
+            <h2 className="text-sm font-semibold text-slate-200">Dialogues</h2>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
+            {loading && <p className="text-slate-400 text-xs p-2">Chargement…</p>}
+            {!loading && channels.length === 0 && (
+              <p className="text-slate-500 text-xs p-2 text-center">
+                Sélectionnez un ou plusieurs membres à gauche pour démarrer.
+              </p>
+            )}
+            {channels.map((ch) => (
+              <button
+                key={ch.channelId}
+                type="button"
+                onClick={() => setSelectedId(ch.channelId)}
+                className={`w-full flex items-center gap-2 p-3 rounded-xl border text-left transition-colors ${
+                  selectedId === ch.channelId
+                    ? 'border-violet-500/50 bg-violet-950/30'
+                    : 'border-slate-800 bg-slate-900/50 hover:border-violet-500/30'
+                }`}
+              >
+                <UserAvatar
+                  avatar={ch.otherAvatar}
+                  avatarEmoji={ch.otherAvatarEmoji}
+                  size="sm"
+                  alt={ch.otherPseudo}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                    {ch.channelType === 'group' ? (
+                      <span className="text-[10px] text-violet-400 shrink-0">👥</span>
+                    ) : (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${ch.otherIsOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}
+                      />
+                    )}
+                    {ch.otherPseudo}
+                  </p>
+                  {ch.channelType === 'group' && ch.memberCount && (
+                    <p className="text-[10px] text-slate-500">{ch.memberCount} participants</p>
+                  )}
+                </div>
+                {ch.unreadCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-violet-600 text-[10px] text-white shrink-0">
+                    {ch.unreadCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="flex flex-col min-h-[320px] lg:min-h-0">
+          {selectedId && selected ? (
+            <DialogueStream
+              channelId={selectedId}
+              otherPseudo={selected.otherPseudo}
+              otherAvatar={selected.otherAvatar}
+              otherAvatarEmoji={selected.otherAvatarEmoji}
+              otherIsOnline={selected.otherIsOnline}
+              isGroup={selected.channelType === 'group'}
+              memberCount={selected.memberCount}
+              memberIds={selected.memberIds ?? []}
+              participantsById={participantsById}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm p-6 text-center">
+              Choisissez un dialogue ou démarrez une conversation avec les membres du lieu.
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   )
 }

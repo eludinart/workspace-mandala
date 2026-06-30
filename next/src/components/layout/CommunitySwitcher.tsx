@@ -5,6 +5,7 @@ import { communitiesApi } from '@/api/communities'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
+import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
 
 type CatalogItem = {
   slug: string
@@ -73,6 +74,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                       <p className="font-medium truncate">{c.name}</p>
                       {c.tagline && <p className="text-xs text-slate-500 truncate">{c.tagline}</p>}
                     </div>
+                    <span className="text-[10px] text-slate-500 shrink-0">{formatCommunityRoleLabel(c.role)}</span>
                     {active?.slug === c.slug && (
                       <span className="text-[10px] text-violet-400 shrink-0">Actif</span>
                     )}
@@ -115,6 +117,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                         logo_emoji: '🏛️',
                       })
                       await refresh()
+                      setActiveSlug(newSlug.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, ''))
                       setShowCreate(false)
                       onClose()
                     } catch (e: unknown) {

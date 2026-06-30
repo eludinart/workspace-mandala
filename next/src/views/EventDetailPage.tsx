@@ -74,6 +74,7 @@ export function EventDetailPage({
   const [msg, setMsg] = useState<string | null>(null)
   const [editLocation, setEditLocation] = useState('')
   const [editStarts, setEditStarts] = useState('')
+  const [editEnds, setEditEnds] = useState('')
   const [editStatus, setEditStatus] = useState('')
 
   const load = useCallback(async () => {
@@ -84,6 +85,7 @@ export function EventDetailPage({
       setData(d)
       setEditLocation(d.event.location ?? '')
       setEditStarts(d.event.starts_at?.slice(0, 16).replace(' ', 'T') ?? '')
+      setEditEnds(d.event.ends_at?.slice(0, 16).replace(' ', 'T') ?? '')
       setEditStatus(d.event.status ?? 'draft')
       if (d.can_manage) {
         const m = (await eventsApi.communityMembers(communitySlug)) as { members?: Member[] }
@@ -208,7 +210,7 @@ export function EventDetailPage({
             onClick={() => setTab(t.id)}
             className={`px-3 py-1.5 rounded-t-lg text-sm transition-colors ${
               tab === t.id
-                ? 'bg-violet-600/30 text-violet-100 border border-b-0 border-violet-600/50'
+                ? 'bg-violet-600/30 text-slate-100 border border-b-0 border-violet-600/50'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
@@ -251,6 +253,12 @@ export function EventDetailPage({
               <dt className="text-slate-500">Début</dt>
               <dd>{formatMandalaDateTime(event.starts_at)}</dd>
             </div>
+            {event.ends_at && (
+              <div>
+                <dt className="text-slate-500">Fin</dt>
+                <dd>{formatMandalaDateTime(event.ends_at)}</dd>
+              </div>
+            )}
           </dl>
           {can_manage && (
             <form
@@ -261,6 +269,7 @@ export function EventDetailPage({
                   .update(eventId, {
                     location: editLocation || null,
                     starts_at: editStarts ? editStarts.replace('T', ' ') : null,
+                    ends_at: editEnds ? editEnds.replace('T', ' ') : null,
                     status: editStatus,
                   })
                   .then(() => load())
@@ -284,6 +293,15 @@ export function EventDetailPage({
                   type="datetime-local"
                   value={editStarts}
                   onChange={(e) => setEditStarts(e.target.value)}
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-500 text-xs">Fin (optionnel, pour événements sur plusieurs jours)</span>
+                <input
+                  type="datetime-local"
+                  value={editEnds}
+                  onChange={(e) => setEditEnds(e.target.value)}
                   className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
                 />
               </label>

@@ -2,11 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { accountApi } from '@/api/account'
+import { authApi } from '@/api/auth'
+import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
+import { formatPublicDisplayName } from '@/lib/mandala-display-name'
+import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
+import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
+import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
+import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
 
 const EMOJI_PRESETS = ['🌸', '🕉️', '🌿', '✨', '🌻', '🦋', '🔥', '💜']
 
@@ -14,14 +21,18 @@ const SECTIONS = [
   { id: 'profil', label: 'Profil' },
   { id: 'communautes', label: 'Mes communautés' },
   { id: 'alertes', label: 'Préférences alertes' },
+  { id: 'danger', label: 'Zone sensible' },
 ] as const
 
 export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
-  const { user, refreshUser, isRealAdmin } = useAuth()
-  const { communities } = useCommunity()
+  const { user, refreshUser, isRealAdmin, logout } = useAuth()
+  const { communities, refresh: refreshCommunities, setActiveSlug } = useCommunity()
   const u = user as {
     email?: string
     name?: string
+    first_name?: string
+    last_name?: string
+    show_full_last_name?: boolean
     pseudo?: string
     profile_public?: boolean
     bio?: string
@@ -29,8 +40,9 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
     avatar_emoji?: string
   } | null
   const fileRef = useRef<HTMLInputElement>(null)
-  const [name, setName] = useState('')
-  const [pseudo, setPseudo] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [showFullLastName, setShowFullLastName] = useState(false)
   const [bio, setBio] = useState('')
   const [avatarEmoji, setAvatarEmoji] = useState('🌸')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
@@ -38,28 +50,37 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [leaveSlug, setLeaveSlug] = useState<string | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   const load = useCallback(async () => {
     try {
       const p = (await accountApi.getProfile()) as {
         name?: string
+        first_name?: string
+        last_name?: string
+        show_full_last_name?: boolean
         pseudo?: string
         profile_public?: boolean
         bio?: string
         avatar?: string
         avatar_emoji?: string
       }
-      setName(p.name ?? '')
-      setPseudo(p.pseudo ?? '')
+      setFirstName(p.first_name ?? '')
+      setLastName(p.last_name ?? '')
+      setShowFullLastName(!!p.show_full_last_name)
       setBio(p.bio ?? '')
       setAvatarEmoji(p.avatar_emoji ?? '🌸')
       setAvatarPreview(p.avatar ?? null)
       setProfilePublic(p.profile_public !== false)
     } catch {
-      setName(u?.name ?? '')
-      setPseudo(u?.pseudo ?? '')
+      setFirstName(u?.first_name ?? '')
+      setLastName(u?.last_name ?? '')
+      setShowFullLastName(!!u?.show_full_last_name)
     }
-  }, [u?.name, u?.pseudo])
+  }, [u?.first_name, u?.last_name, u?.show_full_last_name])
 
   useEffect(() => {
     void load()
@@ -96,13 +117,10 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           return
         }
       }
-      const normalizedPseudo = pseudo
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '')
       await accountApi.updateProfile({
-        name: name.trim(),
-        pseudo: normalizedPseudo,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        show_full_last_name: showFullLastName,
         bio: bio.trim(),
         avatar_emoji: avatarEmoji,
         profile_public: profilePublic,
@@ -116,6 +134,42 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       setSaving(false)
     }
   }
+
+  const leaveCommunity = async () => {
+    if (!leaveSlug) return
+    setLeaving(true)
+    setErr(null)
+    try {
+      await communitiesApi.leave(leaveSlug)
+      setLeaveSlug(null)
+      setMsg('Vous avez quitté ce lieu')
+      await refreshCommunities()
+      const remaining = communities.filter((c) => c.slug !== leaveSlug)
+      if (remaining[0]) setActiveSlug(remaining[0].slug)
+    } catch (e: unknown) {
+      setErr(e instanceof ApiError ? e.detail : 'Impossible de quitter ce lieu')
+      setLeaveSlug(null)
+    } finally {
+      setLeaving(false)
+    }
+  }
+
+  const deleteAccount = async () => {
+    setDeletingAccount(true)
+    setErr(null)
+    try {
+      await authApi.deleteMyAccount()
+      setShowDeleteAccount(false)
+      logout()
+    } catch (e: unknown) {
+      setErr(e instanceof ApiError ? e.detail : 'Suppression du compte impossible')
+      setShowDeleteAccount(false)
+    } finally {
+      setDeletingAccount(false)
+    }
+  }
+
+  const leavePlaceName = communities.find((c) => c.slug === leaveSlug)?.name ?? leaveSlug ?? ''
 
   return (
     <div className="max-w-lg space-y-6">
@@ -147,6 +201,10 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         <h2 className="text-lg font-semibold text-slate-200">Profil</h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
           <p className="text-sm text-slate-500">Email : {u?.email ?? '—'}</p>
+
+          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+            <HeartWeatherPicker />
+          </div>
 
           <div className="flex items-center gap-4">
             {avatarPreview ? (
@@ -198,23 +256,45 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             ))}
           </div>
 
-          <label className="block text-sm">
-            <span className="text-slate-500">Nom affiché</span>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-sm">
+              <span className="text-slate-500">Prénom</span>
+              <input
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                autoComplete="given-name"
+                className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-slate-500">Nom de famille</span>
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                autoComplete="family-name"
+                className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+              />
+            </label>
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+              type="checkbox"
+              checked={showFullLastName}
+              onChange={(e) => setShowFullLastName(e.target.checked)}
+              className="rounded"
             />
+            <span>Afficher mon nom de famille en entier dans les listes</span>
           </label>
-          <label className="block text-sm">
-            <span className="text-slate-500">Pseudo (unique)</span>
-            <input
-              value={pseudo}
-              onChange={(e) => setPseudo(e.target.value)}
-              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
-            />
-            <span className="text-[10px] text-slate-500">Sans espaces — ex. ludinard</span>
-          </label>
+          {(firstName.trim() || lastName.trim()) && (
+            <p className="text-xs text-slate-500">
+              Nom visible dans les listes :{' '}
+              <span className="text-slate-300">
+                {formatPublicDisplayName(firstName, lastName, showFullLastName) || '—'}
+              </span>
+            </p>
+          )}
           <label className="block text-sm">
             <span className="text-slate-500">Bio</span>
             <textarea
@@ -256,13 +336,26 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             {communities.map((c) => (
               <li
                 key={c.slug}
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm"
               >
                 <span>
                   {c.logo_emoji ? `${c.logo_emoji} ` : ''}
                   {c.name}
                 </span>
-                {c.role && <span className="text-[10px] text-slate-500 uppercase">{c.role}</span>}
+                <div className="flex items-center gap-2 shrink-0">
+                  {c.role && (
+                    <span className="text-[10px] text-slate-500">
+                      {formatCommunityRoleLabel(c.role)}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setLeaveSlug(c.slug)}
+                    className="text-[10px] px-2 py-1 rounded border border-red-900/50 text-red-300 hover:bg-red-950/30"
+                  >
+                    Quitter…
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -283,6 +376,32 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </div>
       </section>
 
+      <section id="danger" className="scroll-mt-20 space-y-3">
+        <h2 className="text-lg font-semibold text-red-300">Zone sensible</h2>
+        <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4 space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-slate-200">Quitter un lieu</p>
+            <p className="text-xs text-slate-500">
+              Retire votre appartenance et efface vos données sur ce lieu (calendrier, Agora, météo…).
+              Votre compte Mandala reste actif pour les autres lieux.
+            </p>
+          </div>
+          <div className="border-t border-red-900/20 pt-4 space-y-2">
+            <p className="text-sm font-medium text-red-200">Supprimer mon compte</p>
+            <p className="text-xs text-slate-500">
+              Suppression définitive de votre profil et de toutes vos données dans l&apos;application.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowDeleteAccount(true)}
+              className="w-full py-2 rounded-lg border border-red-700/60 text-red-200 text-sm hover:bg-red-950/40"
+            >
+              Supprimer mon compte Mandala…
+            </button>
+          </div>
+        </div>
+      </section>
+
       {isRealAdmin && onNavigate && (
         <section id="admin" className="scroll-mt-20">
           <button
@@ -293,6 +412,25 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             Ouvrir l&apos;administration →
           </button>
         </section>
+      )}
+
+      {leaveSlug && (
+        <RemoveMemberConfirmDialog
+          memberLabel="Vous"
+          placeName={leavePlaceName}
+          loading={leaving}
+          onCancel={() => setLeaveSlug(null)}
+          onConfirm={() => void leaveCommunity()}
+        />
+      )}
+
+      {showDeleteAccount && u?.email && (
+        <DeleteAccountConfirmDialog
+          email={u.email}
+          loading={deletingAccount}
+          onCancel={() => setShowDeleteAccount(false)}
+          onConfirm={() => void deleteAccount()}
+        />
       )}
     </div>
   )
