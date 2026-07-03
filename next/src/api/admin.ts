@@ -7,8 +7,14 @@ export type CommunityAdmin = {
   tagline: string | null
   description: string | null
   location: string | null
+  address: string | null
+  postal_code: string | null
+  city: string | null
+  country: string | null
   website: string | null
   contact_email: string | null
+  latitude: number | null
+  longitude: number | null
   accent_color: string | null
   logo_emoji: string | null
   avatar: string | null

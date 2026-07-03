@@ -13,6 +13,7 @@ import {
 import { isCommunityManagerRole } from './community-role-labels'
 import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
+import { geocodeAddress } from './geocode'
 
 export type CommunityRecord = {
   id: number
@@ -21,6 +22,10 @@ export type CommunityRecord = {
   tagline: string | null
   description: string | null
   location: string | null
+  address: string | null
+  postal_code: string | null
+  city: string | null
+  country: string | null
   website: string | null
   contact_email: string | null
   latitude: number | null
@@ -38,7 +43,7 @@ export type CommunityManagerRecord = CommunityRecord & {
 export type CommunityRole = 'member' | 'organizer' | 'admin'
 
 const COMMUNITY_COLS =
-  'id, slug, name, tagline, description, location, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter'
+  'id, slug, name, tagline, description, location, address, postal_code, city, country, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter'
 
 const MAX_COMMUNITY_AVATAR_BYTES = 150_000
 
@@ -73,6 +78,10 @@ function mapCommunityRow(r: RowDataPacket): CommunityRecord {
     tagline: r.tagline ? String(r.tagline) : null,
     description: r.description ? String(r.description) : null,
     location: r.location ? String(r.location) : null,
+    address: r.address ? String(r.address) : null,
+    postal_code: r.postal_code ? String(r.postal_code) : null,
+    city: r.city ? String(r.city) : null,
+    country: r.country ? String(r.country) : null,
     website: r.website ? String(r.website) : null,
     contact_email: r.contact_email ? String(r.contact_email) : null,
     latitude: parseCoord(r.latitude),
@@ -112,6 +121,10 @@ let _ensured = false
 const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'description', ddl: 'description TEXT DEFAULT NULL' },
   { name: 'location', ddl: 'location VARCHAR(255) DEFAULT NULL' },
+  { name: 'address', ddl: 'address VARCHAR(255) DEFAULT NULL' },
+  { name: 'postal_code', ddl: 'postal_code VARCHAR(24) DEFAULT NULL' },
+  { name: 'city', ddl: 'city VARCHAR(120) DEFAULT NULL' },
+  { name: 'country', ddl: "country VARCHAR(80) DEFAULT NULL" },
   { name: 'website', ddl: 'website VARCHAR(255) DEFAULT NULL' },
   { name: 'contact_email', ddl: 'contact_email VARCHAR(120) DEFAULT NULL' },
   { name: 'avatar', ddl: 'avatar MEDIUMTEXT DEFAULT NULL' },
@@ -119,6 +132,20 @@ const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'latitude', ddl: 'latitude DECIMAL(9,6) DEFAULT NULL' },
   { name: 'longitude', ddl: 'longitude DECIMAL(9,6) DEFAULT NULL' },
 ]
+
+/** Compose une adresse lisible à partir des champs structurés. */
+export function composeCommunityAddress(parts: {
+  address?: string | null
+  postal_code?: string | null
+  city?: string | null
+  country?: string | null
+}): string {
+  const line2 = [parts.postal_code, parts.city].filter((v) => v && String(v).trim()).join(' ')
+  return [parts.address, line2, parts.country]
+    .map((v) => (v ? String(v).trim() : ''))
+    .filter(Boolean)
+    .join(', ')
+}
 
 /** Ajoute les colonnes profil si absentes (compatible MariaDB sans IF NOT EXISTS). */
 async function ensureCommunityProfileColumns(pool: ReturnType<typeof getPool>, tC: string): Promise<void> {
@@ -139,20 +166,26 @@ async function seedDefaultCommunityGeoHints(
   const hints: Array<{
     slug: string
     location: string
+    city: string
+    country: string
     latitude: number
     longitude: number
     description?: string
   }> = [
     {
       slug: 'shambhala',
-      location: 'Inde',
+      location: 'New Delhi, Inde',
+      city: 'New Delhi',
+      country: 'Inde',
       latitude: 28.6139,
       longitude: 77.209,
       description: 'Communauté spirituelle et lieu de retraite.',
     },
     {
       slug: 'sivana',
-      location: 'France',
+      location: 'Toulouse, France',
+      city: 'Toulouse',
+      country: 'France',
       latitude: 43.6047,
       longitude: 1.4442,
       description: 'Espace de partage et de pratiques en France.',
@@ -162,11 +195,13 @@ async function seedDefaultCommunityGeoHints(
     await pool.execute(
       `UPDATE ${tC}
        SET location = COALESCE(location, ?),
+           city = COALESCE(city, ?),
+           country = COALESCE(country, ?),
            latitude = COALESCE(latitude, ?),
            longitude = COALESCE(longitude, ?),
            description = COALESCE(description, ?)
        WHERE slug = ?`,
-      [h.location, h.latitude, h.longitude, h.description ?? null, h.slug]
+      [h.location, h.city, h.country, h.latitude, h.longitude, h.description ?? null, h.slug]
     )
   }
 }
@@ -725,7 +760,9 @@ export async function getCommunityById(id: number): Promise<CommunityAdminRecord
   const tC = table('mandala_communities')
   const tM = table('mandala_community_members')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location, c.website, c.contact_email,
+    `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location,
+            c.address, c.postal_code, c.city, c.country,
+            c.website, c.contact_email, c.latitude, c.longitude,
             c.accent_color, c.logo_emoji, c.avatar, c.is_active, c.created_at,
             (SELECT COUNT(*) FROM ${tM} m WHERE m.community_id = c.id) AS member_count
      FROM ${tC} c WHERE c.id = ? LIMIT 1`,
@@ -744,8 +781,15 @@ export async function updateCommunityAdmin(
     tagline?: string | null
     description?: string | null
     location?: string | null
+    address?: string | null
+    postal_code?: string | null
+    city?: string | null
+    country?: string | null
     website?: string | null
     contact_email?: string | null
+    latitude?: number | null
+    longitude?: number | null
+    geocode?: boolean
     accent_color?: string | null
     logo_emoji?: string | null
     avatar?: string | null
@@ -790,6 +834,22 @@ export async function updateCommunityAdmin(
     updates.push('location = ?')
     values.push(body.location ? String(body.location).trim().slice(0, 255) : null)
   }
+  if (body.address !== undefined) {
+    updates.push('address = ?')
+    values.push(body.address ? String(body.address).trim().slice(0, 255) : null)
+  }
+  if (body.postal_code !== undefined) {
+    updates.push('postal_code = ?')
+    values.push(body.postal_code ? String(body.postal_code).trim().slice(0, 24) : null)
+  }
+  if (body.city !== undefined) {
+    updates.push('city = ?')
+    values.push(body.city ? String(body.city).trim().slice(0, 120) : null)
+  }
+  if (body.country !== undefined) {
+    updates.push('country = ?')
+    values.push(body.country ? String(body.country).trim().slice(0, 80) : null)
+  }
   if (body.website !== undefined) {
     updates.push('website = ?')
     values.push(body.website ? String(body.website).trim().slice(0, 255) : null)
@@ -797,6 +857,47 @@ export async function updateCommunityAdmin(
   if (body.contact_email !== undefined) {
     updates.push('contact_email = ?')
     values.push(body.contact_email ? String(body.contact_email).trim().slice(0, 120) : null)
+  }
+
+  const latProvided =
+    body.latitude !== undefined && body.latitude !== null && String(body.latitude) !== ''
+  const lngProvided =
+    body.longitude !== undefined && body.longitude !== null && String(body.longitude) !== ''
+  if (body.latitude !== undefined) {
+    updates.push('latitude = ?')
+    values.push(parseCommunityCoord(body.latitude, 'latitude'))
+  }
+  if (body.longitude !== undefined) {
+    updates.push('longitude = ?')
+    values.push(parseCommunityCoord(body.longitude, 'longitude'))
+  }
+
+  const addressTouched =
+    body.address !== undefined ||
+    body.city !== undefined ||
+    body.postal_code !== undefined ||
+    body.country !== undefined
+  if (body.geocode === true || (!latProvided && !lngProvided && addressTouched)) {
+    const geo = await geocodeAddress({
+      address: body.address !== undefined ? body.address : existing.address,
+      postal_code: body.postal_code !== undefined ? body.postal_code : existing.postal_code,
+      city: body.city !== undefined ? body.city : existing.city,
+      country: body.country !== undefined ? body.country : existing.country,
+    })
+    if (geo) {
+      const latIdx = updates.findIndex((u) => u.startsWith('latitude'))
+      if (latIdx >= 0) values[latIdx] = geo.latitude
+      else {
+        updates.push('latitude = ?')
+        values.push(geo.latitude)
+      }
+      const lngIdx = updates.findIndex((u) => u.startsWith('longitude'))
+      if (lngIdx >= 0) values[lngIdx] = geo.longitude
+      else {
+        updates.push('longitude = ?')
+        values.push(geo.longitude)
+      }
+    }
   }
   if (body.avatar !== undefined) {
     const parsed = parseCommunityAvatarInput(body.avatar)
@@ -1018,10 +1119,16 @@ export async function updateCommunitySettingsForManager(
     tagline?: string | null
     description?: string | null
     location?: string | null
+    address?: string | null
+    postal_code?: string | null
+    city?: string | null
+    country?: string | null
     website?: string | null
     contact_email?: string | null
     latitude?: number | null
     longitude?: number | null
+    /** Force le recalcul des coordonnées à partir de l'adresse. */
+    geocode?: boolean
     accent_color?: string | null
     logo_emoji?: string | null
     avatar?: string | null
@@ -1053,6 +1160,22 @@ export async function updateCommunitySettingsForManager(
     updates.push('location = ?')
     values.push(body.location ? String(body.location).trim().slice(0, 255) : null)
   }
+  if (body.address !== undefined) {
+    updates.push('address = ?')
+    values.push(body.address ? String(body.address).trim().slice(0, 255) : null)
+  }
+  if (body.postal_code !== undefined) {
+    updates.push('postal_code = ?')
+    values.push(body.postal_code ? String(body.postal_code).trim().slice(0, 24) : null)
+  }
+  if (body.city !== undefined) {
+    updates.push('city = ?')
+    values.push(body.city ? String(body.city).trim().slice(0, 120) : null)
+  }
+  if (body.country !== undefined) {
+    updates.push('country = ?')
+    values.push(body.country ? String(body.country).trim().slice(0, 80) : null)
+  }
   if (body.website !== undefined) {
     updates.push('website = ?')
     values.push(body.website ? String(body.website).trim().slice(0, 255) : null)
@@ -1061,6 +1184,12 @@ export async function updateCommunitySettingsForManager(
     updates.push('contact_email = ?')
     values.push(body.contact_email ? String(body.contact_email).trim().slice(0, 120) : null)
   }
+
+  const latProvided =
+    body.latitude !== undefined && body.latitude !== null && String(body.latitude) !== ''
+  const lngProvided =
+    body.longitude !== undefined && body.longitude !== null && String(body.longitude) !== ''
+
   if (body.latitude !== undefined) {
     updates.push('latitude = ?')
     values.push(parseCommunityCoord(body.latitude, 'latitude'))
@@ -1068,6 +1197,40 @@ export async function updateCommunitySettingsForManager(
   if (body.longitude !== undefined) {
     updates.push('longitude = ?')
     values.push(parseCommunityCoord(body.longitude, 'longitude'))
+  }
+
+  // Géocodage automatique : coordonnées absentes mais adresse fournie/modifiée,
+  // ou recalcul explicitement demandé.
+  const addressTouched =
+    body.address !== undefined ||
+    body.city !== undefined ||
+    body.postal_code !== undefined ||
+    body.country !== undefined
+  const wantsGeocode = body.geocode === true || (!latProvided && !lngProvided && addressTouched)
+
+  if (wantsGeocode) {
+    const geo = await geocodeAddress({
+      address: body.address !== undefined ? body.address : current.address,
+      postal_code: body.postal_code !== undefined ? body.postal_code : current.postal_code,
+      city: body.city !== undefined ? body.city : current.city,
+      country: body.country !== undefined ? body.country : current.country,
+    })
+    if (geo) {
+      if (!updates.some((u) => u.startsWith('latitude'))) {
+        updates.push('latitude = ?')
+        values.push(geo.latitude)
+      } else {
+        const idx = updates.findIndex((u) => u.startsWith('latitude'))
+        values[idx] = geo.latitude
+      }
+      if (!updates.some((u) => u.startsWith('longitude'))) {
+        updates.push('longitude = ?')
+        values.push(geo.longitude)
+      } else {
+        const idx = updates.findIndex((u) => u.startsWith('longitude'))
+        values[idx] = geo.longitude
+      }
+    }
   }
   if (body.accent_color !== undefined) {
     updates.push('accent_color = ?')
@@ -1107,6 +1270,10 @@ export type PublicCommunityCard = Pick<
   | 'tagline'
   | 'description'
   | 'location'
+  | 'address'
+  | 'postal_code'
+  | 'city'
+  | 'country'
   | 'website'
   | 'contact_email'
   | 'latitude'
@@ -1124,6 +1291,10 @@ function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
     tagline: c.tagline,
     description: c.description,
     location: c.location,
+    address: c.address,
+    postal_code: c.postal_code,
+    city: c.city,
+    country: c.country,
     website: c.website,
     contact_email: c.contact_email,
     latitude: c.latitude,
@@ -1139,6 +1310,51 @@ export async function listPublicCommunitiesForSignup(): Promise<PublicCommunityC
   return listPublicCommunitiesForLanding()
 }
 
+/** Fiche publique d'un lieu actif (profil grand public, sans compte). */
+export async function getPublicCommunityBySlug(slug: string): Promise<PublicCommunityCard | null> {
+  if (!isDbConfigured()) return null
+  const normalized = slug?.trim().toLowerCase()
+  if (!normalized) return null
+  const community = await getCommunityBySlug(normalized)
+  if (!community) return null
+  return mapPublicCommunityCard(community)
+}
+
+export type PublicCommunityProfile = PublicCommunityCard & {
+  member_count: number
+  charter: CharterBlock[]
+}
+
+/** Profil public détaillé d'un lieu (carte + charte + statistiques). */
+export async function getPublicCommunityProfileBySlug(
+  slug: string
+): Promise<PublicCommunityProfile | null> {
+  if (!isDbConfigured()) return null
+  const normalized = slug?.trim().toLowerCase()
+  if (!normalized) return null
+  const community = await getCommunityBySlug(normalized)
+  if (!community) return null
+
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  let memberCount = 0
+  try {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT COUNT(*) AS cnt FROM ${tM} WHERE community_id = ?`,
+      [community.id]
+    )
+    memberCount = Number(rows[0]?.cnt ?? 0)
+  } catch {
+    memberCount = 0
+  }
+
+  return {
+    ...mapPublicCommunityCard(community),
+    member_count: memberCount,
+    charter: community.charter ?? [],
+  }
+}
+
 /** Catalogue grand public — promotion des lieux inscrits. */
 export async function listPublicCommunitiesForLanding(): Promise<PublicCommunityCard[]> {
   if (!isDbConfigured()) return []
@@ -1147,8 +1363,8 @@ export async function listPublicCommunitiesForLanding(): Promise<PublicCommunity
   const pool = getPool()
   const tC = table('mandala_communities')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, slug, name, tagline, description, location, website, contact_email,
-            latitude, longitude, accent_color, logo_emoji, avatar
+    `SELECT id, slug, name, tagline, description, location, address, postal_code, city, country,
+            website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar
      FROM ${tC} WHERE is_active = 1 ORDER BY name ASC`
   )
   return (rows ?? []).map((r) => mapPublicCommunityCard(mapCommunityRow(r)))

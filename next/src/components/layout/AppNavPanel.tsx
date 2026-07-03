@@ -123,6 +123,16 @@ export function AppNavPanel({
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2 space-y-1">
+        <nav className="px-2 pt-1">
+          <NavButton
+            active={page === 'places-map'}
+            icon="🗺️"
+            label="Carte des lieux"
+            description="Réseau des lieux inscrits"
+            onClick={() => go('places-map')}
+          />
+        </nav>
+
         <SectionTitle>Navigation</SectionTitle>
         <nav className="flex flex-col gap-0.5 px-2">
           {MAIN_NAV.map((item) => (

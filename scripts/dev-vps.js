@@ -139,7 +139,8 @@ tunnel.on('error', onTunnelError)
 tunnel.on('close', onTunnelClose)
 
 setTimeout(() => {
-  console.log('\n▶  Démarrage Next.js Mandala (port 3002)...\n')
+  console.log('\n▶  Démarrage Next.js Mandala (port 3002, HTTPS)...\n')
+  console.log('   https://localhost:3002  — certificat auto-signé : acceptez l’avertissement du navigateur la 1re fois.\n')
   killListenersOnPort(NEXT_DEV_PORT)
 
   const nextEnv = {
@@ -155,7 +156,7 @@ setTimeout(() => {
     MARIADB_TUNNEL_TARGET: SSH_HOST,
     DB_PREFIX: env.DB_PREFIX || 'mdl_',
     JWT_SECRET: env.JWT_SECRET || 'change_me_dev_mandala_only',
-    NEXT_PUBLIC_APP_URL: env.NEXT_PUBLIC_APP_URL || 'http://localhost:3002',
+    NEXT_PUBLIC_APP_URL: env.NEXT_PUBLIC_APP_URL || 'https://localhost:3002',
   }
 
   nextProcess = spawn('npm', ['run', 'dev', '--prefix', 'next'], {

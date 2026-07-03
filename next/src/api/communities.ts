@@ -8,6 +8,10 @@ export type PublicCommunityCard = {
   tagline?: string | null
   description?: string | null
   location?: string | null
+  address?: string | null
+  postal_code?: string | null
+  city?: string | null
+  country?: string | null
   website?: string | null
   contact_email?: string | null
   latitude?: number | null
@@ -15,6 +19,11 @@ export type PublicCommunityCard = {
   accent_color?: string | null
   logo_emoji?: string | null
   avatar?: string | null
+}
+
+export type PublicCommunityProfile = PublicCommunityCard & {
+  member_count: number
+  charter: CharterBlock[]
 }
 
 export type MemberCharterView = {
@@ -37,6 +46,10 @@ export type CommunityManagerSettings = {
   tagline: string | null
   description: string | null
   location: string | null
+  address: string | null
+  postal_code: string | null
+  city: string | null
+  country: string | null
   website: string | null
   contact_email: string | null
   latitude: number | null
@@ -48,6 +61,12 @@ export type CommunityManagerSettings = {
   charter: CharterBlock[]
   can_manage?: boolean
   member_role?: string | null
+}
+
+export type GeocodeResult = {
+  latitude: number
+  longitude: number
+  display_name: string
 }
 
 export const communitiesApi = {
@@ -85,5 +104,12 @@ export const communitiesApi = {
   updateSettings: (slug: string, body: Record<string, unknown>) =>
     api.patch(`/api/communities/${encodeURIComponent(slug)}/settings`, body) as Promise<{
       settings: CommunityManagerSettings
+    }>,
+  geocode: (
+    slug: string,
+    body: { address?: string | null; postal_code?: string | null; city?: string | null; country?: string | null }
+  ) =>
+    api.post(`/api/communities/${encodeURIComponent(slug)}/geocode`, body) as Promise<{
+      result: GeocodeResult
     }>,
 }

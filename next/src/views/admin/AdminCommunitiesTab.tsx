@@ -36,7 +36,14 @@ export function AdminCommunitiesTab({
   const [editColor, setEditColor] = useState('')
   const [editActive, setEditActive] = useState(true)
   const [editDesc, setEditDesc] = useState('')
-  const [editLocation, setEditLocation] = useState('')
+  const [editAddress, setEditAddress] = useState('')
+  const [editPostalCode, setEditPostalCode] = useState('')
+  const [editCity, setEditCity] = useState('')
+  const [editCountry, setEditCountry] = useState('France')
+  const [editLat, setEditLat] = useState('')
+  const [editLng, setEditLng] = useState('')
+  const [geoBusy, setGeoBusy] = useState(false)
+  const [geoMsg, setGeoMsg] = useState<string | null>(null)
   const [editWebsite, setEditWebsite] = useState('')
   const [editEmail, setEditEmail] = useState('')
   const [editAvatar, setEditAvatar] = useState<string | null>(null)
@@ -75,7 +82,13 @@ export function AdminCommunitiesTab({
         setEditColor(data.community.accent_color ?? '#7c3aed')
         setEditActive(data.community.is_active)
         setEditDesc(data.community.description ?? '')
-        setEditLocation(data.community.location ?? '')
+        setEditAddress(data.community.address ?? '')
+        setEditPostalCode(data.community.postal_code ?? '')
+        setEditCity(data.community.city ?? '')
+        setEditCountry(data.community.country ?? 'France')
+        setEditLat(data.community.latitude != null ? String(data.community.latitude) : '')
+        setEditLng(data.community.longitude != null ? String(data.community.longitude) : '')
+        setGeoMsg(null)
         setEditWebsite(data.community.website ?? '')
         setEditEmail(data.community.contact_email ?? '')
         const av = data.community.avatar
@@ -111,7 +124,13 @@ export function AdminCommunitiesTab({
         name: editName,
         tagline: editTagline || null,
         description: editDesc || null,
-        location: editLocation || null,
+        address: editAddress || null,
+        postal_code: editPostalCode || null,
+        city: editCity || null,
+        country: editCountry || null,
+        location: [editCity, editCountry].filter(Boolean).join(', ') || null,
+        latitude: editLat.trim() ? Number(editLat) : null,
+        longitude: editLng.trim() ? Number(editLng) : null,
         website: editWebsite || null,
         contact_email: editEmail || null,
         logo_emoji: editEmoji,
@@ -136,6 +155,29 @@ export function AdminCommunitiesTab({
       onMessage(e instanceof ApiError ? e.detail : 'Erreur enregistrement', false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const locate = async () => {
+    const slug = detail?.slug
+    if (!slug) return
+    setGeoBusy(true)
+    setGeoMsg(null)
+    try {
+      const { result } = await communitiesApi.geocode(slug, {
+        address: editAddress || null,
+        postal_code: editPostalCode || null,
+        city: editCity || null,
+        country: editCountry || null,
+      })
+      setEditLat(String(result.latitude))
+      setEditLng(String(result.longitude))
+      setGeoMsg(`Position trouvée : ${result.display_name}`)
+    } catch (e: unknown) {
+      const err = e instanceof ApiError ? e.detail : 'Adresse introuvable'
+      setGeoMsg(typeof err === 'string' ? err : 'Adresse introuvable')
+    } finally {
+      setGeoBusy(false)
     }
   }
 
@@ -366,16 +408,99 @@ export function AdminCommunitiesTab({
                     className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 resize-y"
                   />
                 </label>
-                <label className="block">
-                  <span className="text-slate-500 text-xs">Lieu</span>
-                  <input
-                    value={editLocation}
-                    onChange={(e) => setEditLocation(e.target.value)}
-                    placeholder="Ville, pays…"
-                    className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
-                  />
-                </label>
-                <label className="block">
+                <fieldset className="block sm:col-span-2 space-y-3 rounded-xl border border-slate-800 p-3">
+                  <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
+                    Adresse du lieu
+                  </legend>
+                  <label className="block">
+                    <span className="text-slate-500 text-xs">Adresse (n° et rue)</span>
+                    <input
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      placeholder="ex. 12 rue de la Paix"
+                      className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                    />
+                  </label>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <label className="block">
+                      <span className="text-slate-500 text-xs">Code postal</span>
+                      <input
+                        value={editPostalCode}
+                        onChange={(e) => setEditPostalCode(e.target.value)}
+                        placeholder="ex. 31000"
+                        className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                      />
+                    </label>
+                    <label className="block sm:col-span-2">
+                      <span className="text-slate-500 text-xs">Ville</span>
+                      <input
+                        value={editCity}
+                        onChange={(e) => setEditCity(e.target.value)}
+                        placeholder="ex. Toulouse"
+                        className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="text-slate-500 text-xs">Pays</span>
+                    <input
+                      value={editCountry}
+                      onChange={(e) => setEditCountry(e.target.value)}
+                      placeholder="ex. France"
+                      className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => void locate()}
+                      disabled={geoBusy || (!editAddress && !editPostalCode && !editCity)}
+                      className="text-sm px-3 py-2 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white disabled:opacity-50"
+                    >
+                      {geoBusy ? 'Localisation…' : '📍 Localiser sur la carte'}
+                    </button>
+                    {editLat && editLng && (
+                      <span className="text-xs text-slate-400">
+                        {Number(editLat).toFixed(5)}, {Number(editLng).toFixed(5)}
+                      </span>
+                    )}
+                  </div>
+                  {geoMsg && <p className="text-xs text-slate-400">{geoMsg}</p>}
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="text-slate-500 text-xs">Latitude</span>
+                      <input
+                        value={editLat}
+                        onChange={(e) => setEditLat(e.target.value)}
+                        type="number"
+                        step="any"
+                        min={-90}
+                        max={90}
+                        placeholder="ex. 43.6047"
+                        className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-slate-500 text-xs">Longitude</span>
+                      <input
+                        value={editLng}
+                        onChange={(e) => setEditLng(e.target.value)}
+                        type="number"
+                        step="any"
+                        min={-180}
+                        max={180}
+                        placeholder="ex. 1.4442"
+                        className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                      />
+                    </label>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Renseignez l&apos;adresse puis « Localiser » pour positionner le lieu sur la
+                    carte publique. À l&apos;enregistrement, les coordonnées sont calculées
+                    automatiquement si elles sont vides.
+                  </p>
+                </fieldset>
+                <label className="block sm:col-span-2">
                   <span className="text-slate-500 text-xs">Site web</span>
                   <input
                     value={editWebsite}

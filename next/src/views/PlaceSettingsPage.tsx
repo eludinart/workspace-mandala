@@ -34,9 +34,14 @@ export function PlaceSettingsPage({
   const [name, setName] = useState('')
   const [tagline, setTagline] = useState('')
   const [description, setDescription] = useState('')
-  const [location, setLocation] = useState('')
+  const [address, setAddress] = useState('')
+  const [postalCode, setPostalCode] = useState('')
+  const [city, setCity] = useState('')
+  const [country, setCountry] = useState('France')
   const [latitude, setLatitude] = useState('')
   const [longitude, setLongitude] = useState('')
+  const [geoBusy, setGeoBusy] = useState(false)
+  const [geoMsg, setGeoMsg] = useState<string | null>(null)
   const [website, setWebsite] = useState('')
   const [email, setEmail] = useState('')
   const [emoji, setEmoji] = useState('🏛️')
@@ -55,9 +60,13 @@ export function PlaceSettingsPage({
     setName(s.name)
     setTagline(s.tagline ?? '')
     setDescription(s.description ?? '')
-    setLocation(s.location ?? '')
+    setAddress(s.address ?? '')
+    setPostalCode(s.postal_code ?? '')
+    setCity(s.city ?? '')
+    setCountry(s.country ?? 'France')
     setLatitude(s.latitude != null ? String(s.latitude) : '')
     setLongitude(s.longitude != null ? String(s.longitude) : '')
+    setGeoMsg(null)
     setWebsite(s.website ?? '')
     setEmail(s.contact_email ?? '')
     setEmoji(s.logo_emoji ?? '🏛️')
@@ -96,7 +105,11 @@ export function PlaceSettingsPage({
         name,
         tagline: tagline || null,
         description: description || null,
-        location: location || null,
+        address: address || null,
+        postal_code: postalCode || null,
+        city: city || null,
+        country: country || null,
+        location: [city, country].filter(Boolean).join(', ') || null,
         latitude: latitude.trim() ? Number(latitude) : null,
         longitude: longitude.trim() ? Number(longitude) : null,
         website: website || null,
@@ -117,6 +130,28 @@ export function PlaceSettingsPage({
       setMsgOk(false)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const locate = async () => {
+    if (!active?.slug) return
+    setGeoBusy(true)
+    setGeoMsg(null)
+    try {
+      const { result } = await communitiesApi.geocode(active.slug, {
+        address: address || null,
+        postal_code: postalCode || null,
+        city: city || null,
+        country: country || null,
+      })
+      setLatitude(String(result.latitude))
+      setLongitude(String(result.longitude))
+      setGeoMsg(`Position trouvée : ${result.display_name}`)
+    } catch (e: unknown) {
+      const err = e instanceof ApiError ? e.detail : 'Adresse introuvable'
+      setGeoMsg(typeof err === 'string' ? err : 'Adresse introuvable')
+    } finally {
+      setGeoBusy(false)
     }
   }
 
@@ -257,56 +292,109 @@ export function PlaceSettingsPage({
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 resize-y"
             />
           </label>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <fieldset className="space-y-3 rounded-xl border border-slate-800 p-3">
+            <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
+              Adresse du lieu
+            </legend>
             <label className="block">
-              <span className="text-slate-500 text-xs">Localisation (ville, pays)</span>
+              <span className="text-slate-500 text-xs">Adresse (n° et rue)</span>
               <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="ex. Toulouse, France"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="ex. 12 rue de la Paix"
                 className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
               />
             </label>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <label className="block">
+                <span className="text-slate-500 text-xs">Code postal</span>
+                <input
+                  value={postalCode}
+                  onChange={(e) => setPostalCode(e.target.value)}
+                  placeholder="ex. 31000"
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-slate-500 text-xs">Ville</span>
+                <input
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  placeholder="ex. Toulouse"
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                />
+              </label>
+            </div>
             <label className="block">
-              <span className="text-slate-500 text-xs">Site web</span>
+              <span className="text-slate-500 text-xs">Pays</span>
               <input
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="ex. France"
                 className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
               />
             </label>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-slate-500 text-xs">Latitude (carte publique)</span>
-              <input
-                value={latitude}
-                onChange={(e) => setLatitude(e.target.value)}
-                type="number"
-                step="any"
-                min={-90}
-                max={90}
-                placeholder="ex. 43.6047"
-                className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
-              />
-            </label>
-            <label className="block">
-              <span className="text-slate-500 text-xs">Longitude (carte publique)</span>
-              <input
-                value={longitude}
-                onChange={(e) => setLongitude(e.target.value)}
-                type="number"
-                step="any"
-                min={-180}
-                max={180}
-                placeholder="ex. 1.4442"
-                className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
-              />
-            </label>
-          </div>
-          <p className="text-xs text-slate-500 -mt-1">
-            Les coordonnées GPS positionnent le lieu sur la carte de la page d&apos;accueil publique.
-          </p>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => void locate()}
+                disabled={geoBusy || (!address && !postalCode && !city)}
+                className="text-sm px-3 py-2 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white disabled:opacity-50"
+              >
+                {geoBusy ? 'Localisation…' : '📍 Localiser sur la carte'}
+              </button>
+              {latitude && longitude && (
+                <span className="text-xs text-slate-400">
+                  {Number(latitude).toFixed(5)}, {Number(longitude).toFixed(5)}
+                </span>
+              )}
+            </div>
+            {geoMsg && <p className="text-xs text-slate-400">{geoMsg}</p>}
+
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="text-slate-500 text-xs">Latitude</span>
+                <input
+                  value={latitude}
+                  onChange={(e) => setLatitude(e.target.value)}
+                  type="number"
+                  step="any"
+                  min={-90}
+                  max={90}
+                  placeholder="ex. 43.6047"
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-500 text-xs">Longitude</span>
+                <input
+                  value={longitude}
+                  onChange={(e) => setLongitude(e.target.value)}
+                  type="number"
+                  step="any"
+                  min={-180}
+                  max={180}
+                  placeholder="ex. 1.4442"
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+                />
+              </label>
+            </div>
+            <p className="text-xs text-slate-500">
+              Renseignez l&apos;adresse puis cliquez sur « Localiser » pour positionner
+              automatiquement le lieu. Les coordonnées peuvent être ajustées manuellement. À
+              l&apos;enregistrement, si aucune coordonnée n&apos;est saisie, elles sont calculées à
+              partir de l&apos;adresse.
+            </p>
+          </fieldset>
+          <label className="block">
+            <span className="text-slate-500 text-xs">Site web</span>
+            <input
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+            />
+          </label>
           <label className="block">
             <span className="text-slate-500 text-xs">Contact</span>
             <input

@@ -9,3 +9,4 @@ nogit/
 .DS_Store
 tsconfig.tsbuildinfo
 next/tsconfig.tsbuildinfo
+next/certificates/

@@ -15,13 +15,25 @@ function isMappable(p: PublicCommunityCard): p is MappablePlace {
 type Props = {
   places: PublicCommunityCard[]
   selectedSlug?: string | null
+  /** Mise en surbrillance sur la carte (sans défilement de page). */
   onSelect?: (slug: string) => void
+  /** Hauteur du conteneur carte (classe Tailwind). Défaut : grande carte. */
+  heightClassName?: string
+  /** Masque la légende du bas (utile en mini-carte). */
+  hideCaption?: boolean
 }
 
-export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
+export function PlacesMap({
+  places,
+  selectedSlug,
+  onSelect,
+  heightClassName = 'h-[min(52vh,28rem)]',
+  hideCaption = false,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import('leaflet').Map | null>(null)
   const markersLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
+  const markersBySlugRef = useRef<Map<string, import('leaflet').Marker>>(new Map())
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
 
@@ -55,9 +67,11 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
       mapRef.current?.remove()
       mapRef.current = null
       markersLayerRef.current = null
+      markersBySlugRef.current.clear()
     }
   }, [])
 
+  // Création / mise à jour des marqueurs
   useEffect(() => {
     const map = mapRef.current
     const layer = markersLayerRef.current
@@ -68,6 +82,7 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
     void import('leaflet').then((L) => {
       if (cancelled) return
       layer.clearLayers()
+      markersBySlugRef.current.clear()
       const bounds = L.latLngBounds([])
 
       for (const place of mappable) {
@@ -80,11 +95,24 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
           iconAnchor: [18, 18],
         })
         const marker = L.marker([place.latitude, place.longitude], { icon })
-        marker.on('click', () => onSelectRef.current?.(place.slug))
+        const line2 = [place.postal_code, place.city].filter((v) => v && String(v).trim()).join(' ')
+        const popupAddr =
+          [place.address, line2, place.country]
+            .map((v) => (v ? String(v).trim() : ''))
+            .filter(Boolean)
+            .join(', ') || place.location || ''
+        const profileHref = `/lieux/${encodeURIComponent(place.slug)}`
         marker.bindPopup(
-          `<strong>${place.name}</strong>${place.location ? `<br/><span style="opacity:0.8">${place.location}</span>` : ''}`
+          `<strong>${place.name}</strong>` +
+            (popupAddr ? `<br/><span style="opacity:0.8">${popupAddr}</span>` : '') +
+            `<br/><a href="${profileHref}" style="display:inline-block;margin-top:6px;color:#7c3aed;font-weight:600">Voir le profil →</a>`
         )
+        marker.on('click', () => {
+          onSelectRef.current?.(place.slug)
+          marker.openPopup()
+        })
         marker.addTo(layer)
+        markersBySlugRef.current.set(place.slug, marker)
         bounds.extend([place.latitude, place.longitude])
       }
 
@@ -95,6 +123,11 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
       } else {
         map.setView(FRANCE_CENTER, DEFAULT_ZOOM, { animate: false })
       }
+
+      if (selectedSlug) {
+        const m = markersBySlugRef.current.get(selectedSlug)
+        m?.openPopup()
+      }
     })
 
     return () => {
@@ -102,17 +135,20 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
     }
   }, [mappable, selectedSlug])
 
+  // Centrage sur le lieu sélectionné (sans quitter la carte)
   useEffect(() => {
     const map = mapRef.current
     if (!map || !selectedSlug) return
     const place = mappable.find((p) => p.slug === selectedSlug)
     if (!place) return
     map.flyTo([place.latitude, place.longitude], Math.max(map.getZoom(), 7), { duration: 0.8 })
+    const marker = markersBySlugRef.current.get(selectedSlug)
+    marker?.openPopup()
   }, [selectedSlug, mappable])
 
   return (
     <div className="m-public-map relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner">
-      <div ref={containerRef} className="h-[min(52vh,28rem)] w-full z-0" aria-label="Carte des lieux" />
+      <div ref={containerRef} className={`${heightClassName} w-full z-0`} aria-label="Carte des lieux" />
       {mappable.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-[400] pointer-events-none">
           <p className="text-sm text-slate-400 px-6 text-center">
@@ -120,9 +156,11 @@ export function PlacesMap({ places, selectedSlug, onSelect }: Props) {
           </p>
         </div>
       )}
-      <p className="absolute bottom-2 left-2 right-2 z-[400] text-[10px] text-slate-500 text-center pointer-events-none">
-        France · Belgique · Suisse — lieux francophones
-      </p>
+      {!hideCaption && (
+        <p className="absolute bottom-2 left-2 right-2 z-[400] text-[10px] text-slate-500 text-center pointer-events-none">
+          France · Belgique · Suisse — lieux francophones
+        </p>
+      )}
     </div>
   )
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import type { PublicCommunityCard } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 
@@ -15,9 +16,29 @@ function normalizeWebsite(url: string): string {
   return /^https?:\/\//i.test(t) ? t : `https://${t}`
 }
 
+function composeAddress(place: PublicCommunityCard): string {
+  const line2 = [place.postal_code, place.city].filter((v) => v && String(v).trim()).join(' ')
+  const full = [place.address, line2, place.country]
+    .map((v) => (v ? String(v).trim() : ''))
+    .filter(Boolean)
+    .join(', ')
+  return full || (place.location ?? '')
+}
+
+function directionsUrl(place: PublicCommunityCard): string | null {
+  if (place.latitude != null && place.longitude != null) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${place.latitude},${place.longitude}`
+  }
+  const addr = composeAddress(place)
+  if (!addr) return null
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`
+}
+
 export function PlacePublicCard({ place, selected, onSelect }: Props) {
   const website = place.website?.trim()
   const email = place.contact_email?.trim()
+  const displayAddress = composeAddress(place)
+  const directions = directionsUrl(place)
 
   return (
     <article
@@ -43,7 +64,7 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
         <div className="min-w-0 flex-1 space-y-1">
           <h3 className="text-lg font-semibold text-slate-100">{place.name}</h3>
           {place.tagline && <p className="text-sm text-violet-300/80">{place.tagline}</p>}
-          {place.location && <p className="text-xs text-slate-500">📍 {place.location}</p>}
+          {displayAddress && <p className="text-xs text-slate-500">📍 {displayAddress}</p>}
         </div>
       </button>
 
@@ -53,8 +74,17 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
         </p>
       )}
 
-      {(website || email) && (
-        <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={`/lieux/${encodeURIComponent(place.slug)}`}
+          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium"
+        >
+          Voir le profil →
+        </Link>
+      </div>
+
+      {(website || email || directions) && (
+        <div className="mt-2 flex flex-wrap gap-2">
           {website && (
             <a
               href={normalizeWebsite(website)}
@@ -71,6 +101,16 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
               className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
             >
               ✉️ Contacter
+            </a>
+          )}
+          {directions && (
+            <a
+              href={directions}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600"
+            >
+              🧭 Itinéraire
             </a>
           )}
         </div>

@@ -12,6 +12,7 @@ import { EventsPage } from '@/views/EventsPage'
 import { CalendarPage } from '@/views/CalendarPage'
 import { AccountPage } from '@/views/AccountPage'
 import { PlaceSettingsPage } from '@/views/PlaceSettingsPage'
+import { PlacesMapPage } from '@/views/PlacesMapPage'
 import { ManagedPlacesPage } from '@/views/ManagedPlacesPage'
 import { AdminPage } from '@/views/AdminPage'
 import { PlaceAnnouncementsPage } from '@/views/PlaceAnnouncementsPage'
@@ -31,6 +32,7 @@ export type MandalaPage =
   | 'notifications'
   | 'account'
   | 'charter'
+  | 'places-map'
   | 'place-settings'
   | 'place-profile'
   | 'place-charter'
@@ -101,6 +103,8 @@ export function MandalaApp() {
         return <AccountPage onNavigate={navigate} />
       case 'charter':
         return <CharterPage />
+      case 'places-map':
+        return <PlacesMapPage />
       case 'place-settings':
       case 'place-profile':
         return <PlaceSettingsPage section="profile" onNavigate={navigate} />
