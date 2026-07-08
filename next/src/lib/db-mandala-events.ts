@@ -10,11 +10,12 @@ import {
   type CommunityRole,
 } from './db-communities'
 import { assertEndsAfterStarts } from './event-dates'
+import type { EventPhase } from './event-constants'
 import { normalizeDbDateTime } from './format-datetime'
 
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 
-export type { EventPhase } from './event-constants'
+export type { EventPhase }
 
 export type EventStatus = 'draft' | 'published' | 'cancelled'
 

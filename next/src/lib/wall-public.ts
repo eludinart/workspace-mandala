@@ -1,5 +1,7 @@
 /** Colonne partagée : visible sur le mur public (landing). */
 
+import type { Pool } from 'mysql2/promise'
+
 export const WALL_PUBLIC_COLUMN = 'wall_public'
 
 export function parseWallPublic(value: unknown): boolean {
@@ -11,10 +13,7 @@ export function wallPublicFromRow(row: Record<string, unknown>): boolean {
   return parseWallPublic(row[WALL_PUBLIC_COLUMN])
 }
 
-export async function ensureWallPublicColumn(
-  pool: { execute: (sql: string, args?: unknown[]) => Promise<unknown> },
-  tableName: string
-): Promise<void> {
+export async function ensureWallPublicColumn(pool: Pool, tableName: string): Promise<void> {
   try {
     await pool.execute(
       `ALTER TABLE ${tableName} ADD COLUMN ${WALL_PUBLIC_COLUMN} TINYINT(1) NOT NULL DEFAULT 0`
