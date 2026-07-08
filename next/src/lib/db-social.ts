@@ -400,6 +400,82 @@ export async function openGroupChannel(params: {
   }
 }
 
+/** Ajoute des membres du lieu à un groupe existant. */
+export async function addMembersToGroupChannel(params: {
+  channelId: number
+  userId: number
+  memberUserIds: number[]
+}): Promise<{ channelId: number; memberIds: number[] }> {
+  const pool = getPool()
+  const channelId = Number(params.channelId)
+  const userId = Number(params.userId)
+  if (!channelId || !userId) throw Object.assign(new Error('Paramètres requis'), { status: 400 })
+
+  const ch = await assertChannelAccess(pool, channelId, userId)
+  if (String(ch.channel_type ?? 'direct') !== 'group') {
+    throw Object.assign(new Error('Ce canal n\'est pas un groupe'), { status: 400 })
+  }
+
+  const communityId = ch.community_id ? Number(ch.community_id) : 0
+  if (!communityId) throw Object.assign(new Error('Lieu du groupe introuvable'), { status: 400 })
+
+  const tMembers = table('chat_channel_members')
+  const tChannels = table('chat_channels')
+  const [memberRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${tMembers} WHERE channel_id = ?`,
+    [channelId]
+  )
+  const currentIds = (memberRows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
+  const toAdd = [...new Set(params.memberUserIds.map((id) => Number(id)).filter((id) => id > 0))].filter(
+    (id) => !currentIds.includes(id)
+  )
+
+  if (!toAdd.length) {
+    return { channelId, memberIds: currentIds }
+  }
+
+  await verifyUsersInCommunity(pool, communityId, toAdd)
+
+  const allIds = [...new Set([...currentIds, ...toAdd])]
+  const fingerprint = memberFingerprint(allIds)
+
+  const [conflictRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${tChannels}
+     WHERE channel_type = 'group' AND community_id = ? AND member_fingerprint = ? AND id != ?
+     LIMIT 1`,
+    [communityId, fingerprint, channelId]
+  )
+  if (conflictRows?.length) {
+    throw Object.assign(
+      new Error('Un groupe avec exactement ces participants existe déjà'),
+      { status: 409 }
+    )
+  }
+
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    for (const uid of toAdd) {
+      await conn.execute(`INSERT IGNORE INTO ${tMembers} (channel_id, user_id) VALUES (?, ?)`, [
+        channelId,
+        uid,
+      ])
+    }
+    await conn.execute(`UPDATE ${tChannels} SET member_fingerprint = ? WHERE id = ?`, [
+      fingerprint,
+      channelId,
+    ])
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+
+  return { channelId, memberIds: allIds }
+}
+
 /** IDs des autres participants (notifications). */
 export async function getChannelRecipientIds(
   channelId: number,
@@ -1040,6 +1116,66 @@ export async function getOtherUserIdInChannel(
   return null
 }
 
+/** Retourne le lieu et l'interlocuteur pour ouvrir un canal depuis une notification. */
+export async function getChannelNavigationContext(
+  channelId: number,
+  userId: number
+): Promise<{
+  channelId: number
+  channelType: 'direct' | 'group'
+  communitySlug: string | null
+  otherUserId: number | null
+}> {
+  const pool = getPool()
+  const ch = await assertChannelAccess(pool, channelId, userId)
+  const channelType = String(ch.channel_type ?? 'direct') === 'group' ? 'group' : 'direct'
+
+  if (channelType === 'group') {
+    const communityId = ch.community_id ? Number(ch.community_id) : null
+    const communitySlug = communityId ? await getCommunitySlugById(pool, communityId) : null
+    return { channelId, channelType, communitySlug, otherUserId: null }
+  }
+
+  const ua = Number(ch.user_a)
+  const ub = Number(ch.user_b)
+  const otherUserId = userId === ua ? ub : ua
+  const communitySlug =
+    otherUserId > 0 ? await getSharedCommunitySlug(pool, userId, otherUserId) : null
+  return { channelId, channelType, communitySlug, otherUserId: otherUserId > 0 ? otherUserId : null }
+}
+
+async function getCommunitySlugById(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  communityId: number
+): Promise<string | null> {
+  const tC = table('mandala_communities')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT slug FROM ${tC} WHERE id = ? AND is_active = 1 LIMIT 1`,
+    [communityId]
+  )
+  return rows?.[0]?.slug ? String(rows[0].slug) : null
+}
+
+async function getSharedCommunitySlug(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  userIdA: number,
+  userIdB: number
+): Promise<string | null> {
+  const tComm = table('mandala_communities')
+  const tMem = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT c.slug
+     FROM ${tMem} m1
+     INNER JOIN ${tMem} m2 ON m1.community_id = m2.community_id
+     INNER JOIN ${tComm} c ON c.id = m1.community_id AND c.is_active = 1
+     WHERE m1.user_id = ? AND m2.user_id = ?
+     ORDER BY c.name ASC
+     LIMIT 1`,
+    [userIdA, userIdB]
+  )
+  return rows?.[0]?.slug ? String(rows[0].slug) : null
+}
+
 /** Crée une notification in-app pour un nouveau message Clairière (appelé après sendChannelMessage) */
 export async function createClairiereMessageNotification(
   channelId: number,
@@ -1068,7 +1204,15 @@ export async function createClairiereMessageNotification(
   }
   if (!pseudo) pseudo = 'Quelqu\'un'
 
-  const actionUrl = `/clairiere/${channelId}`
+  let actionUrl = `/clairiere/${channelId}`
+  try {
+    const ctx = await getChannelNavigationContext(channelId, recipientId)
+    const params = new URLSearchParams({ channelId: String(channelId) })
+    if (ctx.communitySlug) params.set('community', ctx.communitySlug)
+    actionUrl = `mandala:messages?${params.toString()}`
+  } catch {
+    /* garder l'URL legacy */
+  }
   const bodyText = cardSlug
     ? `${pseudo} a partagé une carte avec vous`
     : body

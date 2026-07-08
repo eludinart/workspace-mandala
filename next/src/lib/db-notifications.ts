@@ -339,6 +339,9 @@ export async function listForUser(params: { userId: number; per_page?: number; p
         n.action_label,
         n.priority,
         n.created_at,
+        n.source_type,
+        n.source_id,
+        COALESCE(n.channel_id, d.channel_id) as channel_id,
         d.id as delivery_id,
         d.read_at
      FROM ${tD} d
@@ -358,6 +361,9 @@ export async function listForUser(params: { userId: number; per_page?: number; p
     action_label: r.action_label ?? null,
     priority: String(r.priority ?? 'normal'),
     created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+    source_type: r.source_type != null ? String(r.source_type) : null,
+    source_id: r.source_id != null ? String(r.source_id) : null,
+    channel_id: r.channel_id != null ? String(r.channel_id) : null,
     delivery_id: String(r.delivery_id ?? ''),
     read_at: r.read_at ? new Date(r.read_at).toISOString() : null,
   }))

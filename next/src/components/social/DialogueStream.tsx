@@ -6,8 +6,10 @@ import { useSocialStore, type ChannelMessage } from '@/store/useSocialStore'
 import { socialApi } from '@/api/social'
 import { TemperatureIndicator } from './TemperatureIndicator'
 import { GroupParticipantsPreview } from './GroupParticipantsPreview'
+import { AddGroupMembersPanel } from './AddGroupMembersPanel'
 import { MessageBubble } from './MessageBubble'
 import { UserAvatar } from '@/components/UserAvatar'
+import type { CommunityMember } from '@/api/members'
 
 export function DialogueStream({
   channelId,
@@ -21,6 +23,8 @@ export function DialogueStream({
   participantsById = {},
   createdBy,
   onGroupRenamed,
+  communityMembers = [],
+  onGroupMembersChanged,
 }: {
   channelId: number
   otherPseudo?: string
@@ -33,6 +37,8 @@ export function DialogueStream({
   participantsById?: Record<number, { pseudo: string; avatar?: string | null; avatarEmoji?: string }>
   createdBy?: number | null
   onGroupRenamed?: (name: string) => void
+  communityMembers?: CommunityMember[]
+  onGroupMembersChanged?: () => void
 }) {
   const { user } = useAuth()
   const u = user as {
@@ -435,11 +441,19 @@ export function DialogueStream({
           </div>
         )}
         {isGroup && memberIds.length > 0 && (
-          <GroupParticipantsPreview
-            memberIds={memberIds}
-            participantsById={participantsById}
-            meId={meId}
-          />
+          <>
+            <GroupParticipantsPreview
+              memberIds={memberIds}
+              participantsById={participantsById}
+              meId={meId}
+            />
+            <AddGroupMembersPanel
+              channelId={channelId}
+              existingMemberIds={memberIds}
+              communityMembers={communityMembers}
+              onMembersAdded={onGroupMembersChanged}
+            />
+          </>
         )}
       </header>
 

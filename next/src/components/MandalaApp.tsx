@@ -45,6 +45,8 @@ export type MandalaNavigate = (
   p: MandalaPage,
   opts?: {
     messagesUserId?: string
+    messagesChannelId?: string
+    communitySlug?: string
     eventId?: number | null
     adminTab?: AdminTabId
     /** Ouvre le hub d’un lieu dans « Mes lieux » (slug) ; `null` = liste des lieux */
@@ -57,6 +59,8 @@ export function MandalaApp() {
   const [mounted, setMounted] = useState(false)
   const [page, setPage] = useState<MandalaPage>('home')
   const [messagesOpenUserId, setMessagesOpenUserId] = useState<string | null>(null)
+  const [messagesOpenChannelId, setMessagesOpenChannelId] = useState<string | null>(null)
+  const [messagesCommunitySlug, setMessagesCommunitySlug] = useState<string | null>(null)
   const [openEventId, setOpenEventId] = useState<number | null>(null)
   const [adminTab, setAdminTab] = useState<AdminTabId>('people')
   const [managedPlaceHubSlug, setManagedPlaceHubSlug] = useState<string | null>(null)
@@ -66,8 +70,20 @@ export function MandalaApp() {
   }, [])
 
   const navigate = useCallback<MandalaNavigate>((p, opts) => {
-    if (opts?.messagesUserId) setMessagesOpenUserId(opts.messagesUserId)
-    else if (p !== 'messages') setMessagesOpenUserId(null)
+    if (opts?.messagesChannelId) {
+      setMessagesOpenChannelId(opts.messagesChannelId)
+      setMessagesOpenUserId(null)
+    } else if (opts?.messagesUserId) {
+      setMessagesOpenUserId(opts.messagesUserId)
+      setMessagesOpenChannelId(null)
+    } else if (p !== 'messages') {
+      setMessagesOpenUserId(null)
+      setMessagesOpenChannelId(null)
+    }
+
+    if (opts?.communitySlug) setMessagesCommunitySlug(opts.communitySlug)
+    else if (p !== 'messages') setMessagesCommunitySlug(null)
+
     if (opts?.eventId !== undefined) setOpenEventId(opts.eventId)
     else if (p !== 'events') setOpenEventId(null)
     if (opts?.adminTab) setAdminTab(opts.adminTab)
@@ -96,7 +112,13 @@ export function MandalaApp() {
       case 'members':
         return <MembersPage onOpenMessages={(userId) => navigate('messages', { messagesUserId: userId })} />
       case 'messages':
-        return <MessagesPage openWithUserId={messagesOpenUserId} />
+        return (
+          <MessagesPage
+            openWithUserId={messagesOpenUserId}
+            openWithChannelId={messagesOpenChannelId}
+            openCommunitySlug={messagesCommunitySlug}
+          />
+        )
       case 'notifications':
         return <NotificationsPage onNavigate={navigate} />
       case 'account':
@@ -133,7 +155,7 @@ export function MandalaApp() {
       default:
         return <HomePage onNavigate={navigate} />
     }
-  }, [page, messagesOpenUserId, openEventId, adminTab, managedPlaceHubSlug, navigate])
+  }, [page, messagesOpenUserId, messagesOpenChannelId, messagesCommunitySlug, openEventId, adminTab, managedPlaceHubSlug, navigate])
 
   if (!mounted) {
     return <div className="min-h-screen bg-slate-950" aria-busy="true" />

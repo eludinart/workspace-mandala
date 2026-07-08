@@ -20,6 +20,15 @@ export const socialApi = {
     const q = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''
     return api.get(`/api/social/my_channels${q}`)
   },
+  getChannelContext: (channelId: number) =>
+    api.get(
+      `/api/social/channel_context?channel_id=${encodeURIComponent(String(channelId))}`
+    ) as Promise<{
+      channelId: number
+      channelType: 'direct' | 'group'
+      communitySlug: string | null
+      otherUserId: number | null
+    }>,
   openChannel: (targetUserId: number, communitySlug: string) =>
     api.post('/api/social/open_channel', {
       target_user_id: targetUserId,
@@ -36,6 +45,11 @@ export const socialApi = {
       channelId: number
       name: string
     }>,
+  addGroupMembers: (channelId: number, memberUserIds: number[]) =>
+    api.post('/api/social/add_group_members', {
+      channelId,
+      member_user_ids: memberUserIds,
+    }) as Promise<{ channelId: number; memberIds: number[] }>,
   updateGroupChannelIcon: (
     channelId: number,
     payload: { emoji?: string | null; image?: string | null }

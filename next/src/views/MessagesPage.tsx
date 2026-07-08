@@ -34,8 +34,16 @@ type PendingSeed = {
   intention_id: string
 }
 
-export function MessagesPage({ openWithUserId }: { openWithUserId?: string | null }) {
-  const { active } = useCommunity()
+export function MessagesPage({
+  openWithUserId,
+  openWithChannelId,
+  openCommunitySlug,
+}: {
+  openWithUserId?: string | null
+  openWithChannelId?: string | null
+  openCommunitySlug?: string | null
+}) {
+  const { active, setActiveSlug } = useCommunity()
   const { user } = useAuth()
   const fetchClairiereUnread = useSocialStore((s) => s.fetchClairiereUnread)
   const [channels, setChannels] = useState<Channel[]>([])
@@ -46,6 +54,7 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const openedForRef = useRef<string | null>(null)
+  const openedChannelRef = useRef<string | null>(null)
 
   const loadChannels = useCallback(async () => {
     setLoading(true)
@@ -81,7 +90,14 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
   }, [loadChannels])
 
   useEffect(() => {
+    if (openCommunitySlug && active?.slug !== openCommunitySlug) {
+      setActiveSlug(openCommunitySlug)
+    }
+  }, [openCommunitySlug, active?.slug, setActiveSlug])
+
+  useEffect(() => {
     if (!openWithUserId || !active?.slug) return
+    if (openCommunitySlug && active.slug !== openCommunitySlug) return
     if (openedForRef.current === openWithUserId) return
     openedForRef.current = openWithUserId
 
@@ -101,7 +117,50 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
       }
     }
     void openForUser()
-  }, [openWithUserId, active?.slug, loadChannels])
+  }, [openWithUserId, openCommunitySlug, active?.slug, loadChannels])
+
+  useEffect(() => {
+    if (!openWithChannelId) return
+    if (openCommunitySlug && active?.slug !== openCommunitySlug) {
+      setActiveSlug(openCommunitySlug)
+      return
+    }
+    if (!active?.slug) return
+
+    const openKey = `${openWithChannelId}:${active.slug}`
+    if (openedChannelRef.current === openKey) return
+    openedChannelRef.current = openKey
+
+    const openForChannel = async () => {
+      try {
+        const channelId = Number(openWithChannelId)
+        if (!channelId) return
+        const list = await loadChannels()
+        const existing = list.find((c) => c.channelId === channelId)
+        if (existing) {
+          setSelectedId(channelId)
+          return
+        }
+        const ctx = await socialApi.getChannelContext(channelId)
+        if (ctx.communitySlug && active.slug !== ctx.communitySlug) {
+          openedChannelRef.current = null
+          setActiveSlug(ctx.communitySlug)
+          return
+        }
+        if (ctx.otherUserId && ctx.channelType === 'direct') {
+          const res = await socialApi.openChannel(ctx.otherUserId, active.slug)
+          setSelectedId(res.channelId)
+        } else {
+          setSelectedId(channelId)
+        }
+        await loadChannels()
+      } catch (e: unknown) {
+        openedChannelRef.current = null
+        setError(e instanceof ApiError ? e.detail : 'Impossible d\'ouvrir la conversation')
+      }
+    }
+    void openForChannel()
+  }, [openWithChannelId, openCommunitySlug, active?.slug, loadChannels, setActiveSlug])
 
   const acceptSeed = async (seedId: number) => {
     try {
@@ -276,7 +335,9 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
               memberIds={selected.memberIds ?? []}
               participantsById={participantsById}
               createdBy={selected.createdBy ?? null}
+              communityMembers={members}
               onGroupRenamed={() => void loadChannels()}
+              onGroupMembersChanged={() => void loadChannels()}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm p-6 text-center">

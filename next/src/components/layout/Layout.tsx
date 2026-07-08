@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { socialApi } from '@/api/social'
 import { useSocialStore } from '@/store/useSocialStore'
 import { AppHeader } from '@/components/layout/AppHeader'
+import { PlaceSwitchBanner } from '@/components/layout/PlaceSwitchBanner'
 import { AdminActingRoleBar } from '@/components/AdminActingRoleBar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
@@ -53,6 +54,7 @@ export function Layout({
           onNavigate={onNavigate}
           onOpenMenu={() => setMobileNavOpen(true)}
         />
+        <PlaceSwitchBanner />
         <AdminActingRoleBar />
         <main className="flex-1 min-h-0 overflow-auto p-4 md:p-6 pb-24 md:pb-6">{children}</main>
       </div>

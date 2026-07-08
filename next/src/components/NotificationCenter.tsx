@@ -2,14 +2,17 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
+import type { MandalaNavigate } from '@/components/MandalaApp'
+import { useCommunity } from '@/contexts/CommunityContext'
 import { useNotifications, type NotificationItem } from '@/contexts/NotificationContext'
+import { navigateFromNotification } from '@/lib/notification-navigation'
 
 const ICONS: Record<string, string> = {
   announcement: '📢',
   system: '⚙️',
   clairiere_message: '💬',
   chat_message: '💬',
+  chat_new_message: '💬',
   event: '📅',
   targeted: '🎯',
 }
@@ -38,50 +41,8 @@ function timeAgo(dateStr: string) {
   return `il y a ${days} j`
 }
 
-function resolveNavigation(
-  notif: NotificationItem,
-  onNavigate: MandalaNavigate
-): boolean {
-  const url = notif.action_url?.trim()
-  if (url) {
-    if (url.startsWith('mandala:')) {
-      const page = url.slice(8).split('?')[0] as MandalaPage
-      if (['home', 'events', 'members', 'messages', 'notifications', 'account', 'admin'].includes(page)) {
-        onNavigate(page)
-        return true
-      }
-    }
-    const lower = url.toLowerCase()
-    if (lower.includes('message') || lower.includes('clairiere') || lower.includes('chat')) {
-      onNavigate('messages')
-      return true
-    }
-    if (lower.includes('event')) {
-      onNavigate('events')
-      return true
-    }
-    if (lower.includes('member')) {
-      onNavigate('members')
-      return true
-    }
-    if (lower.startsWith('http')) {
-      window.open(url, '_blank', 'noopener,noreferrer')
-      return true
-    }
-  }
-  const type = (notif.type ?? '').toLowerCase()
-  if (type.includes('message') || type.includes('clairiere') || type.includes('chat')) {
-    onNavigate('messages')
-    return true
-  }
-  if (type.includes('event')) {
-    onNavigate('events')
-    return true
-  }
-  return false
-}
-
 export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate }) {
+  const { setActiveSlug, active } = useCommunity()
   const { unreadCount, items, loading, fetchList, markRead, markAllRead, deleteRead } =
     useNotifications()
   const [open, setOpen] = useState(false)
@@ -117,9 +78,14 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
 
   const handleClick = (notif: NotificationItem) => {
     if (!notif.read_at) void markRead([notif.id])
-    const navigated = resolveNavigation(notif, onNavigate)
-    if (!navigated) onNavigate('notifications')
-    setOpen(false)
+    void navigateFromNotification(notif, {
+      onNavigate,
+      setActiveSlug,
+      currentSlug: active?.slug,
+    }).then((navigated) => {
+      if (!navigated) onNavigate('notifications')
+      setOpen(false)
+    })
   }
 
   return (

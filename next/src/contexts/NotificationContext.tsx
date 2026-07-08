@@ -15,6 +15,9 @@ export type NotificationItem = {
   created_at?: string | null
   priority?: string
   delivery_id?: string
+  source_type?: string | null
+  source_id?: string | null
+  channel_id?: string | null
 }
 
 type NotificationContextValue = {
