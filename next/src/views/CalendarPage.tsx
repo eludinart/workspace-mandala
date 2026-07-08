@@ -148,6 +148,25 @@ export function CalendarPage() {
   )
 
   useEffect(() => {
+    if (!active?.slug) return
+    let t: number | undefined
+    const onEventsChanged = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ communitySlug?: string }>).detail
+      if (detail?.communitySlug !== active.slug) return
+      if (t) window.clearTimeout(t)
+      t = window.setTimeout(() => {
+        void loadData()
+        if (selectedDay) void openDay(selectedDay, { sheet: false })
+      }, 250)
+    }
+    window.addEventListener('mandala-events-changed', onEventsChanged)
+    return () => {
+      if (t) window.clearTimeout(t)
+      window.removeEventListener('mandala-events-changed', onEventsChanged)
+    }
+  }, [active?.slug, loadData, openDay, selectedDay])
+
+  useEffect(() => {
     if (loading || !data || selectedDay) return
     const todayStr = dateToDay(today)
     void openDay(todayStr, { sheet: false })

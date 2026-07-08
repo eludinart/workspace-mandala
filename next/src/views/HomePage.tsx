@@ -45,6 +45,17 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
     void load()
   }, [load])
 
+  useEffect(() => {
+    if (!active?.slug) return
+    const onEventsChanged = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ communitySlug?: string }>).detail
+      if (detail?.communitySlug !== active.slug) return
+      void load()
+    }
+    window.addEventListener('mandala-events-changed', onEventsChanged)
+    return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
+  }, [active?.slug, load])
+
   const featuredEvent = pickFeaturedEvent(events)
   const otherUpcoming = pickOtherUpcoming(events, featuredEvent)
   const featuredIsToday = featuredEvent ? isEventOnDay(featuredEvent) : false

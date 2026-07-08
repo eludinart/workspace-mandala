@@ -277,6 +277,17 @@ export function EventsPage({
   }, [load])
 
   useEffect(() => {
+    if (!active?.slug) return
+    const onEventsChanged = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ communitySlug?: string }>).detail
+      if (detail?.communitySlug !== active.slug) return
+      void load()
+    }
+    window.addEventListener('mandala-events-changed', onEventsChanged)
+    return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
+  }, [active?.slug, load])
+
+  useEffect(() => {
     if (openEventId) setModalEventId(openEventId)
   }, [openEventId])
 
@@ -308,6 +319,7 @@ export function EventsPage({
         communitySlug={active.slug}
         onBack={() => {
           setFullPageId(null)
+          void load()
           onOpenEvent?.(null)
         }}
       />
