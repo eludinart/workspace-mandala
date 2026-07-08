@@ -62,6 +62,12 @@ export function DialogueStream({
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+
+  const [iconEditing, setIconEditing] = useState(false)
+  const [iconSaving, setIconSaving] = useState(false)
+  const [iconEmojiDraft, setIconEmojiDraft] = useState('')
+  const [iconImageDraft, setIconImageDraft] = useState<string | null>(null)
+  const [iconError, setIconError] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const messages = messagesByChannel[String(channelId)] || []
@@ -74,6 +80,15 @@ export function DialogueStream({
     setNameDraft(otherPseudo || '')
     setRenameError(null)
   }, [editingName, otherPseudo])
+
+  useEffect(() => {
+    if (!iconEditing) return
+    setIconError(null)
+    setIconEmojiDraft(otherAvatarEmoji ?? (isGroup ? '👥' : ''))
+    setIconImageDraft(otherAvatar ?? null)
+    // If the user starts editing the icon, stop any name editing UI.
+    setEditingName(false)
+  }, [iconEditing, otherAvatarEmoji, otherAvatar, isGroup])
 
   useEffect(() => {
     if (!channelId) return
@@ -218,6 +233,37 @@ export function DialogueStream({
     }
   }
 
+  const submitIcon = async () => {
+    if (!canRename || iconSaving) return
+    setIconSaving(true)
+    setIconError(null)
+    try {
+      await socialApi.updateGroupChannelIcon(channelId, {
+        emoji: iconEmojiDraft.trim() || null,
+        image: iconImageDraft,
+      })
+      setIconEditing(false)
+      // Reload channels list so the new icon shows in the sidebar + header.
+      onGroupRenamed?.(otherPseudo || '')
+    } catch (e: unknown) {
+      setIconError((e as { detail?: string; message?: string })?.detail || (e as { message?: string })?.message || 'Impossible de modifier l’icône')
+    } finally {
+      setIconSaving(false)
+    }
+  }
+
+  const pickIconImage = (file: File | null) => {
+    if (!file) {
+      setIconImageDraft(null)
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setIconImageDraft(String(reader.result ?? ''))
+    }
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="flex-1 min-h-[min(70vh,600px)] flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
       <header className="shrink-0 px-3 py-2 border-b border-slate-800">
@@ -273,16 +319,33 @@ export function DialogueStream({
                   <span className="text-sm font-medium truncate block flex-1 min-w-0">
                     {otherPseudo || 'Dialogue'}
                   </span>
-                  {canRename && (
-                    <button
-                      type="button"
-                      onClick={() => setEditingName(true)}
-                      className="shrink-0 px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
-                      aria-label="Renommer le groupe"
-                      title="Renommer"
-                    >
-                      ✎
-                    </button>
+                  {canRename && !iconEditing && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingName(true)
+                          setIconEditing(false)
+                        }}
+                        className="px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
+                        aria-label="Renommer le groupe"
+                        title="Renommer"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIconEditing(true)
+                          setEditingName(false)
+                        }}
+                        className="px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
+                        aria-label="Modifier l'icône du groupe"
+                        title="Icône"
+                      >
+                        🖼️
+                      </button>
+                    </div>
                   )}
                 </>
               )}
@@ -297,6 +360,80 @@ export function DialogueStream({
             {renameError && <span className="text-[11px] text-red-400 block mt-0.5">{renameError}</span>}
           </div>
         </div>
+        {iconEditing && canRename && (
+          <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-slate-500">Icône</p>
+                <p className="text-xs text-slate-400 mt-0.5">Emoji ou image (optionnel)</p>
+              </div>
+              <UserAvatar
+                avatar={iconImageDraft}
+                avatarEmoji={iconEmojiDraft.trim() || '👥'}
+                size="sm"
+                alt="Aperçu icône"
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="flex-1 text-xs text-slate-500">
+                Emoji
+                <input
+                  type="text"
+                  value={iconEmojiDraft}
+                  onChange={(e) => setIconEmojiDraft(e.target.value)}
+                  placeholder="Ex: 👥"
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+                />
+              </label>
+              <label className="flex-1 text-xs text-slate-500">
+                Image
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => pickIconImage(e.target.files?.[0] ?? null)}
+                  className="mt-1 text-sm text-slate-400"
+                />
+              </label>
+            </div>
+
+            {iconImageDraft && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIconImageDraft(null)}
+                  className="text-xs text-slate-400 hover:text-slate-200"
+                >
+                  Retirer l'image
+                </button>
+              </div>
+            )}
+
+            {iconError && <p className="text-xs text-red-400">{iconError}</p>}
+
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIconEditing(false)
+                  setIconError(null)
+                }}
+                disabled={iconSaving}
+                className="px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-sm hover:bg-slate-800 disabled:opacity-50"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitIcon()}
+                disabled={iconSaving}
+                className="px-3 py-1.5 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
+              >
+                {iconSaving ? '…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        )}
         {isGroup && memberIds.length > 0 && (
           <GroupParticipantsPreview
             memberIds={memberIds}

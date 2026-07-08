@@ -131,9 +131,9 @@ export function EventDetailModal({
                       >
                         {phaseLabel(event.phase)}
                       </span>
-                      {(event.media_count ?? 0) > 0 && (
+                      {media.length > 0 && (
                         <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-black/30 text-slate-100">
-                          📷 {event.media_count}
+                          📷 {media.length}
                         </span>
                       )}
                     </div>

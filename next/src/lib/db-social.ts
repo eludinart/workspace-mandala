@@ -4,6 +4,7 @@
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, table } from './db'
 import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
+import { isAvatarImageUrl } from './user-avatar'
 
 const PRESENCE_ONLINE_SECONDS = 300
 
@@ -153,6 +154,8 @@ async function ensureGroupChannelSupport(pool: Awaited<ReturnType<typeof getPool
         ['channel_type', "VARCHAR(20) NOT NULL DEFAULT 'direct'"],
         ['community_id', 'INT NULL'],
         ['channel_name', 'VARCHAR(255) NULL'],
+        ['channel_icon_emoji', 'VARCHAR(32) NULL'],
+        ['channel_icon_image', 'MEDIUMTEXT NULL'],
         ['member_fingerprint', 'VARCHAR(512) NULL'],
         ['created_by', 'INT NULL'],
       ] as const) {
@@ -541,7 +544,8 @@ export async function getMyChannels(
   }
 
   let groupSql = `
-    SELECT c.id, c.community_id, c.channel_name, c.member_fingerprint, c.created_by
+    SELECT c.id, c.community_id, c.channel_name, c.member_fingerprint, c.created_by,
+           c.channel_icon_emoji, c.channel_icon_image
     FROM ${tChannels} c
     INNER JOIN ${tMembers} m ON m.channel_id = c.id AND m.user_id = ?
     WHERE c.channel_type = 'group'`
@@ -567,8 +571,8 @@ export async function getMyChannels(
       communityId: gr.community_id ? Number(gr.community_id) : null,
       createdBy: gr.created_by != null ? Number(gr.created_by) : null,
       otherPseudo: groupName,
-      otherAvatar: null,
-      otherAvatarEmoji: '👥',
+      otherAvatar: gr.channel_icon_image ? String(gr.channel_icon_image) : null,
+      otherAvatarEmoji: String(gr.channel_icon_emoji ?? '').trim() || '👥',
       otherIsOnline: false,
       otherLastSeenAt: null,
       unreadCount,
@@ -610,6 +614,45 @@ export async function renameGroupChannel(params: {
     throw Object.assign(new Error('Seul le créateur peut renommer ce groupe'), { status: 403 })
   }
   return { channelId, name }
+}
+
+export async function updateGroupChannelIcon(params: {
+  channelId: number
+  userId: number
+  emoji?: string | null
+  image?: string | null
+}): Promise<{ channelId: number }> {
+  const pool = getPool()
+  await ensureGroupChannelSupport(pool)
+
+  const channelId = Number(params.channelId)
+  const userId = Number(params.userId)
+  const emojiRaw = params.emoji != null ? String(params.emoji) : ''
+  const emoji = emojiRaw.trim() || null
+  const imageRaw = params.image != null ? String(params.image) : ''
+  const image = imageRaw.trim() || null
+
+  if (!channelId || !userId) throw new Error('Paramètres requis')
+  if (emoji && emoji.length > 16) throw Object.assign(new Error('Emoji trop long (16 max)'), { status: 400 })
+  if (image && !isAvatarImageUrl(image)) throw Object.assign(new Error('Image invalide'), { status: 400 })
+
+  // Must have access (member).
+  await assertChannelAccess(pool, channelId, userId)
+
+  const tCh = table('chat_channels')
+  const [res] = await pool.execute(
+    `UPDATE ${tCh}
+     SET channel_icon_emoji = ?, channel_icon_image = ?
+     WHERE id = ? AND channel_type = 'group' AND created_by = ?`,
+    [emoji, image, channelId, userId]
+  )
+
+  const affected = Number((res as { affectedRows?: number })?.affectedRows ?? 0)
+  if (!affected) {
+    throw Object.assign(new Error('Seul le créateur peut modifier l’icône du groupe'), { status: 403 })
+  }
+
+  return { channelId }
 }
 
 /** Table dédiée P2P (évite conflit avec mdl_chat_messages du chat coach qui utilise conversation_id) */

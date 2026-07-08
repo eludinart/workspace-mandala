@@ -36,6 +36,15 @@ export const socialApi = {
       channelId: number
       name: string
     }>,
+  updateGroupChannelIcon: (
+    channelId: number,
+    payload: { emoji?: string | null; image?: string | null }
+  ) =>
+    api.post('/api/social/update_group_channel_icon', {
+      channelId,
+      emoji: payload.emoji ?? null,
+      image: payload.image ?? null,
+    }) as Promise<{ channelId: number }>,
   getChannelMessages: (channelId: string) =>
     api.get(`/api/social/channel_messages?channel_id=${encodeURIComponent(channelId)}`),
   sendMessage: (channelId: string, payload: Record<string, unknown>) =>
