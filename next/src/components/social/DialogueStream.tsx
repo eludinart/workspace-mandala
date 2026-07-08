@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSocialStore, type ChannelMessage } from '@/store/useSocialStore'
+import { socialApi } from '@/api/social'
 import { TemperatureIndicator } from './TemperatureIndicator'
 import { GroupParticipantsPreview } from './GroupParticipantsPreview'
 import { MessageBubble } from './MessageBubble'
@@ -18,6 +19,8 @@ export function DialogueStream({
   memberCount,
   memberIds = [],
   participantsById = {},
+  createdBy,
+  onGroupRenamed,
 }: {
   channelId: number
   otherPseudo?: string
@@ -28,6 +31,8 @@ export function DialogueStream({
   memberCount?: number
   memberIds?: number[]
   participantsById?: Record<number, { pseudo: string; avatar?: string | null; avatarEmoji?: string }>
+  createdBy?: number | null
+  onGroupRenamed?: (name: string) => void
 }) {
   const { user } = useAuth()
   const u = user as {
@@ -53,11 +58,22 @@ export function DialogueStream({
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [pendingMessages, setPendingMessages] = useState<ChannelMessage[]>([])
+  const [renaming, setRenaming] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   const messages = messagesByChannel[String(channelId)] || []
   const visibleMessages = [...messages, ...pendingMessages]
   const temperature = temperatureByChannel[String(channelId)] || 'calm'
+  const canRename = isGroup && createdBy != null && meId != null && Number(createdBy) === Number(meId)
+
+  useEffect(() => {
+    if (!editingName) return
+    setNameDraft(otherPseudo || '')
+    setRenameError(null)
+  }, [editingName, otherPseudo])
 
   useEffect(() => {
     if (!channelId) return
@@ -182,6 +198,26 @@ export function DialogueStream({
     void toggleMessageReaction(channelId, messageId, emoji)
   }
 
+  const submitRename = async () => {
+    if (!canRename || renaming) return
+    const next = nameDraft.trim()
+    if (!next) {
+      setRenameError('Nom requis')
+      return
+    }
+    setRenaming(true)
+    setRenameError(null)
+    try {
+      await socialApi.renameGroupChannel(channelId, next)
+      setEditingName(false)
+      onGroupRenamed?.(next)
+    } catch (e: unknown) {
+      setRenameError((e as { detail?: string; message?: string })?.detail || (e as { message?: string })?.message || 'Impossible de renommer')
+    } finally {
+      setRenaming(false)
+    }
+  }
+
   return (
     <div className="flex-1 min-h-[min(70vh,600px)] flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
       <header className="shrink-0 px-3 py-2 border-b border-slate-800">
@@ -199,7 +235,58 @@ export function DialogueStream({
             />
           )}
           <div className="min-w-0 flex-1">
-            <span className="text-sm font-medium truncate block">{otherPseudo || 'Dialogue'}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              {editingName ? (
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void submitRename()
+                      if (e.key === 'Escape') setEditingName(false)
+                    }}
+                    autoFocus
+                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 text-sm"
+                    aria-label="Nom du groupe"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void submitRename()}
+                    disabled={renaming}
+                    className="px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50"
+                    aria-label="Enregistrer le nom"
+                  >
+                    {renaming ? '…' : 'OK'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(false)}
+                    disabled={renaming}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800 disabled:opacity-50"
+                    aria-label="Annuler"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className="text-sm font-medium truncate block flex-1 min-w-0">
+                    {otherPseudo || 'Dialogue'}
+                  </span>
+                  {canRename && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingName(true)}
+                      className="shrink-0 px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
+                      aria-label="Renommer le groupe"
+                      title="Renommer"
+                    >
+                      ✎
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
             <span className="text-[11px] text-slate-500">
               {isGroup
                 ? `${memberCount ?? (memberIds.length || Object.keys(participantsById).length)} participants`
@@ -207,6 +294,7 @@ export function DialogueStream({
                   ? 'En ligne'
                   : 'Hors ligne'}
             </span>
+            {renameError && <span className="text-[11px] text-red-400 block mt-0.5">{renameError}</span>}
           </div>
         </div>
         {isGroup && memberIds.length > 0 && (

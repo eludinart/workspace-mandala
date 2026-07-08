@@ -22,6 +22,7 @@ type Channel = {
   unreadCount: number
   memberCount?: number
   memberIds?: number[]
+  createdBy?: number | null
 }
 
 type PendingSeed = {
@@ -274,6 +275,8 @@ export function MessagesPage({ openWithUserId }: { openWithUserId?: string | nul
               memberCount={selected.memberCount}
               memberIds={selected.memberIds ?? []}
               participantsById={participantsById}
+              createdBy={selected.createdBy ?? null}
+              onGroupRenamed={() => void loadChannels()}
             />
           ) : (
             <div className="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm p-6 text-center">

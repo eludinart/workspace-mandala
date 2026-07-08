@@ -31,6 +31,11 @@ export const socialApi = {
       community_slug: communitySlug,
       name,
     }) as Promise<{ channelId: number; isNew: boolean }>,
+  renameGroupChannel: (channelId: number, name: string) =>
+    api.post('/api/social/rename_group_channel', { channelId, name }) as Promise<{
+      channelId: number
+      name: string
+    }>,
   getChannelMessages: (channelId: string) =>
     api.get(`/api/social/channel_messages?channel_id=${encodeURIComponent(channelId)}`),
   sendMessage: (channelId: string, payload: Record<string, unknown>) =>

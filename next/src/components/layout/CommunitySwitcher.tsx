@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { communitiesApi } from '@/api/communities'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
@@ -27,6 +28,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
   const [newSlug, setNewSlug] = useState('')
   const [newName, setNewName] = useState('')
   const [createMsg, setCreateMsg] = useState<string | null>(null)
+  const portalTarget = useMemo(() => (typeof document !== 'undefined' ? document.body : null), [])
 
   useEffect(() => {
     if (!open) return
@@ -42,8 +44,16 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
 
   const available = catalog.filter((c) => !c.is_member)
 
-  return (
-    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4" role="dialog" aria-modal="true">
+  const modal = (
+    <div
+      className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top), 0px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom), 0px)',
+      }}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-slate-700 bg-slate-900 shadow-xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
           <h2 className="font-semibold">Mes communautés</h2>
@@ -182,4 +192,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
       </div>
     </div>
   )
+
+  // Portal : garantit un vrai "fixed" relatif au viewport (évite les parents transform/overflow).
+  return portalTarget ? createPortal(modal, portalTarget) : modal
 }

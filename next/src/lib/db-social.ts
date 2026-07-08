@@ -88,6 +88,7 @@ export type MyChannelRecord = {
   channelId: number
   channelType: 'direct' | 'group'
   communityId?: number | null
+  createdBy?: number | null
   otherUserId?: number
   otherPseudo: string
   otherAvatar: string | null
@@ -540,7 +541,7 @@ export async function getMyChannels(
   }
 
   let groupSql = `
-    SELECT c.id, c.community_id, c.channel_name, c.member_fingerprint
+    SELECT c.id, c.community_id, c.channel_name, c.member_fingerprint, c.created_by
     FROM ${tChannels} c
     INNER JOIN ${tMembers} m ON m.channel_id = c.id AND m.user_id = ?
     WHERE c.channel_type = 'group'`
@@ -564,6 +565,7 @@ export async function getMyChannels(
       channelId,
       channelType: 'group',
       communityId: gr.community_id ? Number(gr.community_id) : null,
+      createdBy: gr.created_by != null ? Number(gr.created_by) : null,
       otherPseudo: groupName,
       otherAvatar: null,
       otherAvatarEmoji: '👥',
@@ -576,6 +578,38 @@ export async function getMyChannels(
   }
 
   return { channels: list }
+}
+
+export async function renameGroupChannel(params: {
+  channelId: number
+  userId: number
+  name: string
+}): Promise<{ channelId: number; name: string }> {
+  const pool = getPool()
+  await ensureGroupChannelSupport(pool)
+  const channelId = Number(params.channelId)
+  const userId = Number(params.userId)
+  const name = String(params.name ?? '').trim()
+
+  if (!channelId || !userId) throw new Error('Paramètres requis')
+  if (!name) throw Object.assign(new Error('Nom requis'), { status: 400 })
+  if (name.length > 60) throw Object.assign(new Error('Nom trop long (60 caractères max)'), { status: 400 })
+
+  // Must be a member to access at all.
+  await assertChannelAccess(pool, channelId, userId)
+
+  const tCh = table('chat_channels')
+  const [res] = await pool.execute(
+    `UPDATE ${tCh}
+     SET channel_name = ?
+     WHERE id = ? AND channel_type = 'group' AND created_by = ?`,
+    [name, channelId, userId]
+  )
+  const affected = Number((res as { affectedRows?: number })?.affectedRows ?? 0)
+  if (!affected) {
+    throw Object.assign(new Error('Seul le créateur peut renommer ce groupe'), { status: 403 })
+  }
+  return { channelId, name }
 }
 
 /** Table dédiée P2P (évite conflit avec mdl_chat_messages du chat coach qui utilise conversation_id) */

@@ -90,49 +90,85 @@ export function EventDetailModal({
           className="w-full max-w-lg max-h-[92vh] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-950/50 shrink-0">
-            <p className="text-sm font-semibold text-slate-200 truncate">
-              {loading ? 'Chargement…' : event?.title ?? 'Événement'}
-            </p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 px-3 py-1.5 text-sm rounded-lg border border-slate-700 hover:bg-slate-800"
-            >
-              Fermer
-            </button>
-          </div>
-
           <div className="flex-1 min-h-0 overflow-y-auto">
             {loading && <p className="p-6 text-sm text-slate-400">Chargement du détail…</p>}
             {error && <p className="p-6 text-sm text-red-400">{error}</p>}
             {!loading && !error && event && (
               <>
-                {event.cover_image && (
+                <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setLightboxSrc(event.cover_image!)}
-                    className="block w-full"
+                    onClick={onClose}
+                    className="absolute top-3 right-3 z-10 px-3 py-1.5 text-sm rounded-xl border border-white/15 bg-black/40 text-white hover:bg-black/55 backdrop-blur"
                   >
-                    <img
-                      src={event.cover_image}
-                      alt=""
-                      className="w-full max-h-52 object-cover border-b border-slate-800"
-                    />
+                    Fermer
                   </button>
-                )}
-                <div className="p-4 sm:p-5 space-y-4">
-                  <div className="space-y-2">
-                    <span
-                      className={`inline-block text-[10px] px-2 py-0.5 rounded-full border ${phaseBadgeClass(event.phase)}`}
+
+                  {event.cover_image ? (
+                    <button
+                      type="button"
+                      onClick={() => setLightboxSrc(event.cover_image!)}
+                      className="block w-full"
+                      aria-label="Voir l’image de couverture"
                     >
-                      {phaseLabel(event.phase)}
-                    </span>
-                    <h2 className="text-xl font-bold text-slate-100">{event.title}</h2>
-                    <p className="text-sm text-violet-300/90">
-                      {formatEventDateRange(event.starts_at, event.ends_at)}
-                    </p>
-                    {event.location && <p className="text-sm text-slate-400">📍 {event.location}</p>}
+                      <div className="relative w-full h-56 sm:h-64 bg-slate-950">
+                        <img
+                          src={event.cover_image}
+                          alt=""
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
+                      </div>
+                    </button>
+                  ) : (
+                    <div className="w-full h-40 sm:h-44 bg-gradient-to-br from-violet-950/60 via-slate-950 to-slate-950 border-b border-slate-800" />
+                  )}
+
+                  <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex items-center text-[10px] px-2 py-0.5 rounded-full border ${phaseBadgeClass(event.phase)}`}
+                      >
+                        {phaseLabel(event.phase)}
+                      </span>
+                      {(event.media_count ?? 0) > 0 && (
+                        <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-black/30 text-slate-100">
+                          📷 {event.media_count}
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="mt-2 text-xl sm:text-2xl font-bold text-slate-50 leading-tight">
+                      {event.title}
+                    </h2>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/35 px-2.5 py-1 text-sm font-semibold text-slate-50 backdrop-blur">
+                        <span aria-hidden>📅</span>
+                        {formatEventDateRange(event.starts_at, event.ends_at)}
+                      </span>
+                      {event.location && (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-2.5 py-1 text-sm text-slate-100 backdrop-blur">
+                          <span aria-hidden>📍</span>
+                          {event.location}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 sm:p-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-3">
+                      <p className="text-[11px] uppercase tracking-wider text-slate-500">Phase</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200">
+                        {EVENT_PHASES.find((p) => p.id === event.phase)?.label ?? event.phase}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-3">
+                      <p className="text-[11px] uppercase tracking-wider text-slate-500">Début</p>
+                      <p className="mt-1 text-sm font-medium text-slate-200">
+                        {event.starts_at ? formatMandalaDateTime(event.starts_at) : '—'}
+                      </p>
+                    </div>
                   </div>
 
                   {event.description && (
@@ -193,20 +229,18 @@ export function EventDetailModal({
                   )}
 
                   {totalTasks > 0 && (
-                    <p className="text-xs text-slate-500">
-                      Tâches : {doneTasks} / {totalTasks} terminée(s)
-                    </p>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/35 p-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-slate-500">Tâches</p>
+                        <p className="mt-1 text-sm text-slate-200">
+                          {doneTasks} / {totalTasks} terminée(s)
+                        </p>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300">
+                        {totalTasks > 0 ? `${Math.round((doneTasks / totalTasks) * 100)}%` : '—'}
+                      </span>
+                    </div>
                   )}
-
-                  <div className="text-xs text-slate-600">
-                    Phase : {EVENT_PHASES.find((p) => p.id === event.phase)?.label ?? event.phase}
-                    {event.starts_at && (
-                      <>
-                        {' · '}
-                        Début {formatMandalaDateTime(event.starts_at)}
-                      </>
-                    )}
-                  </div>
                 </div>
               </>
             )}

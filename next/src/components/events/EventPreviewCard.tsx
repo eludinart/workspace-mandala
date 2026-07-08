@@ -29,8 +29,11 @@ export function EventPreviewCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="font-semibold text-base text-slate-100 leading-snug">{event.title}</h3>
-            <p className="text-sm text-violet-300/90 mt-1">
-              {formatEventDateRange(event.starts_at, event.ends_at)}
+            <p className="mt-1">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-950/40 px-2.5 py-1 text-sm font-semibold text-slate-100">
+                <span aria-hidden>📅</span>
+                {formatEventDateRange(event.starts_at, event.ends_at)}
+              </span>
             </p>
             {event.location && <p className="text-sm text-slate-500 mt-0.5">📍 {event.location}</p>}
           </div>
@@ -99,11 +102,14 @@ export function EventPreviewCard({
           >
             {event.title}
           </h3>
+        </div>
+        <div className="flex items-center justify-between gap-3">
           <span
-            className={`text-violet-300/90 shrink-0 text-right max-w-[45%] leading-tight ${
-              variant === 'hero' ? 'text-sm' : 'text-[11px]'
+            className={`inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-950/40 px-2.5 py-1 font-semibold text-slate-100 ${
+              variant === 'hero' ? 'text-sm' : 'text-xs'
             }`}
           >
+            <span aria-hidden>📅</span>
             {formatEventDateRange(event.starts_at, event.ends_at)}
           </span>
         </div>
