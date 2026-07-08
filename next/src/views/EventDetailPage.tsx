@@ -72,10 +72,21 @@ export function EventDetailPage({
   const [addRole, setAddRole] = useState('volunteer')
   const [newTask, setNewTask] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editDescription, setEditDescription] = useState('')
   const [editLocation, setEditLocation] = useState('')
   const [editStarts, setEditStarts] = useState('')
   const [editEnds, setEditEnds] = useState('')
   const [editStatus, setEditStatus] = useState('')
+
+  const emitEventsChanged = useCallback(() => {
+    if (typeof window === 'undefined') return
+    window.dispatchEvent(
+      new CustomEvent('mandala-events-changed', {
+        detail: { communitySlug, eventId },
+      }),
+    )
+  }, [communitySlug, eventId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -83,6 +94,8 @@ export function EventDetailPage({
     try {
       const d = (await eventsApi.get(eventId)) as EventDetail
       setData(d)
+      setEditTitle(d.event.title ?? '')
+      setEditDescription(d.event.description ?? '')
       setEditLocation(d.event.location ?? '')
       setEditStarts(d.event.starts_at?.slice(0, 16).replace(' ', 'T') ?? '')
       setEditEnds(d.event.ends_at?.slice(0, 16).replace(' ', 'T') ?? '')
@@ -149,44 +162,97 @@ export function EventDetailPage({
   const setPhase = async (phase: string) => {
     try {
       await eventsApi.update(eventId, { phase })
-      void load()
+      await load()
+      emitEventsChanged()
     } catch (e: unknown) {
       setMsg(e instanceof ApiError ? e.detail : 'Erreur')
     }
   }
 
+  const readAsDataUrl = useCallback(async (file: File): Promise<string> => {
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result ?? ''))
+      reader.onerror = () => reject(new Error('Lecture fichier impossible'))
+      reader.readAsDataURL(file)
+    })
+  }, [])
+
+  const uploadCover = useCallback(
+    async (file: File | null) => {
+      if (!file) return
+      setMsg(null)
+      try {
+        const dataUrl = await readAsDataUrl(file)
+        await eventsApi.update(eventId, { cover_image: dataUrl })
+        await load()
+        emitEventsChanged()
+      } catch (e: unknown) {
+        setMsg(e instanceof ApiError ? e.detail : 'Erreur photo')
+      }
+    },
+    [eventId, load, emitEventsChanged, readAsDataUrl],
+  )
+
+  const uploadGalleryFiles = useCallback(
+    async (files: File[]) => {
+      if (!data?.can_manage) return
+      const images = files.filter((f) => /^image\//.test(f.type))
+      if (images.length === 0) return
+      setMsg(`Ajout de ${images.length} photo(s)…`)
+      try {
+        for (const file of images) {
+          const dataUrl = await readAsDataUrl(file)
+          await eventsApi.addMedia(eventId, { image_data: dataUrl })
+        }
+        await load()
+        emitEventsChanged()
+        setMsg(null)
+      } catch (e: unknown) {
+        setMsg(e instanceof ApiError ? e.detail : 'Erreur galerie')
+      }
+    },
+    [data?.can_manage, eventId, emitEventsChanged, load, readAsDataUrl],
+  )
+
+  // Permet de coller plusieurs images depuis le presse-papiers sur l'onglet "Photos".
+  useEffect(() => {
+    if (!data?.can_manage || tab !== 'photos') return
+    let inFlight = false
+    const onPaste = (ev: ClipboardEvent) => {
+      if (inFlight) return
+      const items = ev.clipboardData?.items
+      if (!items) return
+      const files: File[] = []
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
+        // Sur les navigateurs récents, les images sont exposées en tant que "file".
+        if (item?.kind === 'file' && typeof item.type === 'string' && item.type.startsWith('image/')) {
+          const f = item.getAsFile()
+          if (f) files.push(f)
+        }
+      }
+      if (files.length === 0) return
+
+      ev.preventDefault()
+      inFlight = true
+      void (async () => {
+        try {
+          await uploadGalleryFiles(files)
+        } finally {
+          inFlight = false
+        }
+      })()
+    }
+
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [data?.can_manage, tab, uploadGalleryFiles])
+
   if (loading) return <p className="text-slate-400 text-sm">Chargement…</p>
   if (error || !data) return <p className="text-red-400 text-sm">{error ?? 'Introuvable'}</p>
 
   const { event, staff, tasks, media, can_manage } = data
-
-  const uploadCover = async (file: File | null) => {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        await eventsApi.update(eventId, { cover_image: String(reader.result ?? '') })
-        void load()
-      } catch (e: unknown) {
-        setMsg(e instanceof ApiError ? e.detail : 'Erreur photo')
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  const uploadGallery = async (file: File | null) => {
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        await eventsApi.addMedia(eventId, { image_data: String(reader.result ?? '') })
-        void load()
-      } catch (e: unknown) {
-        setMsg(e instanceof ApiError ? e.detail : 'Erreur galerie')
-      }
-    }
-    reader.readAsDataURL(file)
-  }
 
   const staffIds = new Set(staff.map((s) => s.user_id))
   const availableMembers = members.filter((m) => !staffIds.has(m.user_id))
@@ -241,7 +307,7 @@ export function EventDetailPage({
               />
             </label>
           )}
-          {event.description && (
+          {!can_manage && event.description && (
             <p className="text-slate-300 text-sm leading-relaxed">{event.description}</p>
           )}
           <dl className="grid sm:grid-cols-2 gap-2 text-sm text-slate-400">
@@ -265,20 +331,47 @@ export function EventDetailPage({
               className="space-y-2 rounded-xl border border-slate-800 p-3 text-sm"
               onSubmit={(e) => {
                 e.preventDefault()
+                const title = editTitle.trim()
+                if (!title) {
+                  setMsg('Titre requis')
+                  return
+                }
                 void eventsApi
                   .update(eventId, {
+                    title,
+                    description: editDescription.trim() || null,
                     location: editLocation || null,
                     starts_at: editStarts ? editStarts.replace('T', ' ') : null,
                     ends_at: editEnds ? editEnds.replace('T', ' ') : null,
                     status: editStatus,
                   })
-                  .then(() => load())
+                  .then(async () => {
+                    await load()
+                    emitEventsChanged()
+                  })
                   .catch((err: unknown) =>
                     setMsg(err instanceof ApiError ? err.detail : 'Erreur mise à jour'),
                   )
               }}
             >
               <p className="text-xs text-slate-500 uppercase tracking-wide">Informations</p>
+              <label className="block">
+                <span className="text-slate-500 text-xs">Titre</span>
+                <input
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
+                />
+              </label>
+              <label className="block">
+                <span className="text-slate-500 text-xs">Description</span>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  rows={3}
+                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
+                />
+              </label>
               <label className="block">
                 <span className="text-slate-500 text-xs">Lieu</span>
                 <input
@@ -467,16 +560,21 @@ export function EventDetailPage({
         <section className="space-y-3 pt-2">
           <h2 className="text-lg font-semibold">Galerie photos</h2>
           {can_manage && (
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                const files = e.target.files
-                if (files) for (let i = 0; i < files.length; i++) void uploadGallery(files[i])
-              }}
-              className="text-sm"
-            />
+            <>
+              <div className="text-xs text-slate-500">
+                Astuce : vous pouvez aussi coller plusieurs images depuis le presse-papiers.
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files ?? [])
+                  void uploadGalleryFiles(files)
+                }}
+                className="text-sm"
+              />
+            </>
           )}
           {media.length === 0 && !can_manage && (
             <p className="text-slate-500 text-sm italic">Aucune photo.</p>
@@ -488,7 +586,14 @@ export function EventDetailPage({
                 {can_manage && (
                   <button
                     type="button"
-                    onClick={() => void eventsApi.removeMedia(eventId, m.id).then(() => load())}
+                    onClick={() => {
+                      void eventsApi
+                        .removeMedia(eventId, m.id)
+                        .then(async () => {
+                          await load()
+                          emitEventsChanged()
+                        })
+                    }}
                     className="absolute top-1 right-1 text-xs bg-black/60 px-1 rounded text-red-300"
                   >
                     ×
