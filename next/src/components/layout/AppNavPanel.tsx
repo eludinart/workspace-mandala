@@ -126,9 +126,9 @@ export function AppNavPanel({
         <nav className="px-2 pt-1">
           <NavButton
             active={page === 'places-map'}
-            icon="🗺️"
-            label="Carte des lieux"
-            description="Réseau des lieux inscrits"
+            icon="🧭"
+            label="Découvrir"
+            description="Carte, événements & actualités"
             onClick={() => go('places-map')}
           />
         </nav>

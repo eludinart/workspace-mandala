@@ -12,6 +12,7 @@ export type PlaceAnnouncement = {
   author_pseudo: string
   author_avatar_emoji: string
   author_avatar: string | null
+  wall_public: boolean
 }
 
 export const placeAnnouncementsApi = {
@@ -27,10 +28,11 @@ export const placeAnnouncementsApi = {
     title: string
     body: string
     image_data?: string | null
+    wall_public?: boolean
   }) => api.post('/api/place-announcements', body) as Promise<{ announcement: PlaceAnnouncement }>,
   update: (
     id: number,
-    body: { title?: string; body?: string; image_data?: string | null }
+    body: { title?: string; body?: string; image_data?: string | null; wall_public?: boolean }
   ) =>
     api.patch(`/api/place-announcements/${id}`, body) as Promise<{ announcement: PlaceAnnouncement }>,
   remove: (id: number) => api.delete(`/api/place-announcements/${id}`) as Promise<{ ok: boolean }>,

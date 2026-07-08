@@ -12,7 +12,7 @@ import { EventsPage } from '@/views/EventsPage'
 import { CalendarPage } from '@/views/CalendarPage'
 import { AccountPage } from '@/views/AccountPage'
 import { PlaceSettingsPage } from '@/views/PlaceSettingsPage'
-import { PlacesMapPage } from '@/views/PlacesMapPage'
+import { DiscoverWallPage } from '@/views/DiscoverWallPage'
 import { ManagedPlacesPage } from '@/views/ManagedPlacesPage'
 import { AdminPage } from '@/views/AdminPage'
 import { PlaceAnnouncementsPage } from '@/views/PlaceAnnouncementsPage'
@@ -104,7 +104,7 @@ export function MandalaApp() {
       case 'charter':
         return <CharterPage />
       case 'places-map':
-        return <PlacesMapPage />
+        return <DiscoverWallPage onNavigate={navigate} />
       case 'place-settings':
       case 'place-profile':
         return <PlaceSettingsPage section="profile" onNavigate={navigate} />

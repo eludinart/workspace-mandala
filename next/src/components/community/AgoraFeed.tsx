@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api-client'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { FeedSection } from '@/components/community/FeedSection'
+import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
 
 export function AgoraFeed() {
   const { active } = useCommunity()
@@ -33,7 +34,9 @@ export function AgoraFeed() {
   const [submitting, setSubmitting] = useState(false)
   const [removingId, setRemovingId] = useState<number | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
+  const [wallPublic, setWallPublic] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     if (!active?.id) {
@@ -70,8 +73,10 @@ export function AgoraFeed() {
         community_id: active.id,
         type: postType,
         content: draft.trim(),
+        wall_public: canManage ? wallPublic : false,
       })
       setDraft('')
+      setWallPublic(false)
       setComposerOpen(false)
       setMsg('Brève publiée')
       await load()
@@ -79,6 +84,22 @@ export function AgoraFeed() {
       setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const toggleWallPublic = async (postId: number, next: boolean) => {
+    if (!canManage) return
+    setWallPublicBusyId(postId)
+    setMsg(null)
+    setError(null)
+    try {
+      await postsApi.update(postId, { wall_public: next })
+      setMsg(next ? 'Brève visible sur le mur public' : 'Brève retirée du mur public')
+      await load()
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
+    } finally {
+      setWallPublicBusyId(null)
     }
   }
 
@@ -168,6 +189,14 @@ export function AgoraFeed() {
               }
               className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-base resize-none"
             />
+            {canManage && (
+              <WallPublicToggle
+                id="wall-public-agora-compose"
+                checked={wallPublic}
+                onChange={setWallPublic}
+                disabled={submitting}
+              />
+            )}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -182,6 +211,7 @@ export function AgoraFeed() {
                 onClick={() => {
                   setComposerOpen(false)
                   setDraft('')
+                  setWallPublic(false)
                 }}
                 className="text-sm text-slate-500 hover:text-slate-300 px-3 py-2"
               >
@@ -234,6 +264,7 @@ export function AgoraFeed() {
                   >
                     {p.type === 'logistics' ? 'Logistique' : 'Inspiration'}
                   </span>
+                  <WallPublicBadge public={p.wall_public} />
                   {canManage && (
                     <button
                       type="button"
@@ -249,6 +280,16 @@ export function AgoraFeed() {
                 <p className="text-base text-slate-200 mt-3 whitespace-pre-wrap leading-relaxed">
                   {p.content}
                 </p>
+                {canManage && (
+                  <div className="mt-3">
+                    <WallPublicToggle
+                      id={`wall-public-post-${p.id}`}
+                      checked={p.wall_public}
+                      disabled={wallPublicBusyId === p.id}
+                      onChange={(next) => void toggleWallPublic(p.id, next)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </li>

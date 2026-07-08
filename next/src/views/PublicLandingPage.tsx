@@ -2,29 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { ThemePicker } from '@/components/theme/ThemePicker'
-import { PlacePublicCard } from '@/components/public/PlacePublicCard'
-
-const PlacesMap = dynamic(
-  () => import('@/components/public/PlacesMap').then((m) => m.PlacesMap),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[min(60vh,32rem)] rounded-3xl border border-slate-800 bg-slate-950 flex items-center justify-center">
-        <p className="text-sm text-slate-500">Chargement de la carte…</p>
-      </div>
-    ),
-  }
-)
+import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
 
 const FEATURES = [
   {
-    icon: '🏛️',
-    title: 'Promouvoir les lieux',
-    text: "Chaque communauté présente son identité, sa localisation et ses moyens de contact au grand public.",
+    icon: '🧭',
+    title: 'Un mur vivant',
+    text: 'Carte, événements et messages des organisateurs réunis sur un même fil — par date ou par lieu.',
   },
   {
     icon: '👥',
@@ -42,7 +29,6 @@ export function PublicLandingPage() {
   const { user, loading: authLoading } = useAuth()
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
 
   const loadPlaces = useCallback(async () => {
     setLoading(true)
@@ -60,12 +46,8 @@ export function PublicLandingPage() {
     void loadPlaces()
   }, [loadPlaces])
 
-  const selectPlaceOnMap = useCallback((slug: string) => {
-    setSelectedSlug(slug)
-  }, [])
-
-  const scrollToMap = useCallback(() => {
-    document.getElementById('carte')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const scrollToMur = useCallback(() => {
+    document.getElementById('mur')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [])
 
   return (
@@ -76,14 +58,11 @@ export function PublicLandingPage() {
             Mandala
           </a>
           <nav className="hidden sm:flex items-center gap-6 text-sm text-slate-400">
-            <a href="#carte" className="hover:text-slate-200 transition-colors">
-              Carte
+            <a href="#mur" className="hover:text-slate-200 transition-colors">
+              Mur &amp; carte
             </a>
             <a href="#projet" className="hover:text-slate-200 transition-colors">
               Le projet
-            </a>
-            <a href="#lieux" className="hover:text-slate-200 transition-colors">
-              Lieux
             </a>
           </nav>
           <div className="flex items-center gap-2 shrink-0">
@@ -116,7 +95,6 @@ export function PublicLandingPage() {
       </header>
 
       <main id="top">
-        {/* 1 — Présentation */}
         <section className="relative overflow-hidden">
           <div
             className="absolute inset-0 opacity-30 pointer-events-none"
@@ -125,57 +103,54 @@ export function PublicLandingPage() {
                 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(124,58,237,0.45), transparent 70%)',
             }}
           />
-          <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-14 sm:pt-24 sm:pb-16 text-center">
-            <p className="text-xs uppercase tracking-[0.2em] text-violet-400/90 font-semibold mb-4">
-              Réseau de lieux &amp; communautés
-            </p>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight max-w-3xl mx-auto leading-[1.1]">
-              Des espaces de vie, de pratique et de rencontre
-            </h1>
-            <p className="mt-6 text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-              Mandala relie des lieux et des communautés en France et dans l&apos;espace francophone.
-              Découvrez les espaces inscrits, contactez-les pour vous renseigner, ou rejoignez une
-              communauté en tant que membre.
-            </p>
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={scrollToMap}
-                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-semibold transition-colors"
-              >
-                Explorer la carte
-              </button>
-              <Link
-                href="/app"
-                className="w-full sm:w-auto px-6 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800/80 font-medium transition-colors"
-              >
-                {user ? 'Accéder à mon espace' : 'Créer un compte membre'}
-              </Link>
-            </div>
-            {!loading && places.length > 0 && (
-              <p className="mt-8 text-sm text-slate-500">
-                <span className="text-violet-300 font-semibold">{places.length}</span>{' '}
-                {places.length > 1 ? 'lieux référencés' : 'lieu référencé'} sur la plateforme
+          <div className="relative max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-12 sm:pt-20 sm:pb-14">
+            <div className="max-w-3xl">
+              <p className="text-xs uppercase tracking-[0.2em] text-violet-400/90 font-semibold mb-4">
+                Réseau de lieux &amp; communautés
               </p>
-            )}
+              <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold tracking-tight leading-[1.08]">
+                Le mur vivant des lieux qui vous inspirent
+              </h1>
+              <p className="mt-5 text-lg text-slate-400 leading-relaxed max-w-2xl">
+                Carte interactive, événements à venir et messages des organisateurs — tout ce qui
+                anime les communautés Mandala, au même endroit.
+              </p>
+              <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                <button
+                  type="button"
+                  onClick={scrollToMur}
+                  className="px-6 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 font-semibold transition-colors"
+                >
+                  Explorer le mur
+                </button>
+                <Link
+                  href="/app"
+                  className="px-6 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800/80 font-medium transition-colors text-center"
+                >
+                  {user ? 'Voir tout mon fil' : 'Rejoindre un lieu'}
+                </Link>
+              </div>
+              {!loading && places.length > 0 && (
+                <p className="mt-6 text-sm text-slate-500">
+                  <span className="text-violet-300 font-semibold">{places.length}</span>{' '}
+                  {places.length > 1 ? 'lieux actifs' : 'lieu actif'} · fil mis à jour en continu
+                </p>
+              )}
+            </div>
           </div>
         </section>
 
-        {/* 2 — Carte des lieux */}
-        <section id="carte" className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 scroll-mt-16">
-          <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold">Carte des lieux</h2>
-            <p className="text-slate-400 text-sm sm:text-base">
-              Visualisez l&apos;implantation géographique des communautés inscrites. Cliquez sur un
-              marqueur pour voir le détail et accéder au profil du lieu.
+        <section id="mur" className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 scroll-mt-16">
+          <div className="mb-8 space-y-2">
+            <h2 className="text-2xl sm:text-3xl font-bold">Mur &amp; carte</h2>
+            <p className="text-slate-400 text-sm sm:text-base max-w-2xl">
+              Parcourez le réseau géographiquement ou suivez l&apos;actualité. Connectez-vous pour
+              débloquer les annonces complètes, le mur de vos lieux et les brèves des membres.
             </p>
           </div>
-          <div className="overflow-hidden rounded-3xl border border-slate-800 shadow-2xl shadow-black/40">
-            <PlacesMap places={places} selectedSlug={selectedSlug} onSelect={selectPlaceOnMap} />
-          </div>
+          <WallDiscoverSection mapHeightClass="h-[min(56vh,30rem)]" feedLimit={20} />
         </section>
 
-        {/* 3 — Blocs de présentation */}
         <section id="projet" className="border-y border-slate-800/60 bg-slate-900/30 scroll-mt-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-14 space-y-2">
@@ -204,43 +179,12 @@ export function PublicLandingPage() {
           </div>
         </section>
 
-        {/* 4 — Les lieux inscrits */}
-        <section id="lieux" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 scroll-mt-16">
-          <div className="mb-8 sm:mb-10 text-center max-w-2xl mx-auto space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold">Les lieux inscrits</h2>
-            <p className="text-slate-400 text-sm sm:text-base">
-              Consultez les présentations et contactez directement les communautés qui vous
-              intéressent.
-            </p>
-          </div>
-
-          {loading && <p className="text-center text-sm text-slate-500">Chargement des lieux…</p>}
-
-          {!loading && places.length === 0 && (
-            <p className="text-sm text-slate-500 rounded-2xl border border-slate-800 p-8 text-center">
-              Aucun lieu publié pour le moment.
-            </p>
-          )}
-
-          <div className="grid sm:grid-cols-2 gap-4 sm:gap-5">
-            {places.map((place) => (
-              <PlacePublicCard
-                key={place.slug}
-                place={place}
-                selected={selectedSlug === place.slug}
-                onSelect={() => setSelectedSlug(place.slug)}
-              />
-            ))}
-          </div>
-        </section>
-
-        {/* 5 — Appel gestionnaires */}
         <section className="border-t border-slate-800 bg-gradient-to-b from-violet-950/25 to-slate-950">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 text-center space-y-5">
             <h2 className="text-2xl sm:text-3xl font-bold">Vous gérez un lieu ?</h2>
             <p className="text-slate-400 max-w-xl mx-auto text-sm sm:text-base">
-              Organisateurs et gestionnaires : connectez-vous pour administrer votre communauté,
-              publier des événements et accueillir de nouveaux membres.
+              Publiez annonces et événements : ils apparaissent sur le mur de votre communauté et
+              dans le fil public de Mandala.
             </p>
             <Link
               href="/app"

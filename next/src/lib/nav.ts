@@ -110,7 +110,7 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   notifications: 'Alertes',
   account: 'Mon compte',
   charter: 'Charte du lieu',
-  'places-map': 'Carte des lieux',
+  'places-map': 'Découvrir',
   'place-settings': 'Paramètres du lieu',
   'place-profile': 'Profil du lieu',
   'place-charter': 'Charte du lieu',

@@ -62,10 +62,12 @@ export async function POST(req: NextRequest) {
     const uid = parseInt(userId, 10)
     const body = await req.json()
     const community = await resolveCommunity(req, body)
-    await requireCommunityMembership(uid, community.id)
+    const role = await requireCommunityMembership(uid, community.id)
+    const can_manage = await userCanManageInCommunity(uid, role)
     const post = await createPost(community.id, uid, {
       type: body.type,
       content: String(body.content ?? ''),
+      wall_public: can_manage ? body.wall_public : false,
     })
     return NextResponse.json({ post })
   } catch (err: unknown) {

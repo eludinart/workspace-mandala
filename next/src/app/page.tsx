@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import { PublicLandingPage } from '@/views/PublicLandingPage'
 
 export const metadata: Metadata = {
-  title: 'Mandala — Lieux & communautés',
+  title: 'Mandala — Mur vivant des lieux & communautés',
   description:
-    'Découvrez les lieux et communautés inscrits sur Mandala. Carte, présentations et contacts — France et espace francophone.',
+    'Carte interactive, événements et messages des organisateurs. Découvrez le réseau Mandala — France et espace francophone.',
 }
 
 export default function HomePage() {

@@ -12,7 +12,7 @@ import {
 import { assertEndsAfterStarts } from './event-dates'
 import { normalizeDbDateTime } from './format-datetime'
 
-import type { EventPhase } from './event-constants'
+import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 
 export type { EventPhase } from './event-constants'
 
@@ -31,6 +31,7 @@ export type EventRecord = {
   created_by: number
   created_at: string | null
   cover_image: string | null
+  wall_public: boolean
 }
 
 export type EventMediaRow = {
@@ -91,6 +92,7 @@ export async function ensureEventsTables(): Promise<void> {
   } catch {
     /* column exists */
   }
+  await ensureWallPublicColumn(pool, tE)
   const tM = table('event_media')
   await exec(
     pool,
@@ -144,7 +146,7 @@ async function getEventRow(eventId: number): Promise<EventRecord | null> {
   const pool = getPool()
   const tE = table('events')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image
+    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public
      FROM ${tE} WHERE id = ? LIMIT 1`,
     [eventId]
   )
@@ -167,6 +169,7 @@ function mapEvent(r: RowDataPacket): EventRecord {
     created_by: Number(r.created_by),
     created_at: normalizeDbDateTime(r.created_at),
     cover_image: r.cover_image ? String(r.cover_image) : null,
+    wall_public: wallPublicFromRow(r as Record<string, unknown>),
   }
 }
 
@@ -220,7 +223,7 @@ export async function listEventsForCommunityBetween(
   const pool = getPool()
   const tE = table('events')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at
+    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public
      FROM ${tE}
      WHERE community_id = ? AND status != 'cancelled'
        AND starts_at IS NOT NULL
@@ -425,6 +428,10 @@ export async function updateEvent(params: {
         values.push(img)
       }
     }
+  }
+  if (p.wall_public !== undefined) {
+    fields.push('wall_public = ?')
+    values.push(parseWallPublic(p.wall_public) ? 1 : 0)
   }
 
   if (fields.length === 0) return event

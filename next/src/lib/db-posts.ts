@@ -3,8 +3,8 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
-import type { CommunityRole } from './db-communities'
-import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership } from './db-communities'
+import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
+import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 
 let _postTablesEnsured = false
 
@@ -20,6 +20,7 @@ export type CommunityPostRow = {
   author_pseudo: string
   author_avatar_emoji: string
   author_avatar: string | null
+  wall_public: boolean
 }
 
 export async function ensurePostTables(): Promise<void> {
@@ -40,6 +41,7 @@ export async function ensurePostTables(): Promise<void> {
       KEY idx_author (author_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
+  await ensureWallPublicColumn(pool, t)
   _postTablesEnsured = true
 }
 
@@ -99,7 +101,7 @@ export async function deleteCommunityPost(params: {
 export async function createPost(
   communityId: number,
   authorId: number,
-  data: { type: PostType; content: string }
+  data: { type: PostType; content: string; wall_public?: boolean }
 ): Promise<CommunityPostRow> {
   await ensurePostTables()
   if (!isPostType(data.type)) {
@@ -115,9 +117,10 @@ export async function createPost(
 
   const pool = getPool()
   const t = table('mandala_posts')
+  const wallPublic = parseWallPublic(data.wall_public) ? 1 : 0
   const [result] = await pool.execute(
-    `INSERT INTO ${t} (community_id, author_id, type, content) VALUES (?, ?, ?, ?)`,
-    [communityId, authorId, data.type, content]
+    `INSERT INTO ${t} (community_id, author_id, type, content, wall_public) VALUES (?, ?, ?, ?, ?)`,
+    [communityId, authorId, data.type, content, wallPublic]
   )
   const insertId = Number((result as { insertId?: number }).insertId)
   const posts = await getPostsByCommunity(communityId, 1)
@@ -133,7 +136,61 @@ export async function createPost(
     author_pseudo: `user_${authorId}`,
     author_avatar_emoji: '🌸',
     author_avatar: null,
+    wall_public: parseWallPublic(data.wall_public),
   }
+}
+
+function mapPostRow(r: RowDataPacket): CommunityPostRow {
+  return {
+    id: Number(r.id),
+    community_id: Number(r.community_id),
+    author_id: Number(r.author_id),
+    type: (r.type === 'logistics' ? 'logistics' : 'inspiration') as PostType,
+    content: String(r.content),
+    created_at: r.created_at ? String(r.created_at) : new Date().toISOString(),
+    author_pseudo: String(r.author_pseudo),
+    author_avatar_emoji: String(r.author_avatar_emoji || '🌸'),
+    author_avatar: r.author_avatar ? String(r.author_avatar) : null,
+    wall_public: wallPublicFromRow(r as Record<string, unknown>),
+  }
+}
+
+export async function updateCommunityPost(params: {
+  postId: number
+  userId: number
+  isAppSiteManager: boolean
+  wall_public?: boolean
+}): Promise<CommunityPostRow> {
+  const post = await getPostRow(params.postId)
+  if (!post) throw Object.assign(new Error('Brève introuvable'), { status: 404 })
+
+  let role: CommunityRole = 'member'
+  try {
+    role = await requireCommunityMembership(params.userId, post.community_id)
+  } catch {
+    throw Object.assign(new Error('Accès refusé'), { status: 403 })
+  }
+  if (!canManageCommunityPosts(role, params.isAppSiteManager)) {
+    throw Object.assign(new Error('Droits organisateur requis'), { status: 403 })
+  }
+
+  if (params.wall_public === undefined) {
+    const posts = await getPostsByCommunity(post.community_id, 50)
+    const found = posts.find((p) => p.id === params.postId)
+    if (!found) throw Object.assign(new Error('Brève introuvable'), { status: 404 })
+    return found
+  }
+
+  const pool = getPool()
+  const t = table('mandala_posts')
+  await pool.execute(`UPDATE ${t} SET wall_public = ? WHERE id = ?`, [
+    parseWallPublic(params.wall_public) ? 1 : 0,
+    params.postId,
+  ])
+  const posts = await getPostsByCommunity(post.community_id, 50)
+  const updated = posts.find((p) => p.id === params.postId)
+  if (!updated) throw Object.assign(new Error('Brève introuvable'), { status: 404 })
+  return updated
 }
 
 export async function getPostsByCommunity(
@@ -148,7 +205,7 @@ export async function getPostsByCommunity(
   const safeLimit = Math.min(Math.max(1, limit), 50)
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT p.id, p.community_id, p.author_id, p.type, p.content, p.created_at,
+    `SELECT p.id, p.community_id, p.author_id, p.type, p.content, p.created_at, p.wall_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', p.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji,
             COALESCE(am.meta_value, '') AS author_avatar
@@ -163,15 +220,5 @@ export async function getPostsByCommunity(
     [communityId]
   )
 
-  return (rows ?? []).map((r) => ({
-    id: Number(r.id),
-    community_id: Number(r.community_id),
-    author_id: Number(r.author_id),
-    type: (r.type === 'logistics' ? 'logistics' : 'inspiration') as PostType,
-    content: String(r.content),
-    created_at: r.created_at ? String(r.created_at) : new Date().toISOString(),
-    author_pseudo: String(r.author_pseudo),
-    author_avatar_emoji: String(r.author_avatar_emoji || '🌸'),
-    author_avatar: r.author_avatar ? String(r.author_avatar) : null,
-  }))
+  return (rows ?? []).map(mapPostRow)
 }

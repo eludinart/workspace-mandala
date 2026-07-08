@@ -27,6 +27,7 @@ export async function PATCH(
       title: body.title,
       body: body.body,
       image_data: body.image_data,
+      wall_public: body.wall_public,
     })
     return NextResponse.json({ announcement })
   } catch (err: unknown) {

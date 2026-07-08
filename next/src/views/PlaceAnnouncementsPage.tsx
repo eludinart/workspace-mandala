@@ -20,6 +20,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
   const [editing, setEditing] = useState<PlaceAnnouncement | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [removingId, setRemovingId] = useState<number | null>(null)
+  const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     if (!active?.slug) return
@@ -56,7 +57,12 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
     )
   }
 
-  const handleCreate = async (data: { title: string; body: string; image_data: string | null }) => {
+  const handleCreate = async (data: {
+    title: string
+    body: string
+    image_data: string | null
+    wall_public: boolean
+  }) => {
     if (!active?.slug) return
     setSubmitting(true)
     try {
@@ -70,7 +76,12 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
     }
   }
 
-  const handleUpdate = async (data: { title: string; body: string; image_data: string | null }) => {
+  const handleUpdate = async (data: {
+    title: string
+    body: string
+    image_data: string | null
+    wall_public: boolean
+  }) => {
     if (!editing) return
     setSubmitting(true)
     try {
@@ -95,6 +106,19 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
       setError(e instanceof ApiError ? e.detail : 'Erreur')
     } finally {
       setRemovingId(null)
+    }
+  }
+
+  const handleWallPublicChange = async (id: number, wall_public: boolean) => {
+    setWallPublicBusyId(id)
+    setError(null)
+    try {
+      await placeAnnouncementsApi.update(id, { wall_public })
+      await load()
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.detail : 'Erreur')
+    } finally {
+      setWallPublicBusyId(null)
     }
   }
 
@@ -152,6 +176,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
                 initialTitle={a.title}
                 initialBody={a.body}
                 initialImage={a.image_data}
+                initialWallPublic={a.wall_public}
                 submitLabel="Enregistrer"
                 busy={submitting}
                 onSubmit={handleUpdate}
@@ -166,6 +191,8 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
                   setEditing(a)
                 }}
                 onDelete={() => void handleDelete(a.id)}
+                onWallPublicChange={(next) => void handleWallPublicChange(a.id, next)}
+                wallPublicBusy={wallPublicBusyId === a.id}
                 deleting={removingId === a.id}
               />
             )}

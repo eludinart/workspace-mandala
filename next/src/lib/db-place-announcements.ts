@@ -3,8 +3,8 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
-import type { CommunityRole } from './db-communities'
-import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership } from './db-communities'
+import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
+import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
 
 let _tablesEnsured = false
 
@@ -20,6 +20,7 @@ export type PlaceAnnouncementRow = {
   author_pseudo: string
   author_avatar_emoji: string
   author_avatar: string | null
+  wall_public: boolean
 }
 
 function normalizeImageData(img: unknown): string | null | undefined {
@@ -54,6 +55,7 @@ export async function ensurePlaceAnnouncementTables(): Promise<void> {
       KEY idx_author (author_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
+  await ensureWallPublicColumn(pool, t)
   _tablesEnsured = true
 }
 
@@ -109,11 +111,12 @@ function mapAnnouncementRow(r: RowDataPacket): PlaceAnnouncementRow {
     author_pseudo: String(r.author_pseudo ?? ''),
     author_avatar_emoji: String(r.author_avatar_emoji || '🌸'),
     author_avatar: r.author_avatar ? String(r.author_avatar) : null,
+    wall_public: wallPublicFromRow(r as Record<string, unknown>),
   }
 }
 
 const ANNOUNCEMENT_SELECT = `
-  SELECT a.id, a.community_id, a.author_id, a.title, a.body, a.image_data, a.created_at, a.updated_at,
+  SELECT a.id, a.community_id, a.author_id, a.title, a.body, a.image_data, a.created_at, a.updated_at, a.wall_public,
          COALESCE(pm.meta_value, u.display_name, CONCAT('user_', a.author_id)) AS author_pseudo,
          COALESCE(em.meta_value, '🌸') AS author_avatar_emoji,
          COALESCE(am.meta_value, '') AS author_avatar
@@ -154,6 +157,7 @@ export async function createPlaceAnnouncement(params: {
   title: string
   body: string
   image_data?: string | null
+  wall_public?: boolean
   isAppSiteManager: boolean
 }): Promise<PlaceAnnouncementRow> {
   await requireManageAnnouncements(params.authorId, params.communityId, params.isAppSiteManager)
@@ -165,12 +169,13 @@ export async function createPlaceAnnouncement(params: {
   if (body.length > 8000) throw Object.assign(new Error('Message trop long'), { status: 400 })
 
   const image = normalizeImageData(params.image_data ?? null)
+  const wallPublic = parseWallPublic(params.wall_public) ? 1 : 0
   await ensurePlaceAnnouncementTables()
   const pool = getPool()
   const t = table('mandala_place_announcements')
   const [result] = await pool.execute(
-    `INSERT INTO ${t} (community_id, author_id, title, body, image_data) VALUES (?, ?, ?, ?, ?)`,
-    [params.communityId, params.authorId, title, body, image ?? null]
+    `INSERT INTO ${t} (community_id, author_id, title, body, image_data, wall_public) VALUES (?, ?, ?, ?, ?, ?)`,
+    [params.communityId, params.authorId, title, body, image ?? null, wallPublic]
   )
   const id = Number((result as { insertId?: number }).insertId)
   const created = await getPlaceAnnouncementById(id)
@@ -185,6 +190,7 @@ export async function updatePlaceAnnouncement(params: {
   title?: string
   body?: string
   image_data?: string | null
+  wall_public?: boolean
 }): Promise<PlaceAnnouncementRow> {
   const meta = await getAnnouncementMeta(params.announcementId)
   if (!meta) throw Object.assign(new Error('Annonce introuvable'), { status: 404 })
@@ -208,6 +214,10 @@ export async function updatePlaceAnnouncement(params: {
   if (image !== undefined) {
     fields.push('image_data = ?')
     values.push(image)
+  }
+  if (params.wall_public !== undefined) {
+    fields.push('wall_public = ?')
+    values.push(parseWallPublic(params.wall_public) ? 1 : 0)
   }
   if (!fields.length) {
     const row = await getPlaceAnnouncementById(params.announcementId)

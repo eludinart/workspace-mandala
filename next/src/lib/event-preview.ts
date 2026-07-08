@@ -2,7 +2,15 @@
 
 import { EVENT_PHASES } from '@/lib/event-constants'
 import { dateToDayKey, enumerateEventDays, getEventEffectiveEnd } from '@/lib/event-dates'
+import {
+  eventTemporalBadge,
+  isEventOngoing,
+  isEventPast,
+  isEventUpcoming,
+} from '@/lib/event-temporal'
 import { formatMandalaDate, formatMandalaDateTime, parseMandalaDateTime } from '@/lib/format-datetime'
+
+export { eventTemporalBadge, isEventOngoing, isEventPast, isEventUpcoming }
 
 export type HomeEventPreview = {
   id: number
@@ -31,19 +39,6 @@ export function phaseBadgeClass(phase: string): string {
     default:
       return 'bg-violet-950/60 text-violet-200 border-violet-700/40'
   }
-}
-
-export function isEventUpcoming(ev: {
-  starts_at: string | null
-  ends_at: string | null
-  phase: string
-}): boolean {
-  if (ev.phase === 'closed') return false
-  const end = getEventEffectiveEnd(ev.starts_at, ev.ends_at)
-  if (end) return end.getTime() >= Date.now()
-  if (!ev.starts_at) return true
-  const start = parseMandalaDateTime(ev.starts_at)
-  return start ? start.getTime() >= Date.now() - 86400000 : true
 }
 
 export function formatEventDateRange(startsAt: string | null, endsAt: string | null): string {

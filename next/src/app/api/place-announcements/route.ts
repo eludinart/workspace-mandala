@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       title: String(body.title ?? ''),
       body: String(body.body ?? ''),
       image_data: body.image_data,
+      wall_public: body.wall_public,
       isAppSiteManager,
     })
     return NextResponse.json({ announcement })

@@ -11,6 +11,7 @@ export type CommunityPost = {
   author_pseudo: string
   author_avatar_emoji: string
   author_avatar: string | null
+  wall_public: boolean
 }
 
 export const postsApi = {
@@ -20,7 +21,9 @@ export const postsApi = {
       posts: CommunityPost[]
       can_manage?: boolean
     }>,
-  create: (body: { community_id: number; type: PostType; content: string }) =>
+  create: (body: { community_id: number; type: PostType; content: string; wall_public?: boolean }) =>
     api.post('/api/posts', body) as Promise<{ post: CommunityPost }>,
+  update: (postId: number, body: { wall_public: boolean }) =>
+    api.patch(`/api/posts/${postId}`, body) as Promise<{ post: CommunityPost }>,
   remove: (postId: number) => api.delete(`/api/posts/${postId}`) as Promise<{ ok: boolean }>,
 }

@@ -5,6 +5,7 @@ import { eventsApi } from '@/api/events'
 import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 import { ApiError } from '@/lib/api-client'
+import { WallPublicToggle } from '@/components/wall/WallPublicToggle'
 
 type DetailTab = 'overview' | 'team' | 'tasks' | 'photos'
 
@@ -19,6 +20,7 @@ type EventDetail = {
     phase: string
     status: string
     cover_image?: string | null
+    wall_public?: boolean
   }
   staff: Array<{
     id: number
@@ -78,6 +80,7 @@ export function EventDetailPage({
   const [editStarts, setEditStarts] = useState('')
   const [editEnds, setEditEnds] = useState('')
   const [editStatus, setEditStatus] = useState('')
+  const [editWallPublic, setEditWallPublic] = useState(false)
 
   const emitEventsChanged = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -100,6 +103,7 @@ export function EventDetailPage({
       setEditStarts(d.event.starts_at?.slice(0, 16).replace(' ', 'T') ?? '')
       setEditEnds(d.event.ends_at?.slice(0, 16).replace(' ', 'T') ?? '')
       setEditStatus(d.event.status ?? 'draft')
+      setEditWallPublic(!!d.event.wall_public)
       if (d.can_manage) {
         const m = (await eventsApi.communityMembers(communitySlug)) as { members?: Member[] }
         setMembers(m.members ?? [])
@@ -344,6 +348,7 @@ export function EventDetailPage({
                     starts_at: editStarts ? editStarts.replace('T', ' ') : null,
                     ends_at: editEnds ? editEnds.replace('T', ' ') : null,
                     status: editStatus,
+                    wall_public: editWallPublic,
                   })
                   .then(async () => {
                     await load()
@@ -411,6 +416,11 @@ export function EventDetailPage({
                   <option value="completed">Terminé</option>
                 </select>
               </label>
+              <WallPublicToggle
+                id="wall-public-event"
+                checked={editWallPublic}
+                onChange={setEditWallPublic}
+              />
               <button type="submit" className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white">
                 Enregistrer
               </button>

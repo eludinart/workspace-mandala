@@ -4,18 +4,23 @@ import { useRef, useState } from 'react'
 import type { PlaceAnnouncement } from '@/api/place-announcements'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
+import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
 
 export function PlaceAnnouncementCard({
   announcement,
   canManage,
   onEdit,
   onDelete,
+  onWallPublicChange,
+  wallPublicBusy,
   deleting,
 }: {
   announcement: PlaceAnnouncement
   canManage?: boolean
   onEdit?: () => void
   onDelete?: () => void
+  onWallPublicChange?: (next: boolean) => void | Promise<void>
+  wallPublicBusy?: boolean
   deleting?: boolean
 }) {
   const [lightbox, setLightbox] = useState(false)
@@ -43,8 +48,10 @@ export function PlaceAnnouncementCard({
             </p>
           </div>
         </div>
-        {canManage && (onEdit || onDelete) && (
-          <div className="flex gap-1 shrink-0">
+        <div className="flex flex-wrap items-center gap-1 shrink-0 justify-end">
+          <WallPublicBadge public={announcement.wall_public} />
+          {canManage && (onEdit || onDelete) && (
+            <>
             {onEdit && (
               <button
                 type="button"
@@ -64,8 +71,9 @@ export function PlaceAnnouncementCard({
                 {deleting ? '…' : 'Supprimer'}
               </button>
             )}
-          </div>
+          </>
         )}
+        </div>
       </div>
 
       <div>
@@ -104,6 +112,15 @@ export function PlaceAnnouncementCard({
           )}
         </>
       )}
+
+      {canManage && onWallPublicChange && (
+        <WallPublicToggle
+          id={`wall-public-announcement-${announcement.id}`}
+          checked={announcement.wall_public}
+          disabled={wallPublicBusy}
+          onChange={(next) => void onWallPublicChange(next)}
+        />
+      )}
     </article>
   )
 }
@@ -112,6 +129,8 @@ export function AnnouncementEditorForm({
   initialTitle = '',
   initialBody = '',
   initialImage = null as string | null,
+  initialWallPublic = false,
+  showWallPublic = true,
   submitLabel,
   busy,
   onSubmit,
@@ -120,14 +139,22 @@ export function AnnouncementEditorForm({
   initialTitle?: string
   initialBody?: string
   initialImage?: string | null
+  initialWallPublic?: boolean
+  showWallPublic?: boolean
   submitLabel: string
   busy?: boolean
-  onSubmit: (data: { title: string; body: string; image_data: string | null }) => void | Promise<void>
+  onSubmit: (data: {
+    title: string
+    body: string
+    image_data: string | null
+    wall_public: boolean
+  }) => void | Promise<void>
   onCancel?: () => void
 }) {
   const [title, setTitle] = useState(initialTitle)
   const [body, setBody] = useState(initialBody)
   const [image, setImage] = useState<string | null>(initialImage)
+  const [wallPublic, setWallPublic] = useState(initialWallPublic)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const pickImage = (file: File | null) => {
@@ -145,7 +172,7 @@ export function AnnouncementEditorForm({
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault()
-        void onSubmit({ title: title.trim(), body: body.trim(), image_data: image })
+        void onSubmit({ title: title.trim(), body: body.trim(), image_data: image, wall_public: wallPublic })
       }}
     >
       <input
@@ -193,6 +220,14 @@ export function AnnouncementEditorForm({
       </div>
       {image && (
         <img src={image} alt="" className="max-h-40 rounded-lg border border-slate-800 object-cover" />
+      )}
+      {showWallPublic && (
+        <WallPublicToggle
+          id="wall-public-announcement-editor"
+          checked={wallPublic}
+          onChange={setWallPublic}
+          disabled={busy}
+        />
       )}
       <div className="flex gap-2">
         <button

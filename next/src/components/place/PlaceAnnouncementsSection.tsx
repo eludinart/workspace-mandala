@@ -23,6 +23,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
   const [editing, setEditing] = useState<PlaceAnnouncement | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [removingId, setRemovingId] = useState<number | null>(null)
+  const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     if (!active?.slug) {
@@ -49,7 +50,12 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
     void load()
   }, [load])
 
-  const handleCreate = async (data: { title: string; body: string; image_data: string | null }) => {
+  const handleCreate = async (data: {
+    title: string
+    body: string
+    image_data: string | null
+    wall_public: boolean
+  }) => {
     if (!active?.slug) return
     setSubmitting(true)
     setError(null)
@@ -64,7 +70,12 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
     }
   }
 
-  const handleUpdate = async (data: { title: string; body: string; image_data: string | null }) => {
+  const handleUpdate = async (data: {
+    title: string
+    body: string
+    image_data: string | null
+    wall_public: boolean
+  }) => {
     if (!editing) return
     setSubmitting(true)
     setError(null)
@@ -91,6 +102,19 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
       setError(e instanceof ApiError ? e.detail : 'Erreur à la suppression')
     } finally {
       setRemovingId(null)
+    }
+  }
+
+  const handleWallPublicChange = async (id: number, wall_public: boolean) => {
+    setWallPublicBusyId(id)
+    setError(null)
+    try {
+      await placeAnnouncementsApi.update(id, { wall_public })
+      await load()
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.detail : 'Erreur')
+    } finally {
+      setWallPublicBusyId(null)
     }
   }
 
@@ -138,6 +162,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
                 initialTitle={a.title}
                 initialBody={a.body}
                 initialImage={a.image_data}
+                initialWallPublic={a.wall_public}
                 submitLabel="Enregistrer"
                 busy={submitting}
                 onSubmit={handleUpdate}
@@ -149,6 +174,10 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
                 canManage={canManage}
                 onEdit={() => setEditing(a)}
                 onDelete={() => void handleDelete(a.id)}
+                onWallPublicChange={
+                  canManage ? (next) => void handleWallPublicChange(a.id, next) : undefined
+                }
+                wallPublicBusy={wallPublicBusyId === a.id}
                 deleting={removingId === a.id}
               />
             )}
