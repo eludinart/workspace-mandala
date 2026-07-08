@@ -18,6 +18,15 @@ function groupByPlace(items: WallFeedItem[]): Array<{ place: WallFeedItem['place
   return [...map.values()].sort((a, b) => a.place.name.localeCompare(b.place.name, 'fr'))
 }
 
+function isPastEventItem(item: WallFeedItem): boolean {
+  return item.kind === 'event' && item.is_past
+}
+
+function filterPastEvents(items: WallFeedItem[], showPastEvents: boolean): WallFeedItem[] {
+  if (showPastEvents) return items
+  return items.filter((item) => !isPastEventItem(item))
+}
+
 export function WallFeed({
   initialSort = 'date',
   limit = 30,
@@ -32,6 +41,7 @@ export function WallFeed({
   className?: string
 }) {
   const [sort, setSort] = useState<WallFeedSort>(initialSort)
+  const [showPastEvents, setShowPastEvents] = useState(false)
   const [items, setItems] = useState<WallFeedItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +74,19 @@ export function WallFeed({
     return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
   }, [load])
 
-  const grouped = useMemo(() => (sort === 'place' ? groupByPlace(items) : null), [items, sort])
+  const visibleItems = useMemo(
+    () => filterPastEvents(items, showPastEvents),
+    [items, showPastEvents],
+  )
+  const hiddenPastCount = useMemo(
+    () => items.filter(isPastEventItem).length,
+    [items],
+  )
+
+  const grouped = useMemo(
+    () => (sort === 'place' ? groupByPlace(visibleItems) : null),
+    [visibleItems, sort],
+  )
 
   return (
     <div className={`space-y-4 ${className}`}>
@@ -79,32 +101,46 @@ export function WallFeed({
               : 'Mur public — contenus publiés par les organisateurs de chaque lieu'}
           </p>
         </div>
-        <div
-          className="inline-flex rounded-xl border border-slate-700 bg-slate-950/60 p-0.5 shrink-0"
-          role="tablist"
-          aria-label="Trier le fil"
-        >
-          {(
-            [
-              { id: 'date' as const, label: 'Par date' },
-              { id: 'place' as const, label: 'Par lieu' },
-            ] as const
-          ).map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="tab"
-              aria-selected={sort === opt.id}
-              onClick={() => setSort(opt.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                sort === opt.id
-                  ? 'bg-violet-600 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+          <div
+            className="inline-flex rounded-xl border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
+            role="tablist"
+            aria-label="Trier le fil"
+          >
+            {(
+              [
+                { id: 'date' as const, label: 'Par date' },
+                { id: 'place' as const, label: 'Par lieu' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                role="tab"
+                aria-selected={sort === opt.id}
+                onClick={() => setSort(opt.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  sort === opt.id
+                    ? 'bg-violet-600 text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <label className="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none self-end">
+            <input
+              type="checkbox"
+              checked={showPastEvents}
+              onChange={(e) => setShowPastEvents(e.target.checked)}
+              className="rounded border-slate-600 text-violet-600 focus:ring-violet-500/40"
+            />
+            Afficher les événements passés
+            {!showPastEvents && hiddenPastCount > 0 && (
+              <span className="text-slate-500">({hiddenPastCount} masqué{hiddenPastCount > 1 ? 's' : ''})</span>
+            )}
+          </label>
         </div>
       </div>
 
@@ -133,15 +169,17 @@ export function WallFeed({
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {!loading && !error && items.length === 0 && (
+      {!loading && !error && visibleItems.length === 0 && (
         <p className="text-sm text-slate-500 italic rounded-xl border border-slate-800 p-6 text-center">
-          Aucune actualité pour le moment. Revenez bientôt ou explorez les lieux sur la carte.
+          {items.length > 0 && hiddenPastCount > 0 && !showPastEvents
+            ? 'Aucune actualité récente. Cochez « Afficher les événements passés » pour voir l\u2019historique.'
+            : 'Aucune actualité pour le moment. Revenez bientôt ou explorez les lieux sur la carte.'}
         </p>
       )}
 
-      {!loading && !error && sort === 'date' && (
+      {!loading && !error && sort === 'date' && visibleItems.length > 0 && (
         <ul className="space-y-3">
-          {items.map((item) => (
+          {visibleItems.map((item) => (
             <li key={item.id}>
               <WallFeedItemCard item={item} onEventClick={onEventClick} />
             </li>
@@ -149,7 +187,7 @@ export function WallFeed({
         </ul>
       )}
 
-      {!loading && !error && sort === 'place' && grouped && (
+      {!loading && !error && sort === 'place' && grouped && grouped.length > 0 && (
         <div className="space-y-6">
           {grouped.map(({ place, items: placeItems }) => {
             const surface = placeAccentSurface(place.accent_color)
