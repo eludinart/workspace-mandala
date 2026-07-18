@@ -779,7 +779,8 @@ export async function getCommunityById(id: number): Promise<CommunityAdminRecord
     `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location,
             c.address, c.postal_code, c.city, c.country,
             c.website, c.contact_email, c.latitude, c.longitude,
-            c.accent_color, c.logo_emoji, c.avatar, c.is_active, c.created_at,
+            c.accent_color, c.logo_emoji, c.avatar, c.is_active,
+            c.listed_public, c.profile_public, c.created_at,
             (SELECT COUNT(*) FROM ${tM} m WHERE m.community_id = c.id) AS member_count
      FROM ${tC} c WHERE c.id = ? LIMIT 1`,
     [id]
@@ -810,6 +811,8 @@ export async function updateCommunityAdmin(
     logo_emoji?: string | null
     avatar?: string | null
     is_active?: boolean
+    listed_public?: boolean
+    profile_public?: boolean
   }
 ): Promise<CommunityAdminRecord> {
   if (!id) throw new Error('id requis')
@@ -923,6 +926,14 @@ export async function updateCommunityAdmin(
   if (body.is_active !== undefined) {
     updates.push('is_active = ?')
     values.push(body.is_active ? 1 : 0)
+  }
+  if (body.listed_public !== undefined) {
+    updates.push('listed_public = ?')
+    values.push(body.listed_public ? 1 : 0)
+  }
+  if (body.profile_public !== undefined) {
+    updates.push('profile_public = ?')
+    values.push(body.profile_public ? 1 : 0)
   }
   if (body.slug !== undefined) {
     const slug = String(body.slug)

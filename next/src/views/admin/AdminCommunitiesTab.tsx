@@ -35,6 +35,8 @@ export function AdminCommunitiesTab({
   const [editEmoji, setEditEmoji] = useState('')
   const [editColor, setEditColor] = useState('')
   const [editActive, setEditActive] = useState(true)
+  const [editListedPublic, setEditListedPublic] = useState(true)
+  const [editProfilePublic, setEditProfilePublic] = useState(true)
   const [editDesc, setEditDesc] = useState('')
   const [editAddress, setEditAddress] = useState('')
   const [editPostalCode, setEditPostalCode] = useState('')
@@ -81,6 +83,8 @@ export function AdminCommunitiesTab({
         setEditEmoji(data.community.logo_emoji ?? '🏛️')
         setEditColor(data.community.accent_color ?? '#7c3aed')
         setEditActive(data.community.is_active)
+        setEditListedPublic(data.community.listed_public !== false)
+        setEditProfilePublic(data.community.profile_public !== false)
         setEditDesc(data.community.description ?? '')
         setEditAddress(data.community.address ?? '')
         setEditPostalCode(data.community.postal_code ?? '')
@@ -135,6 +139,8 @@ export function AdminCommunitiesTab({
         contact_email: editEmail || null,
         logo_emoji: editEmoji,
         accent_color: editColor,
+        listed_public: editListedPublic,
+        profile_public: editProfilePublic,
       }
       if (isAppAdminScope) {
         body.slug = editSlug
@@ -499,6 +505,45 @@ export function AdminCommunitiesTab({
                     carte publique. À l&apos;enregistrement, les coordonnées sont calculées
                     automatiquement si elles sont vides.
                   </p>
+                </fieldset>
+                <fieldset className="block sm:col-span-2 space-y-3 rounded-xl border border-slate-800 p-3">
+                  <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
+                    Visibilité publique
+                  </legend>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editListedPublic}
+                      onChange={(e) => setEditListedPublic(e.target.checked)}
+                      className="mt-1 rounded border-slate-600 text-sky-600 focus:ring-sky-500"
+                    />
+                    <span>
+                      <span className="block text-sm text-slate-200 font-medium">
+                        Afficher sur la page d&apos;accueil et la carte
+                      </span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Le lieu apparaît dans le catalogue public Mandala et sur la carte des lieux
+                        (si des coordonnées GPS sont renseignées).
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editProfilePublic}
+                      onChange={(e) => setEditProfilePublic(e.target.checked)}
+                      className="mt-1 rounded border-slate-600 text-sky-600 focus:ring-sky-500"
+                    />
+                    <span>
+                      <span className="block text-sm text-slate-200 font-medium">
+                        Profil du lieu public
+                      </span>
+                      <span className="block text-xs text-slate-500 mt-0.5">
+                        Une page publique /lieux/{detail.slug} est accessible sans compte. Si
+                        désactivé, seuls les membres connectés voient le lieu depuis l&apos;application.
+                      </span>
+                    </span>
+                  </label>
                 </fieldset>
                 <label className="block sm:col-span-2">
                   <span className="text-slate-500 text-xs">Site web</span>

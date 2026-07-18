@@ -65,6 +65,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       geocode: body.geocode,
       accent_color: body.accent_color,
       logo_emoji: body.logo_emoji,
+      listed_public: body.listed_public,
+      profile_public: body.profile_public,
     }
     if (Object.prototype.hasOwnProperty.call(body, 'avatar')) {
       patch.avatar = body.avatar

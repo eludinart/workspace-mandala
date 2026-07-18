@@ -20,6 +20,8 @@ export type CommunityAdmin = {
   avatar: string | null
   has_avatar?: boolean
   is_active: boolean
+  listed_public: boolean
+  profile_public: boolean
   member_count: number
   created_at: string | null
 }
