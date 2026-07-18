@@ -19,6 +19,8 @@ export type PublicCommunityCard = {
   accent_color?: string | null
   logo_emoji?: string | null
   avatar?: string | null
+  listed_public?: boolean
+  profile_public?: boolean
 }
 
 export type PublicCommunityProfile = PublicCommunityCard & {
@@ -59,6 +61,8 @@ export type CommunityManagerSettings = {
   avatar: string | null
   has_avatar?: boolean
   charter: CharterBlock[]
+  listed_public: boolean
+  profile_public: boolean
   can_manage?: boolean
   member_role?: string | null
 }

@@ -75,12 +75,18 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={`/lieux/${encodeURIComponent(place.slug)}`}
-          className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium"
-        >
-          Voir le profil →
-        </Link>
+        {place.profile_public !== false ? (
+          <Link
+            href={`/lieux/${encodeURIComponent(place.slug)}`}
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium"
+          >
+            Voir le profil →
+          </Link>
+        ) : (
+          <span className="inline-flex items-center text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500">
+            Profil privé
+          </span>
+        )}
       </div>
 
       {(website || email || directions) && (

@@ -102,10 +102,14 @@ export function PlacesMap({
             .filter(Boolean)
             .join(', ') || place.location || ''
         const profileHref = `/lieux/${encodeURIComponent(place.slug)}`
+        const profileLink =
+          place.profile_public !== false
+            ? `<br/><a href="${profileHref}" style="display:inline-block;margin-top:6px;color:#7c3aed;font-weight:600">Voir le profil →</a>`
+            : `<br/><span style="display:inline-block;margin-top:6px;opacity:0.6;font-size:12px">Profil privé</span>`
         marker.bindPopup(
           `<strong>${place.name}</strong>` +
             (popupAddr ? `<br/><span style="opacity:0.8">${popupAddr}</span>` : '') +
-            `<br/><a href="${profileHref}" style="display:inline-block;margin-top:6px;color:#7c3aed;font-weight:600">Voir le profil →</a>`
+            profileLink
         )
         marker.on('click', () => {
           onSelectRef.current?.(place.slug)

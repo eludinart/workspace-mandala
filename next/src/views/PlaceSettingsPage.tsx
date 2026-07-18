@@ -49,6 +49,8 @@ export function PlaceSettingsPage({
   const [avatar, setAvatar] = useState<string | null>(null)
   const [loadedAvatar, setLoadedAvatar] = useState<string | null>(null)
   const [charter, setCharter] = useState<CharterBlock[]>([])
+  const [listedPublic, setListedPublic] = useState(true)
+  const [profilePublic, setProfilePublic] = useState(true)
   const [preview, setPreview] = useState(false)
   useEffect(() => {
     if (lockedSection) setTab(lockedSection)
@@ -74,6 +76,8 @@ export function PlaceSettingsPage({
     setLoadedAvatar(isAvatarImageUrl(s.avatar) ? s.avatar : null)
     setAvatar(null)
     setCharter(s.charter ?? [])
+    setListedPublic(s.listed_public !== false)
+    setProfilePublic(s.profile_public !== false)
   }, [])
 
   const load = useCallback(async () => {
@@ -117,6 +121,8 @@ export function PlaceSettingsPage({
         logo_emoji: emoji,
         accent_color: color,
         charter,
+        listed_public: listedPublic,
+        profile_public: profilePublic,
       }
       if (avatar !== null) body.avatar = avatar
       const data = await communitiesApi.updateSettings(active.slug, body)
@@ -387,6 +393,46 @@ export function PlaceSettingsPage({
               partir de l&apos;adresse.
             </p>
           </fieldset>
+          <fieldset className="space-y-3 rounded-xl border border-slate-800 p-3">
+            <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
+              Visibilité publique
+            </legend>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={listedPublic}
+                onChange={(e) => setListedPublic(e.target.checked)}
+                className="mt-1 rounded border-slate-600 text-sky-600 focus:ring-sky-500"
+              />
+              <span>
+                <span className="block text-sm text-slate-200 font-medium">
+                  Afficher sur la page d&apos;accueil et la carte
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Le lieu apparaît dans le catalogue public Mandala et sur la carte des lieux
+                  (si des coordonnées GPS sont renseignées).
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={profilePublic}
+                onChange={(e) => setProfilePublic(e.target.checked)}
+                className="mt-1 rounded border-slate-600 text-sky-600 focus:ring-sky-500"
+              />
+              <span>
+                <span className="block text-sm text-slate-200 font-medium">
+                  Profil du lieu public
+                </span>
+                <span className="block text-xs text-slate-500 mt-0.5">
+                  Une page publique /lieux/{active.slug} est accessible sans compte. Si désactivé,
+                  seuls les membres connectés voient le lieu depuis l&apos;application.
+                </span>
+              </span>
+            </label>
+          </fieldset>
+
           <label className="block">
             <span className="text-slate-500 text-xs">Site web</span>
             <input

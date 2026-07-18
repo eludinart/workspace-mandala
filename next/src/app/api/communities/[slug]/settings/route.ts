@@ -60,6 +60,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       logo_emoji: body.logo_emoji,
       avatar: body.avatar,
       charter: body.charter,
+      listed_public: body.listed_public,
+      profile_public: body.profile_public,
     })
     return NextResponse.json({
       settings: {

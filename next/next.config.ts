@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   ...(basePath ? { basePath, assetPrefix: `${basePath}/` } : {}),
   output: 'standalone',
   eslint: { ignoreDuringBuilds: true },
+  // En Docker/Coolify : SKIP_TYPECHECK=1 (le CI fait déjà tsc --noEmit).
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_TYPECHECK === '1',
+  },
   outputFileTracingRoot: path.resolve(process.cwd()),
   reactStrictMode: true,
   async headers() {

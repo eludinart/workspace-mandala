@@ -1,0 +1,26 @@
+# Artefacts locaux — ne jamais envoyer au daemon Docker
+node_modules
+.next
+.git
+.gitignore
+*.log
+.DS_Store
+
+# Secrets et config locale
+.env
+.env.*
+sync-config.env
+docker-compose.env
+nogit
+
+# Next.js (chemins explicites)
+next/node_modules
+next/.next
+next/certificates
+next/tsconfig.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Docs / scripts non nécessaires au build runtime
+docs
+*.md
+!next/README.md

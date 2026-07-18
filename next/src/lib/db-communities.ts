@@ -33,6 +33,10 @@ export type CommunityRecord = {
   accent_color: string | null
   logo_emoji: string | null
   avatar: string | null
+  /** Visible sur la landing et la carte publique. */
+  listed_public: boolean
+  /** Fiche /lieux/[slug] accessible sans compte. */
+  profile_public: boolean
   charter?: CharterBlock[]
 }
 
@@ -43,7 +47,15 @@ export type CommunityManagerRecord = CommunityRecord & {
 export type CommunityRole = 'member' | 'organizer' | 'admin'
 
 const COMMUNITY_COLS =
-  'id, slug, name, tagline, description, location, address, postal_code, city, country, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter'
+  'id, slug, name, tagline, description, location, address, postal_code, city, country, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter, listed_public, profile_public'
+
+function parseBoolFlag(v: unknown, defaultValue = true): boolean {
+  if (v == null || v === '') return defaultValue
+  if (typeof v === 'boolean') return v
+  const s = String(v).trim().toLowerCase()
+  if (s === '0' || s === 'false' || s === 'no') return false
+  return true
+}
 
 const MAX_COMMUNITY_AVATAR_BYTES = 150_000
 
@@ -89,6 +101,8 @@ function mapCommunityRow(r: RowDataPacket): CommunityRecord {
     accent_color: r.accent_color ? String(r.accent_color) : null,
     logo_emoji: r.logo_emoji ? String(r.logo_emoji) : null,
     avatar: r.avatar ? String(r.avatar) : null,
+    listed_public: parseBoolFlag(r.listed_public, true),
+    profile_public: parseBoolFlag(r.profile_public, true),
     ...(charter !== undefined ? { charter } : {}),
   }
 }
@@ -131,6 +145,8 @@ const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'charter', ddl: 'charter LONGTEXT DEFAULT NULL' },
   { name: 'latitude', ddl: 'latitude DECIMAL(9,6) DEFAULT NULL' },
   { name: 'longitude', ddl: 'longitude DECIMAL(9,6) DEFAULT NULL' },
+  { name: 'listed_public', ddl: 'listed_public TINYINT(1) NOT NULL DEFAULT 1' },
+  { name: 'profile_public', ddl: 'profile_public TINYINT(1) NOT NULL DEFAULT 1' },
 ]
 
 /** Compose une adresse lisible à partir des champs structurés. */
@@ -1133,6 +1149,8 @@ export async function updateCommunitySettingsForManager(
     logo_emoji?: string | null
     avatar?: string | null
     charter?: unknown
+    listed_public?: boolean
+    profile_public?: boolean
   }
 ): Promise<CommunityManagerRecord> {
   const current = await getCommunitySettingsForManager(slug, userId, isAppSiteManager)
@@ -1249,6 +1267,14 @@ export async function updateCommunitySettingsForManager(
     updates.push('charter = ?')
     values.push(blocks.length ? serializeCharterBlocks(blocks) : null)
   }
+  if (body.listed_public !== undefined) {
+    updates.push('listed_public = ?')
+    values.push(body.listed_public ? 1 : 0)
+  }
+  if (body.profile_public !== undefined) {
+    updates.push('profile_public = ?')
+    values.push(body.profile_public ? 1 : 0)
+  }
 
   if (updates.length === 0) return current
 
@@ -1281,6 +1307,8 @@ export type PublicCommunityCard = Pick<
   | 'accent_color'
   | 'logo_emoji'
   | 'avatar'
+  | 'listed_public'
+  | 'profile_public'
 >
 
 function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
@@ -1302,6 +1330,8 @@ function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
     accent_color: c.accent_color,
     logo_emoji: c.logo_emoji,
     avatar: c.avatar,
+    listed_public: c.listed_public,
+    profile_public: c.profile_public,
   }
 }
 
@@ -1316,7 +1346,7 @@ export async function getPublicCommunityBySlug(slug: string): Promise<PublicComm
   const normalized = slug?.trim().toLowerCase()
   if (!normalized) return null
   const community = await getCommunityBySlug(normalized)
-  if (!community) return null
+  if (!community || !community.profile_public) return null
   return mapPublicCommunityCard(community)
 }
 
@@ -1333,7 +1363,7 @@ export async function getPublicCommunityProfileBySlug(
   const normalized = slug?.trim().toLowerCase()
   if (!normalized) return null
   const community = await getCommunityBySlug(normalized)
-  if (!community) return null
+  if (!community || !community.profile_public) return null
 
   const pool = getPool()
   const tM = table('mandala_community_members')
@@ -1363,9 +1393,8 @@ export async function listPublicCommunitiesForLanding(): Promise<PublicCommunity
   const pool = getPool()
   const tC = table('mandala_communities')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, slug, name, tagline, description, location, address, postal_code, city, country,
-            website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar
-     FROM ${tC} WHERE is_active = 1 ORDER BY name ASC`
+    `SELECT ${COMMUNITY_COLS}
+     FROM ${tC} WHERE is_active = 1 AND COALESCE(listed_public, 1) = 1 ORDER BY name ASC`
   )
   return (rows ?? []).map((r) => mapPublicCommunityCard(mapCommunityRow(r)))
 }

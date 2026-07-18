@@ -51,10 +51,22 @@ Sinon `MARIADB_HOST` pointe déjà vers le hostname interne du conteneur.
 ## 4. Déployer
 
 1. **Deploy** (premier build peut prendre plusieurs minutes).
-2. Logs : build `Dockerfile.next` → `npm ci` → `npm run build` → image Node 22.
+2. Logs : build `Dockerfile` → `npm ci` → `npm run build:docker` → image Node 22.
 3. Vérifier : `GET https://mandala.eludein.art/api/health` → `"db":"connected"`.
 4. Migrations SQL : `node scripts/apply-all-schemas.mjs` (tunnel ou VPS). Voir [DEPLOY-COOLIFY-PROD.md](./DEPLOY-COOLIFY-PROD.md).
 5. Admin : `node scripts/grant-admin.mjs votre@email.com` puis reconnexion.
+
+### Accélérer les builds Coolify
+
+| Cause | Piste |
+|-------|--------|
+| **`npm run build` à chaque push** | Le Dockerfile utilise `build:docker` (sans `tsc`) — le typecheck reste en CI GitHub. |
+| **`npm ci` lent** | BuildKit cache npm (`RUN --mount=type=cache`) — actif si BuildKit est activé sur le serveur (défaut Coolify récent). |
+| **Nouvelle image à chaque commit** | Normal : seule l’étape `npm ci` est mise en cache si `package-lock.json` inchangé. |
+| **VPS peu puissant** | Un build Next.js prend souvent **45–90 s** sur un petit VPS ; c’est attendu. |
+| **Déploiements inutiles** | Désactiver le webhook auto-deploy pour les commits docs-only, ou déployer à la main. |
+
+Le dépôt Git est léger (~1 Mo) : le temps est surtout CPU (compilation Next.js), pas le clone.
 
 ## 5. Relais socat dev (déjà fait)
 
