@@ -10,6 +10,8 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV USE_NODE_API=true
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV SKIP_TYPECHECK=1
+# Plafond heap : laisse de la RAM au kernel (évite OOM kill pendant « Collecting build traces »).
+ENV NODE_OPTIONS=--max-old-space-size=1536
 COPY next/package*.json ./next/
 # Cache npm entre builds (BuildKit) — accélère npm ci quand package-lock change peu.
 RUN --mount=type=cache,target=/root/.npm \
@@ -20,13 +22,16 @@ COPY scripts/ ./scripts/
 RUN cd next && npm run build:docker
 
 FROM node:22-slim
+WORKDIR /app
+# Attendre la fin du build avant apt-get (évite le pic RAM apt + next en parallèle sur petit VPS).
+COPY --from=next-build /app/next/package.json /tmp/.build-done
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && rm /tmp/.build-done
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-WORKDIR /app
 COPY --from=next-build /app/next/.next/standalone ./
 COPY --from=next-build /app/next/.next/static ./.next/static
 COPY --from=next-build /app/next/public ./public
