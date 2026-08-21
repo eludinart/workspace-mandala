@@ -130,12 +130,12 @@ export function TodayBoard({
   return (
     <FeedSection
       icon="☀️"
-      title="Tableau du jour"
+      title="Vie du lieu"
       subtitle={label.charAt(0).toUpperCase() + label.slice(1)}
       tone="custom"
       accentColor={accent}
       collapsible
-      storageKey="mdl_today_board_collapsed"
+      storageKey="mdl_place_life_board_collapsed"
       action={
         <button
           type="button"

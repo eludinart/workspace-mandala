@@ -14,7 +14,6 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { AgoraFeed } from '@/components/community/AgoraFeed'
 import { FeedSection } from '@/components/community/FeedSection'
 import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncementsSection'
-import { PlaceLifeWallCards } from '@/components/place/PlaceLifeWallCards'
 import { TodayBoard } from '@/components/place/TodayBoard'
 import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
@@ -92,8 +91,6 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
       />
 
       <PlaceAnnouncementsSection onNavigate={onNavigate} />
-
-      <PlaceLifeWallCards onNavigate={onNavigate} />
 
       {(loading || featuredEvent) && (
         <FeedSection

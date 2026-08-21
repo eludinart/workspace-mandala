@@ -20,7 +20,7 @@ function assertDay(day: string): string {
   return d
 }
 
-/** Tableau du jour — présence, événements, courses/logistique, cercles. */
+/** Vie du lieu (accueil) — présence, événements, courses/logistique, cercles. */
 export async function GET(req: NextRequest) {
   try {
     if (!isDbConfigured()) {
