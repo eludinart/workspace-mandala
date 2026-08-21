@@ -43,18 +43,7 @@ export async function GET(req: NextRequest) {
       getCircleSession({ communityId, day, slot: 'evening' }).catch(() => null),
     ])
 
-    const filterToday = <
-      T extends { bring_date: string | null; claims?: Array<{ bring_date: string | null }> },
-    >(
-      items: T[]
-    ) =>
-      items.filter((i) => {
-        if (i.bring_date === day) return true
-        if (i.claims?.some((c) => c.bring_date === day)) return true
-        return false
-      })
-
-    const mapListItem = (i: (typeof coursesAll)[number]) => ({
+    const mapListItem = (i: (typeof coursesAll)[number], forDay: boolean) => ({
       id: i.id,
       title: i.title,
       notes: i.notes,
@@ -62,10 +51,27 @@ export async function GET(req: NextRequest) {
       claimed_by_pseudo: i.claimed_by_pseudo,
       claims: i.claims,
       photo_count: i.photos?.length ?? 0,
+      for_today: forDay,
     })
 
-    const courses = filterToday(coursesAll).map(mapListItem)
-    const logistics = filterToday(logisticsAll).map(mapListItem)
+    const isForToday = (i: (typeof coursesAll)[number]) =>
+      i.bring_date === day || !!i.claims?.some((c) => c.bring_date === day)
+
+    // Résumé des listes en cours — items du jour en premier
+    const sortActive = (items: typeof coursesAll) =>
+      [...items].sort((a, b) => {
+        const at = isForToday(a) ? 0 : 1
+        const bt = isForToday(b) ? 0 : 1
+        if (at !== bt) return at - bt
+        return (a.bring_date || '9999').localeCompare(b.bring_date || '9999')
+      })
+
+    const courses = sortActive(coursesAll)
+      .slice(0, 8)
+      .map((i) => mapListItem(i, isForToday(i)))
+    const logistics = sortActive(logisticsAll)
+      .slice(0, 8)
+      .map((i) => mapListItem(i, isForToday(i)))
 
     const presentUsers = cal.detail.present_users
     const iAmPresent = presentUsers.some((u) => u.user_id === uid)
@@ -99,6 +105,8 @@ export async function GET(req: NextRequest) {
       logistics,
       courses_open_count: coursesAll.length,
       logistics_open_count: logisticsAll.length,
+      courses_today_count: coursesAll.filter(isForToday).length,
+      logistics_today_count: logisticsAll.filter(isForToday).length,
       circles: {
         morning: mapCircle(circleMorning),
         evening: mapCircle(circleEvening),

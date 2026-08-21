@@ -31,18 +31,24 @@ type TodayPayload = {
     id: number
     title: string
     claimed_by_pseudo: string | null
+    bring_date: string | null
     claims?: Array<{ pseudo: string }>
     photo_count: number
+    for_today?: boolean
   }>
   logistics: Array<{
     id: number
     title: string
     claimed_by_pseudo: string | null
+    bring_date: string | null
     claims?: Array<{ pseudo: string }>
     photo_count: number
+    for_today?: boolean
   }>
   courses_open_count?: number
   logistics_open_count?: number
+  courses_today_count?: number
+  logistics_today_count?: number
   circles: {
     morning: { title: string | null; summary: string | null; has_image: boolean } | null
     evening: { title: string | null; summary: string | null; has_image: boolean } | null
@@ -205,50 +211,60 @@ export function TodayBoard({
             ))}
           </BoardBlock>
 
-          {/* Courses */}
+          {/* Courses — résumé des besoins en cours */}
           <BoardBlock
-            title="Courses"
-            empty={
-              (data.courses_open_count ?? 0) > 0
-                ? `Aucune apport prévue aujourd’hui (${data.courses_open_count} en liste)`
-                : 'Rien à apporter aujourd’hui'
-            }
+            title={`Courses${(data.courses_open_count ?? 0) > 0 ? ` (${data.courses_open_count})` : ''}`}
+            empty="Liste vide pour le moment"
             onMore={() => onNavigate('courses')}
             moreLabel="Liste"
           >
             {data.courses.map((c) => (
-              <p key={c.id} className="text-sm text-slate-200 truncate">
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onNavigate('courses')}
+                className="w-full text-left text-sm text-slate-200 hover:text-white truncate"
+              >
+                {c.for_today && (
+                  <span className="text-[10px] uppercase text-emerald-400/90 mr-1.5">Aujourd’hui</span>
+                )}
                 {c.title}
                 <span className="text-slate-500 text-xs ml-1">
                   {c.claims?.length
                     ? c.claims.map((x) => x.pseudo).join(', ')
-                    : c.claimed_by_pseudo || ''}
+                    : c.claimed_by_pseudo || 'libre'}
+                  {c.bring_date && !c.for_today ? ` · ${c.bring_date}` : ''}
                 </span>
-              </p>
+              </button>
             ))}
           </BoardBlock>
 
-          {/* Logistique */}
+          {/* Logistique — résumé des besoins en cours */}
           <BoardBlock
-            title="Logistique"
-            empty={
-              (data.logistics_open_count ?? 0) > 0
-                ? `Rien daté aujourd’hui (${data.logistics_open_count} en cours)`
-                : 'Aucun besoin pour aujourd’hui'
-            }
+            title={`Logistique${(data.logistics_open_count ?? 0) > 0 ? ` (${data.logistics_open_count})` : ''}`}
+            empty="Aucun besoin en cours"
             onMore={() => onNavigate('logistics')}
             moreLabel="Liste"
           >
             {data.logistics.map((c) => (
-              <p key={c.id} className="text-sm text-slate-200 truncate">
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onNavigate('logistics')}
+                className="w-full text-left text-sm text-slate-200 hover:text-white truncate"
+              >
+                {c.for_today && (
+                  <span className="text-[10px] uppercase text-emerald-400/90 mr-1.5">Aujourd’hui</span>
+                )}
                 {c.title}
                 <span className="text-slate-500 text-xs ml-1">
                   {c.claims?.length
                     ? `${c.claims.length} engagé(s)`
-                    : c.claimed_by_pseudo || ''}
+                    : c.claimed_by_pseudo || 'libre'}
                   {c.photo_count > 0 ? ` · ${c.photo_count} photo${c.photo_count > 1 ? 's' : ''}` : ''}
+                  {c.bring_date && !c.for_today ? ` · ${c.bring_date}` : ''}
                 </span>
-              </p>
+              </button>
             ))}
           </BoardBlock>
 
