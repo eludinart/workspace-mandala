@@ -134,6 +134,8 @@ export function TodayBoard({
       subtitle={label.charAt(0).toUpperCase() + label.slice(1)}
       tone="custom"
       accentColor={accent}
+      collapsible
+      storageKey="mdl_today_board_collapsed"
       action={
         <button
           type="button"
