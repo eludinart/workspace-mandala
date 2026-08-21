@@ -16,6 +16,7 @@ type CatalogItem = {
   accent_color?: string | null
   avatar?: string | null
   is_member: boolean
+  join_mode?: 'open' | 'invite' | 'closed'
 }
 
 export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -158,13 +159,24 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                     <span className="flex-1 text-sm truncate">{c.name}</span>
                     <button
                       type="button"
-                      disabled={joiningSlug === c.slug}
+                      disabled={joiningSlug === c.slug || c.join_mode === 'closed'}
                       onClick={() => {
                         void (async () => {
                           setJoinMsg(null)
                           setJoiningSlug(c.slug)
                           try {
-                            await joinCommunity(c.slug)
+                            let inviteCode: string | null = null
+                            if (c.join_mode === 'invite' || c.join_mode == null) {
+                              inviteCode =
+                                typeof window !== 'undefined'
+                                  ? window.prompt(`Code d’invitation pour « ${c.name} »`)
+                                  : null
+                              if (inviteCode == null || !String(inviteCode).trim()) {
+                                setJoinMsg('Code d’invitation requis')
+                                return
+                              }
+                            }
+                            await joinCommunity(c.slug, inviteCode)
                             onClose()
                           } catch (e: unknown) {
                             setJoinMsg(e instanceof ApiError ? e.detail : 'Erreur')
@@ -175,7 +187,13 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                       }}
                       className="text-xs px-2 py-1 rounded bg-violet-600 text-white disabled:opacity-50"
                     >
-                      {joiningSlug === c.slug ? '…' : 'Rejoindre'}
+                      {c.join_mode === 'closed'
+                        ? 'Fermé'
+                        : joiningSlug === c.slug
+                          ? '…'
+                          : c.join_mode === 'open'
+                            ? 'Rejoindre'
+                            : 'Code…'}
                     </button>
                   </div>
                 ))

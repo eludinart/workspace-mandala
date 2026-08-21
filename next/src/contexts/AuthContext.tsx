@@ -3,7 +3,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { authApi } from '@/api/auth'
 import { isCapacitor } from '@/lib/api-client'
-import { isMandalaAdminEmail } from '@/lib/admin-emails'
 import {
   type ActingRole,
   readActingRoleFromStorage,
@@ -41,8 +40,6 @@ const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 function computeIsRealAdmin(user: User): boolean {
   const norm = (v: unknown) => (v == null ? '' : String(v).trim().toLowerCase())
-  const email = String((user as { email?: string })?.email ?? '')
-  if (isMandalaAdminEmail(email)) return true
   const appRole = norm(user?.app_role)
   const wpRole = norm(user?.wp_role)
   const jwtRole = norm(user?.role)

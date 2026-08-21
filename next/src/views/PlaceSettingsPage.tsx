@@ -51,6 +51,8 @@ export function PlaceSettingsPage({
   const [charter, setCharter] = useState<CharterBlock[]>([])
   const [listedPublic, setListedPublic] = useState(true)
   const [profilePublic, setProfilePublic] = useState(true)
+  const [joinMode, setJoinMode] = useState<'open' | 'invite' | 'closed'>('invite')
+  const [inviteCode, setInviteCode] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
   useEffect(() => {
     if (lockedSection) setTab(lockedSection)
@@ -78,6 +80,8 @@ export function PlaceSettingsPage({
     setCharter(s.charter ?? [])
     setListedPublic(s.listed_public !== false)
     setProfilePublic(s.profile_public !== false)
+    setJoinMode(s.join_mode === 'open' || s.join_mode === 'closed' ? s.join_mode : 'invite')
+    setInviteCode(s.invite_code ?? null)
   }, [])
 
   const load = useCallback(async () => {
@@ -123,6 +127,7 @@ export function PlaceSettingsPage({
         charter,
         listed_public: listedPublic,
         profile_public: profilePublic,
+        join_mode: joinMode,
       }
       if (avatar !== null) body.avatar = avatar
       const data = await communitiesApi.updateSettings(active.slug, body)
@@ -431,6 +436,62 @@ export function PlaceSettingsPage({
                 </span>
               </span>
             </label>
+          </fieldset>
+
+          <fieldset className="space-y-3 rounded-xl border border-slate-800 p-3">
+            <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
+              Adhésion
+            </legend>
+            <label className="block space-y-1">
+              <span className="text-xs text-slate-500">Mode d’entrée</span>
+              <select
+                value={joinMode}
+                onChange={(e) =>
+                  setJoinMode(e.target.value as 'open' | 'invite' | 'closed')
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              >
+                <option value="invite">Sur invitation (code)</option>
+                <option value="open">Ouvert à tous</option>
+                <option value="closed">Fermé (gestionnaires seulement)</option>
+              </select>
+            </label>
+            {(joinMode === 'invite' || inviteCode) && (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-slate-300">
+                  Code :{' '}
+                  <span className="font-mono tracking-widest text-slate-100">
+                    {inviteCode || '—'}
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    void (async () => {
+                      if (!active?.slug) return
+                      setSaving(true)
+                      try {
+                        const data = await communitiesApi.updateSettings(active.slug, {
+                          rotate_invite_code: true,
+                        })
+                        applySettings(data.settings)
+                        setMsg('Nouveau code d’invitation généré.')
+                        setMsgOk(true)
+                      } catch (e: unknown) {
+                        setMsg(e instanceof ApiError ? e.detail : 'Erreur')
+                        setMsgOk(false)
+                      } finally {
+                        setSaving(false)
+                      }
+                    })()
+                  }}
+                  className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800"
+                >
+                  Régénérer
+                </button>
+              </div>
+            )}
           </fieldset>
 
           <label className="block">

@@ -125,8 +125,26 @@ async function getWpRole(userId: number): Promise<string> {
   }
 }
 
+async function ensureBootstrapAdminRoleRow(userId: number): Promise<void> {
+  const pool = getPool()
+  const tRoles = table('mandala_app_roles')
+  try {
+    await pool.execute(
+      `INSERT INTO ${tRoles} (user_id, app_role) VALUES (?, 'admin')
+       ON DUPLICATE KEY UPDATE app_role = 'admin'`,
+      [userId]
+    )
+  } catch {
+    /* table optionnelle */
+  }
+}
+
 async function getAppRole(userId: number, wpRole: string, email?: string): Promise<string> {
-  if (isBootstrapAdminEmail(email)) return 'admin'
+  // Comptes bootstrap déjà existants : synchroniser le rôle en base (pas à l'inscription).
+  if (isBootstrapAdminEmail(email)) {
+    await ensureBootstrapAdminRoleRow(userId)
+    return 'admin'
+  }
   const pool = getPool()
   const tRoles = table('mandala_app_roles')
   try {
@@ -140,6 +158,18 @@ async function getAppRole(userId: number, wpRole: string, email?: string): Promi
     // Table might not exist
   }
   return wpRole === 'administrator' ? 'admin' : 'user'
+}
+
+/** Compte toujours présent en base (sessions après suppression). */
+export async function userAccountExists(userId: number): Promise<boolean> {
+  if (!userId || !isDbConfigured()) return false
+  const pool = getPool()
+  const tbl = table('users')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT ID FROM ${tbl} WHERE ID = ? LIMIT 1`,
+    [userId]
+  )
+  return !!rows[0]
 }
 
 /** Parse WordPress serialized capabilities a:1:{s:10:"administrator";i:1;} */
@@ -401,6 +431,12 @@ export async function authRegister(
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new Error('Adresse email invalide')
+  }
+  if (isBootstrapAdminEmail(email)) {
+    throw Object.assign(
+      new Error('Cet email est réservé. Contactez un administrateur pour obtenir un accès.'),
+      { status: 403 }
+    )
   }
   if (password.length < 6) {
     throw new Error('Le mot de passe doit contenir au moins 6 caractères')

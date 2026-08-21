@@ -21,6 +21,7 @@ export type PublicCommunityCard = {
   avatar?: string | null
   listed_public?: boolean
   profile_public?: boolean
+  join_mode?: 'open' | 'invite' | 'closed'
 }
 
 export type PublicCommunityProfile = PublicCommunityCard & {
@@ -63,6 +64,8 @@ export type CommunityManagerSettings = {
   charter: CharterBlock[]
   listed_public: boolean
   profile_public: boolean
+  join_mode?: 'open' | 'invite' | 'closed'
+  invite_code?: string | null
   can_manage?: boolean
   member_role?: string | null
 }
@@ -92,7 +95,11 @@ export const communitiesApi = {
       accepted_at: string
       slug: string
     }>,
-  join: (slug: string) => api.post('/api/communities/join', { slug }),
+  join: (slug: string, inviteCode?: string | null) =>
+    api.post('/api/communities/join', {
+      slug,
+      ...(inviteCode ? { invite_code: inviteCode } : {}),
+    }),
   leave: (slug: string) => api.post('/api/communities/leave', { community_slug: slug }),
   create: (body: {
     slug: string

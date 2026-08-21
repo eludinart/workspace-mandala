@@ -31,7 +31,7 @@ type CommunityContextValue = {
   dismissPlaceSwitch: () => void
   loading: boolean
   refresh: () => Promise<void>
-  joinCommunity: (slug: string) => Promise<void>
+  joinCommunity: (slug: string, inviteCode?: string | null) => Promise<void>
 }
 
 const STORAGE_KEY = 'mandala_active_community'
@@ -120,8 +120,8 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   }, [activeSlug])
 
   const joinCommunity = useCallback(
-    async (slug: string) => {
-      await communitiesApi.join(slug)
+    async (slug: string, inviteCode?: string | null) => {
+      await communitiesApi.join(slug, inviteCode)
       await refresh()
       setActiveSlug(slug)
     },

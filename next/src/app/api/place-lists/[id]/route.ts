@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const itemId = parseInt(idRaw, 10)
     if (!itemId) return NextResponse.json({ error: 'id invalide' }, { status: 400 })
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>
-    const { uid, communityId } = await requirePlaceOpsAccess(req, {
+    const { uid, communityId, canManage } = await requirePlaceOpsAccess(req, {
       communitySlug: body.community_slug != null ? String(body.community_slug) : null,
       communityId: body.community_id != null ? Number(body.community_id) : null,
     })
@@ -54,21 +54,24 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         itemId,
         userId: uid,
         bringDate: String(body.bring_date ?? ''),
+        canManage,
       })
       return NextResponse.json({ ok: true, item })
     }
     if (action === 'brought') {
-      await markPlaceListBrought({ communityId, itemId, userId: uid })
+      await markPlaceListBrought({ communityId, itemId, userId: uid, canManage })
       return NextResponse.json({ ok: true })
     }
     if (action === 'defer') {
-      const item = await deferPlaceListItem({ communityId, itemId, userId: uid })
+      const item = await deferPlaceListItem({ communityId, itemId, userId: uid, canManage })
       return NextResponse.json({ ok: true, item })
     }
     if (action === 'update_details') {
       const item = await updatePlaceListItemDetails({
         communityId,
         itemId,
+        userId: uid,
+        canManage,
         title: body.title != null ? String(body.title) : undefined,
         notes: body.notes !== undefined ? (body.notes != null ? String(body.notes) : null) : undefined,
       })
@@ -83,6 +86,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         itemId,
         images,
         userId: uid,
+        canManage,
       })
       return NextResponse.json({ ok: true, photos })
     }
@@ -91,6 +95,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         communityId,
         itemId,
         photoId: Number(body.photo_id),
+        userId: uid,
+        canManage,
       })
       return NextResponse.json({ ok: true })
     }

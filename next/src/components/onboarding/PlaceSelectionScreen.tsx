@@ -7,7 +7,7 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 type Props = {
   title?: string
   subtitle?: string
-  onComplete: (slug: string) => Promise<void>
+  onComplete: (slug: string, inviteCode?: string | null) => Promise<void>
   initialSlug?: string | null
 }
 
@@ -20,6 +20,7 @@ export function PlaceSelectionScreen({
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(initialSlug)
+  const [inviteCode, setInviteCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,21 +33,32 @@ export function PlaceSelectionScreen({
       .finally(() => setLoading(false))
   }, [])
 
+  const selected = places.find((p) => p.slug === selectedSlug) ?? null
+  const needsInvite = !selected || selected.join_mode !== 'open'
+
   const submit = useCallback(async () => {
-    if (!selectedSlug) {
+    if (!selectedSlug || !selected) {
       setError('Veuillez sélectionner un lieu.')
+      return
+    }
+    if (selected.join_mode === 'closed') {
+      setError('Ce lieu n’accepte pas les adhésions libres.')
+      return
+    }
+    if (selected.join_mode === 'invite' && !inviteCode.trim()) {
+      setError('Code d’invitation requis pour ce lieu.')
       return
     }
     setError(null)
     setSubmitting(true)
     try {
-      await onComplete(selectedSlug)
+      await onComplete(selectedSlug, inviteCode.trim() || null)
     } catch (err: unknown) {
       setError((err as { message?: string })?.message ?? 'Impossible de rejoindre ce lieu.')
     } finally {
       setSubmitting(false)
     }
-  }, [onComplete, selectedSlug])
+  }, [inviteCode, onComplete, selected, selectedSlug])
 
   return (
     <div className="w-full max-w-lg space-y-5">
@@ -112,11 +124,29 @@ export function PlaceSelectionScreen({
         </ul>
       )}
 
+      {needsInvite && selected && selected.join_mode !== 'closed' && (
+        <label className="block space-y-1">
+          <span className="text-xs text-slate-400">Code d’invitation</span>
+          <input
+            value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)}
+            placeholder="Ex. A1B2C3D4"
+            className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm tracking-widest uppercase"
+            autoComplete="off"
+          />
+        </label>
+      )}
+
       {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
       <button
         type="button"
-        disabled={submitting || !selectedSlug || places.length === 0}
+        disabled={
+          submitting ||
+          !selectedSlug ||
+          places.length === 0 ||
+          selected?.join_mode === 'closed'
+        }
         onClick={() => void submit()}
         className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3 font-semibold disabled:opacity-50"
       >

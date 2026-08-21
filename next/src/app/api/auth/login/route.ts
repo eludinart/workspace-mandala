@@ -4,11 +4,21 @@ import { authLogin } from '@/lib/db-auth'
 import { formatDbConnectionError } from '@/lib/db-errors'
 import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
+import { clientIpFromRequest, rateLimitAllow } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIpFromRequest(req.headers)
+    const limited = rateLimitAllow(`auth-login:${ip}`, 20, 60_000)
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: 'Trop de tentatives. Réessayez plus tard.' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } }
+      )
+    }
+
     if (!isDbConfigured()) {
       return NextResponse.json(
         { error: 'Backend non configuré (MARIADB_*)' },

@@ -35,15 +35,26 @@ export function jwtDecode(token: string): { sub: string; role?: string; email?: 
   }
 }
 
-/** Vérifie la signature sans rejeter les tokens expirés (pour le refresh). */
-export function jwtDecodeForRefresh(token: string): { sub: string; role?: string; email?: string } | null {
+/**
+ * Refresh uniquement : accepte un token expiré dans une fenêtre de grâce.
+ * Ne jamais utiliser pour requireAuth / routes protégées.
+ */
+export function jwtDecodeForRefresh(
+  token: string,
+  maxGraceSeconds = 7 * 24 * 3600
+): { sub: string; role?: string; email?: string } | null {
   try {
     const decoded = jwt.verify(token, getSecret(), { ignoreExpiration: true }) as {
       sub: string
       role?: string
       email?: string
+      exp?: number
     }
-    return decoded
+    if (typeof decoded.exp === 'number') {
+      const overdue = Math.floor(Date.now() / 1000) - decoded.exp
+      if (overdue > maxGraceSeconds) return null
+    }
+    return { sub: decoded.sub, role: decoded.role, email: decoded.email }
   } catch {
     return null
   }

@@ -6,12 +6,13 @@
  *   2. Header `Authorization: Bearer` (Capacitor / Android standalone)
  */
 import { NextRequest } from 'next/server'
-import { jwtDecode, jwtDecodeForRefresh } from './jwt'
-import { authMe } from './db-auth'
-import { isMandalaAdminEmail } from './admin-emails'
+import { jwtDecode } from './jwt'
+import { authMe, userAccountExists } from './db-auth'
+import { isBootstrapAdminEmail } from './admin-bootstrap'
 import { isSiteManagerAppRole } from './app-roles'
 import { canManageCommunityInContext, canOrganizeCommunityEvents, type CommunityRole } from './db-communities'
 import { getTokenFromCookie } from './auth-cookie'
+import { isDbConfigured } from './db'
 
 export function getAuthHeader(req: NextRequest): string | null {
   // 1. Cookie httpOnly (web) — inaccessible au JS, priorité absolue
@@ -23,8 +24,9 @@ export function getAuthHeader(req: NextRequest): string | null {
   return auth.slice(7)
 }
 
+/** Strict : signature + expiration. Jamais de ignoreExpiration ici. */
 function decodeToken(token: string) {
-  return jwtDecode(token) ?? jwtDecodeForRefresh(token)
+  return jwtDecode(token)
 }
 
 export function getUserIdFromRequest(req: NextRequest): string | null {
@@ -36,19 +38,26 @@ export function getUserIdFromRequest(req: NextRequest): string | null {
 }
 
 export async function requireAuth(req: NextRequest): Promise<{ userId: string }> {
-  const userId = getUserIdFromRequest(req)
-  if (!userId) {
-    throw new ApiError(401, 'Authentification requise')
+  const token = getAuthHeader(req)
+  if (!token) throw new ApiError(401, 'Authentification requise')
+  const payload = decodeToken(token)
+  if (!payload?.sub) throw new ApiError(401, 'Session expirée ou invalide')
+  const userId = String(payload.sub)
+  const uid = parseInt(userId, 10)
+  if (!uid) throw new ApiError(401, 'Session invalide')
+  if (isDbConfigured()) {
+    const exists = await userAccountExists(uid)
+    if (!exists) throw new ApiError(401, 'Compte introuvable')
   }
   return { userId }
 }
 
 export async function requireAdmin(req: NextRequest): Promise<{ userId: string }> {
+  const { userId } = await requireAuth(req)
   const token = getAuthHeader(req)
   if (!token) throw new ApiError(401, 'Authentification requise')
   const payload = decodeToken(token)
   if (!payload?.sub) throw new ApiError(401, 'Token invalide')
-  const userId = String(payload.sub)
 
   const role = (payload.role as string) ?? ''
   if (role === 'admin' || role === 'administrator') {
@@ -154,7 +163,7 @@ export async function resolveCommunityManagerAccess(userId: number): Promise<Com
   try {
     const u = await authMe(userId)
     const email = String(u.email ?? '')
-    if (isMandalaAdminEmail(email)) return { isAppAdmin: true, isAppSiteManager: true }
+    if (isBootstrapAdminEmail(email)) return { isAppAdmin: true, isAppSiteManager: true }
     const r = String(u.app_role || u.wp_role || '').toLowerCase()
     if (r === 'admin' || r === 'administrator') return { isAppAdmin: true, isAppSiteManager: true }
     if (isSiteManagerAppRole(r)) return { isAppAdmin: false, isAppSiteManager: true }

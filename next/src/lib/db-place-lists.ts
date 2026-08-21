@@ -199,9 +199,16 @@ export async function addPlaceListPhotos(params: {
   itemId: number
   images: string[]
   userId: number
+  canManage?: boolean
 }): Promise<PlaceListPhoto[]> {
   await ensurePlaceListTables()
-  await getItemOrThrow(params.communityId, params.itemId)
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'editor',
+  })
   const pool = getPool()
   const tM = table('place_list_media')
   const [countRows] = await pool.execute<RowDataPacket[]>(
@@ -228,9 +235,17 @@ export async function removePlaceListPhoto(params: {
   communityId: number
   itemId: number
   photoId: number
+  userId: number
+  canManage?: boolean
 }): Promise<void> {
   await ensurePlaceListTables()
-  await getItemOrThrow(params.communityId, params.itemId)
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'editor',
+  })
   const pool = getPool()
   const tM = table('place_list_media')
   const [res] = await pool.execute(`DELETE FROM ${tM} WHERE id = ? AND item_id = ?`, [
@@ -245,10 +260,19 @@ export async function removePlaceListPhoto(params: {
 export async function updatePlaceListItemDetails(params: {
   communityId: number
   itemId: number
+  userId: number
+  canManage?: boolean
   title?: string
   notes?: string | null
 }): Promise<PlaceListItem> {
   await ensurePlaceListTables()
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'editor',
+  })
   const row = await getItemOrThrow(params.communityId, params.itemId)
   const pool = getPool()
   const t = table('place_list_items')
@@ -467,51 +491,90 @@ export async function claimPlaceListItem(params: {
   claim: boolean
 }): Promise<PlaceListItem> {
   await ensurePlaceListTables()
-  const row = await getItemOrThrow(params.communityId, params.itemId)
-  if (row.brought_at || row.archived_at) {
-    throw Object.assign(new Error('Élément déjà clôturé'), { status: 400 })
-  }
-  const kind = assertKind(String(row.kind))
   const pool = getPool()
+  const conn = await pool.getConnection()
+  const t = table('place_list_items')
   const tC = table('place_list_claims')
-
-  if (!params.claim) {
-    const [mine] = await pool.execute<RowDataPacket[]>(
-      `SELECT id FROM ${tC} WHERE item_id = ? AND user_id = ? LIMIT 1`,
-      [params.itemId, params.userId]
+  try {
+    await conn.beginTransaction()
+    const [locked] = await conn.execute<RowDataPacket[]>(
+      `SELECT * FROM ${t} WHERE id = ? AND community_id = ? FOR UPDATE`,
+      [params.itemId, params.communityId]
     )
-    if (!mine[0]) {
-      throw Object.assign(new Error("Vous n'êtes pas engagé sur cet élément"), { status: 403 })
+    const row = locked[0]
+    if (!row) {
+      throw Object.assign(new Error('Élément introuvable'), { status: 404 })
     }
-    await pool.execute(`DELETE FROM ${tC} WHERE item_id = ? AND user_id = ?`, [
-      params.itemId,
-      params.userId,
-    ])
-  } else {
-    if (kind === 'courses') {
-      const [others] = await pool.execute<RowDataPacket[]>(
-        `SELECT user_id FROM ${tC} WHERE item_id = ? AND user_id <> ? LIMIT 1`,
+    if (row.brought_at || row.archived_at) {
+      throw Object.assign(new Error('Élément déjà clôturé'), { status: 400 })
+    }
+    const kind = assertKind(String(row.kind))
+
+    if (!params.claim) {
+      const [mine] = await conn.execute<RowDataPacket[]>(
+        `SELECT id FROM ${tC} WHERE item_id = ? AND user_id = ? LIMIT 1`,
         [params.itemId, params.userId]
       )
-      if (others[0]) {
-        throw Object.assign(new Error("Déjà pris par quelqu'un d'autre"), { status: 409 })
+      if (!mine[0]) {
+        throw Object.assign(new Error("Vous n'êtes pas engagé sur cet élément"), { status: 403 })
       }
+      await conn.execute(`DELETE FROM ${tC} WHERE item_id = ? AND user_id = ?`, [
+        params.itemId,
+        params.userId,
+      ])
+    } else {
+      if (kind === 'courses') {
+        const [others] = await conn.execute<RowDataPacket[]>(
+          `SELECT user_id FROM ${tC} WHERE item_id = ? AND user_id <> ? LIMIT 1`,
+          [params.itemId, params.userId]
+        )
+        if (others[0]) {
+          throw Object.assign(new Error("Déjà pris par quelqu'un d'autre"), { status: 409 })
+        }
+      }
+      let bringDate =
+        params.bringDate != null ? String(params.bringDate).slice(0, 10) : null
+      if (bringDate && !/^\d{4}-\d{2}-\d{2}$/.test(bringDate)) {
+        throw Object.assign(new Error('Date invalide (YYYY-MM-DD)'), { status: 400 })
+      }
+      if (!bringDate) bringDate = todayYmd()
+      await conn.execute(
+        `INSERT INTO ${tC} (item_id, user_id, bring_date) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE bring_date = VALUES(bring_date), updated_at = CURRENT_TIMESTAMP`,
+        [params.itemId, params.userId, bringDate]
+      )
     }
-    let bringDate =
-      params.bringDate != null ? String(params.bringDate).slice(0, 10) : null
-    if (bringDate && !/^\d{4}-\d{2}-\d{2}$/.test(bringDate)) {
-      throw Object.assign(new Error('Date invalide (YYYY-MM-DD)'), { status: 400 })
-    }
-    if (!bringDate) bringDate = todayYmd()
-    await pool.execute(
-      `INSERT INTO ${tC} (item_id, user_id, bring_date) VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE bring_date = VALUES(bring_date), updated_at = CURRENT_TIMESTAMP`,
-      [params.itemId, params.userId, bringDate]
+
+    // sync claim summary in same transaction
+    const [claimRows] = await conn.execute<RowDataPacket[]>(
+      `SELECT user_id, bring_date FROM ${tC} WHERE item_id = ? ORDER BY created_at ASC`,
+      [params.itemId]
     )
+    if (!claimRows?.length) {
+      await conn.execute(`UPDATE ${t} SET claimed_by = NULL, bring_date = NULL WHERE id = ?`, [
+        params.itemId,
+      ])
+    } else {
+      const first = claimRows[0]
+      const dates = claimRows.map((r) => toYmd(r.bring_date)).filter(Boolean) as string[]
+      dates.sort()
+      await conn.execute(`UPDATE ${t} SET claimed_by = ?, bring_date = ? WHERE id = ?`, [
+        Number(first.user_id),
+        dates[0] ?? toYmd(first.bring_date),
+        params.itemId,
+      ])
+    }
+
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
   }
 
-  await syncItemClaimSummary(params.itemId)
-
+  const kindRow = await getItemOrThrow(params.communityId, params.itemId)
+  const kind = assertKind(String(kindRow.kind))
   const list = await listPlaceListItems({
     communityId: params.communityId,
     kind,
@@ -519,12 +582,11 @@ export async function claimPlaceListItem(params: {
   })
   const updated = list.find((x) => x.id === params.itemId)
   if (updated) return updated
-  const again = await getItemOrThrow(params.communityId, params.itemId)
   const [claims, photos] = await Promise.all([
     loadClaimsForItems([params.itemId]),
     loadPhotosForItems([params.itemId]),
   ])
-  return mapItem(again, claims.get(params.itemId) ?? [], photos.get(params.itemId) ?? [])
+  return mapItem(kindRow, claims.get(params.itemId) ?? [], photos.get(params.itemId) ?? [])
 }
 
 export async function setPlaceListBringDate(params: {
@@ -532,7 +594,15 @@ export async function setPlaceListBringDate(params: {
   itemId: number
   userId: number
   bringDate: string
+  canManage?: boolean
 }): Promise<PlaceListItem> {
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'claimer_or_manager',
+  })
   return claimPlaceListItem({
     communityId: params.communityId,
     itemId: params.itemId,
@@ -546,19 +616,18 @@ export async function markPlaceListBrought(params: {
   communityId: number
   itemId: number
   userId: number
+  canManage?: boolean
 }): Promise<void> {
   await ensurePlaceListTables()
-  await getItemOrThrow(params.communityId, params.itemId)
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'claimer_or_manager',
+  })
   const pool = getPool()
   const t = table('place_list_items')
-  const tC = table('place_list_claims')
-  // S'assurer que l'utilisateur est engagé (ou l'ajoute)
-  await pool.execute(
-    `INSERT INTO ${tC} (item_id, user_id, bring_date) VALUES (?, ?, CURDATE())
-     ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP`,
-    [params.itemId, params.userId]
-  )
-  await syncItemClaimSummary(params.itemId)
   await pool.execute(
     `UPDATE ${t}
      SET brought_at = NOW(),
@@ -592,8 +661,16 @@ export async function deferPlaceListItem(params: {
   communityId: number
   itemId: number
   userId: number
+  canManage?: boolean
 }): Promise<PlaceListItem> {
   await ensurePlaceListTables()
+  await assertPlaceListActor({
+    communityId: params.communityId,
+    itemId: params.itemId,
+    userId: params.userId,
+    canManage: !!params.canManage,
+    mode: 'claimer_or_manager',
+  })
   const row = await getItemOrThrow(params.communityId, params.itemId)
   const pool = getPool()
   const t = table('place_list_items')
@@ -618,4 +695,24 @@ export async function deferPlaceListItem(params: {
   const updated = list.find((x) => x.id === params.itemId)
   if (!updated) throw Object.assign(new Error('Élément introuvable après report'), { status: 500 })
   return updated
+}
+
+async function assertPlaceListActor(params: {
+  communityId: number
+  itemId: number
+  userId: number
+  canManage: boolean
+  mode: 'editor' | 'claimer_or_manager'
+}): Promise<void> {
+  if (params.canManage) return
+  const row = await getItemOrThrow(params.communityId, params.itemId)
+  const claims = await loadClaimsForItems([params.itemId])
+  const claimList = claims.get(params.itemId) ?? []
+  const isCreator = Number(row.created_by) === params.userId
+  const isClaimer =
+    claimList.some((c) => c.user_id === params.userId) ||
+    (row.claimed_by != null && Number(row.claimed_by) === params.userId)
+  if (params.mode === 'editor' && (isCreator || isClaimer)) return
+  if (params.mode === 'claimer_or_manager' && isClaimer) return
+  throw Object.assign(new Error('Droits insuffisants sur cet élément'), { status: 403 })
 }

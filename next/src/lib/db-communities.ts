@@ -1,7 +1,7 @@
 /**
  * Communautés (lieux / groupes) — multi-tenant Mandala.
  */
-import { createHash } from 'crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import {
@@ -37,17 +37,20 @@ export type CommunityRecord = {
   listed_public: boolean
   /** Fiche /lieux/[slug] accessible sans compte. */
   profile_public: boolean
+  /** open = libre · invite = code requis · closed = gestionnaires seulement */
+  join_mode: 'open' | 'invite' | 'closed'
   charter?: CharterBlock[]
 }
 
 export type CommunityManagerRecord = CommunityRecord & {
   charter: CharterBlock[]
+  invite_code: string | null
 }
 
 export type CommunityRole = 'member' | 'organizer' | 'admin'
 
 const COMMUNITY_COLS =
-  'id, slug, name, tagline, description, location, address, postal_code, city, country, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter, listed_public, profile_public'
+  'id, slug, name, tagline, description, location, address, postal_code, city, country, website, contact_email, latitude, longitude, accent_color, logo_emoji, avatar, charter, listed_public, profile_public, join_mode'
 
 function parseBoolFlag(v: unknown, defaultValue = true): boolean {
   if (v == null || v === '') return defaultValue
@@ -103,8 +106,15 @@ function mapCommunityRow(r: RowDataPacket): CommunityRecord {
     avatar: r.avatar ? String(r.avatar) : null,
     listed_public: parseBoolFlag(r.listed_public, true),
     profile_public: parseBoolFlag(r.profile_public, true),
+    join_mode: parseJoinMode(r.join_mode),
     ...(charter !== undefined ? { charter } : {}),
   }
+}
+
+function parseJoinMode(v: unknown): 'open' | 'invite' | 'closed' {
+  const s = String(v ?? '').trim().toLowerCase()
+  if (s === 'open' || s === 'closed' || s === 'invite') return s
+  return 'invite'
 }
 
 function mapCommunityManagerRow(r: RowDataPacket): CommunityManagerRecord {
@@ -112,6 +122,7 @@ function mapCommunityManagerRow(r: RowDataPacket): CommunityManagerRecord {
   return {
     ...base,
     charter: base.charter ?? [],
+    invite_code: r.invite_code != null ? String(r.invite_code) : null,
   }
 }
 
@@ -147,6 +158,8 @@ const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'longitude', ddl: 'longitude DECIMAL(9,6) DEFAULT NULL' },
   { name: 'listed_public', ddl: 'listed_public TINYINT(1) NOT NULL DEFAULT 1' },
   { name: 'profile_public', ddl: 'profile_public TINYINT(1) NOT NULL DEFAULT 1' },
+  { name: 'join_mode', ddl: "join_mode VARCHAR(16) NOT NULL DEFAULT 'invite'" },
+  { name: 'invite_code', ddl: 'invite_code VARCHAR(32) DEFAULT NULL' },
 ]
 
 /** Compose une adresse lisible à partir des champs structurés. */
@@ -171,6 +184,36 @@ async function ensureCommunityProfileColumns(pool: ReturnType<typeof getPool>, t
     if (existing.has(name)) continue
     await exec(pool, `ALTER TABLE ${tC} ADD COLUMN ${ddl}`)
     existing.add(name)
+  }
+}
+
+function generateInviteCode(): string {
+  return randomBytes(5).toString('hex').slice(0, 8).toUpperCase()
+}
+
+async function ensureCommunityInviteCodes(pool: ReturnType<typeof getPool>, tC: string): Promise<void> {
+  try {
+    await pool.execute(
+      `UPDATE ${tC} SET invite_code = UPPER(SUBSTRING(MD5(CONCAT(id, slug, RAND())), 1, 8))
+       WHERE invite_code IS NULL OR invite_code = ''`
+    )
+  } catch {
+    /* colonnes absentes le temps d'un deploy */
+  }
+}
+
+function inviteCodesMatch(expected: string | null | undefined, provided: string | null | undefined): boolean {
+  const a = String(expected ?? '')
+    .trim()
+    .toUpperCase()
+  const b = String(provided ?? '')
+    .trim()
+    .toUpperCase()
+  if (!a || !b || a.length !== b.length) return false
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
   }
 }
 
@@ -254,6 +297,7 @@ export async function ensureCommunitiesTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureCommunityProfileColumns(pool, tC)
+  await ensureCommunityInviteCodes(pool, tC)
   await seedDefaultCommunityGeoHints(pool, tC)
   const tA = table('mandala_charter_acceptances')
   await exec(
@@ -648,7 +692,8 @@ export async function listCommunityCatalogForUser(userId: number): Promise<Commu
   const tM = table('mandala_community_members')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location, c.website, c.contact_email,
-            c.accent_color, c.logo_emoji, c.avatar, m.role AS member_role
+            c.accent_color, c.logo_emoji, c.avatar, c.listed_public, c.profile_public, c.join_mode,
+            m.role AS member_role
      FROM ${tC} c
      LEFT JOIN ${tM} m ON m.community_id = c.id AND m.user_id = ?
      WHERE c.is_active = 1
@@ -666,14 +711,44 @@ export async function listCommunityCatalogForUser(userId: number): Promise<Commu
 export async function joinCommunity(params: {
   userId: number
   slug: string
+  inviteCode?: string | null
 }): Promise<CommunityRecord & { role: CommunityRole }> {
   const slug = params.slug.trim().toLowerCase()
-  if (!slug) throw new Error('Slug requis')
-  const community = await getCommunityBySlug(slug)
-  if (!community) throw new Error('Communauté introuvable')
-
+  if (!slug) throw Object.assign(new Error('Slug requis'), { status: 400 })
+  await ensureCommunitiesTables()
   const pool = getPool()
+  const tC = table('mandala_communities')
+  const [cRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT ${COMMUNITY_COLS}, invite_code FROM ${tC} WHERE slug = ? AND is_active = 1 LIMIT 1`,
+    [slug]
+  )
+  const crow = cRows[0]
+  if (!crow) throw Object.assign(new Error('Communauté introuvable'), { status: 404 })
+  const community = mapCommunityRow(crow)
+  const inviteCode = crow.invite_code != null ? String(crow.invite_code) : null
+
   const tM = table('mandala_community_members')
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT role FROM ${tM} WHERE community_id = ? AND user_id = ? LIMIT 1`,
+    [community.id, params.userId]
+  )
+  if (existing[0]) {
+    return { ...community, role: String(existing[0].role) as CommunityRole }
+  }
+
+  const mode = community.join_mode
+  if (mode === 'closed') {
+    throw Object.assign(
+      new Error('Ce lieu n’accepte pas les adhésions libres. Demandez à un gestionnaire.'),
+      { status: 403 }
+    )
+  }
+  if (mode === 'invite') {
+    if (!inviteCodesMatch(inviteCode, params.inviteCode)) {
+      throw Object.assign(new Error('Code d’invitation requis ou incorrect'), { status: 403 })
+    }
+  }
+
   await pool.execute(
     `INSERT INTO ${tM} (community_id, user_id, role) VALUES (?, ?, 'member')
      ON DUPLICATE KEY UPDATE role = role`,
@@ -1125,7 +1200,7 @@ export async function getCommunitySettingsForManager(
   const pool = getPool()
   const tC = table('mandala_communities')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT ${COMMUNITY_COLS} FROM ${tC} WHERE id = ? LIMIT 1`,
+    `SELECT ${COMMUNITY_COLS}, invite_code FROM ${tC} WHERE id = ? LIMIT 1`,
     [community.id]
   )
   const row = rows[0]
@@ -1162,6 +1237,9 @@ export async function updateCommunitySettingsForManager(
     charter?: unknown
     listed_public?: boolean
     profile_public?: boolean
+    join_mode?: 'open' | 'invite' | 'closed'
+    /** true = régénérer un nouveau code d’invitation */
+    rotate_invite_code?: boolean
   }
 ): Promise<CommunityManagerRecord> {
   const current = await getCommunitySettingsForManager(slug, userId, isAppSiteManager)
@@ -1286,6 +1364,15 @@ export async function updateCommunitySettingsForManager(
     updates.push('profile_public = ?')
     values.push(body.profile_public ? 1 : 0)
   }
+  if (body.join_mode !== undefined) {
+    const mode = parseJoinMode(body.join_mode)
+    updates.push('join_mode = ?')
+    values.push(mode)
+  }
+  if (body.rotate_invite_code) {
+    updates.push('invite_code = ?')
+    values.push(generateInviteCode())
+  }
 
   if (updates.length === 0) return current
 
@@ -1293,7 +1380,7 @@ export async function updateCommunitySettingsForManager(
   await pool.execute(`UPDATE ${tC} SET ${updates.join(', ')} WHERE id = ?`, values)
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT ${COMMUNITY_COLS} FROM ${tC} WHERE id = ? LIMIT 1`,
+    `SELECT ${COMMUNITY_COLS}, invite_code FROM ${tC} WHERE id = ? LIMIT 1`,
     [current.id]
   )
   return mapCommunityManagerRow(rows[0])
@@ -1320,6 +1407,7 @@ export type PublicCommunityCard = Pick<
   | 'avatar'
   | 'listed_public'
   | 'profile_public'
+  | 'join_mode'
 >
 
 function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
@@ -1343,6 +1431,7 @@ function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
     avatar: c.avatar,
     listed_public: c.listed_public,
     profile_public: c.profile_public,
+    join_mode: c.join_mode,
   }
 }
 

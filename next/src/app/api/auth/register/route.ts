@@ -4,11 +4,21 @@ import { authRegister } from '@/lib/db-auth'
 import { joinCommunity } from '@/lib/db-communities'
 import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
+import { clientIpFromRequest, rateLimitAllow } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIpFromRequest(req.headers)
+    const limited = rateLimitAllow(`auth-register:${ip}`, 8, 60_000)
+    if (!limited.ok) {
+      return NextResponse.json(
+        { error: 'Trop de tentatives. Réessayez plus tard.' },
+        { status: 429, headers: { 'Retry-After': String(limited.retryAfterSec) } }
+      )
+    }
+
     if (!isDbConfigured()) {
       return NextResponse.json(
         { error: 'Backend non configuré (MARIADB_*)' },
@@ -35,8 +45,18 @@ export async function POST(req: NextRequest) {
     const user = await authRegister(email, password, firstName, lastName)
 
     const communitySlug = String(body.community_slug ?? '').trim().toLowerCase()
+    const inviteCode =
+      body.invite_code != null
+        ? String(body.invite_code)
+        : body.invite_token != null
+          ? String(body.invite_token)
+          : null
     if (communitySlug) {
-      await joinCommunity({ userId: user.id, slug: communitySlug })
+      await joinCommunity({
+        userId: user.id,
+        slug: communitySlug,
+        inviteCode,
+      })
     }
 
     const token = jwtEncode({
@@ -51,7 +71,7 @@ export async function POST(req: NextRequest) {
     const e = err as Error
     const status = (e as Error & { status?: number }).status || 400
     return NextResponse.json(
-      { error: e.message || 'Erreur lors de l\'inscription' },
+      { error: e.message || "Erreur lors de l'inscription" },
       { status }
     )
   }

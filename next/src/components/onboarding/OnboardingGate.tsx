@@ -48,8 +48,8 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   }, [communitiesLoading, refreshStatus, active?.slug])
 
   const handlePlaceJoined = useCallback(
-    async (slug: string) => {
-      await joinCommunity(slug)
+    async (slug: string, inviteCode?: string | null) => {
+      await joinCommunity(slug, inviteCode)
       setActiveSlug(slug)
       try {
         sessionStorage.removeItem('mdl_post_register_onboarding')
