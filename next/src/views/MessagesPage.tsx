@@ -214,20 +214,44 @@ export function MessagesPage({
     void loadChannels()
   }
 
+  const mobileChatOpen = selectedId != null
+
   return (
-    <div className="h-full min-h-[min(70vh,720px)] flex flex-col gap-3">
-      <div>
+    <div
+      className={`flex-1 min-h-0 flex flex-col gap-3 ${
+        mobileChatOpen ? 'overflow-hidden' : 'overflow-y-auto md:overflow-hidden'
+      }`}
+    >
+      <div className={mobileChatOpen ? 'hidden lg:block shrink-0' : 'shrink-0'}>
         <h1 className="text-xl sm:text-2xl font-bold">Messages</h1>
         <p className="text-slate-400 text-sm mt-1">
           Conversations entre membres — <strong className="text-slate-200">{active?.name}</strong>
         </p>
       </div>
 
+      {mobileChatOpen && selected && (
+        <div className="lg:hidden shrink-0 flex items-center gap-2 -mx-1">
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/80"
+            aria-label="Retour à la liste des dialogues"
+          >
+            <span aria-hidden>←</span>
+            Dialogues
+          </button>
+        </div>
+      )}
+
       {msg && <p className="text-sm text-emerald-400">{msg}</p>}
       {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {pending.length > 0 && (
-        <section className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2 shrink-0">
+        <section
+          className={`rounded-xl border border-amber-700/40 bg-amber-950/20 p-4 space-y-2 shrink-0 ${
+            mobileChatOpen ? 'hidden lg:block' : ''
+          }`}
+        >
           <h2 className="text-sm font-semibold text-amber-200">Graines reçues ({pending.length})</h2>
           {pending.map((s) => (
             <div
@@ -261,15 +285,27 @@ export function MessagesPage({
         </section>
       )}
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] gap-3">
-        <div className="min-h-[220px] lg:min-h-0">
+      <div
+        className={`flex-1 min-h-0 gap-3 overflow-hidden ${
+          mobileChatOpen
+            ? 'flex flex-col lg:grid lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] lg:grid-rows-1'
+            : 'grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] lg:grid-rows-1'
+        }`}
+      >
+        <div
+          className={`min-h-[220px] lg:min-h-0 ${mobileChatOpen ? 'hidden lg:block' : ''}`}
+        >
           <ConversationMemberSidebar
             onChannelOpened={handleChannelOpened}
             highlightUserId={openWithUserId}
           />
         </div>
 
-        <section className="flex flex-col min-h-[200px] lg:min-h-0 border border-slate-800 rounded-xl bg-slate-900/30 overflow-hidden">
+        <section
+          className={`flex flex-col min-h-[200px] lg:min-h-0 border border-slate-800 rounded-xl bg-slate-900/30 overflow-hidden ${
+            mobileChatOpen ? 'hidden lg:flex' : ''
+          }`}
+        >
           <div className="shrink-0 px-3 py-2 border-b border-slate-800">
             <h2 className="text-sm font-semibold text-slate-200">Dialogues</h2>
           </div>
@@ -322,7 +358,11 @@ export function MessagesPage({
           </div>
         </section>
 
-        <section className="flex flex-col min-h-[320px] lg:min-h-0">
+        <section
+          className={`min-h-0 flex flex-col ${
+            mobileChatOpen ? 'flex-1 overflow-hidden' : 'hidden lg:flex lg:h-full lg:min-h-0'
+          }`}
+        >
           {selectedId && selected ? (
             <DialogueStream
               channelId={selectedId}

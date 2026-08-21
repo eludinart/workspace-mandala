@@ -271,8 +271,8 @@ export function DialogueStream({
   }
 
   return (
-    <div className="flex-1 min-h-[min(70vh,600px)] flex flex-col rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
-      <header className="shrink-0 px-3 py-2 border-b border-slate-800">
+    <div className="min-h-0 flex-1 grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden lg:min-h-[min(70vh,600px)]">
+      <header className="px-3 py-2 border-b border-slate-800">
         <div className="flex items-center gap-2">
           <TemperatureIndicator temperature={temperature} className="shrink-0" />
           <UserAvatar
@@ -457,7 +457,7 @@ export function DialogueStream({
         )}
       </header>
 
-      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 space-y-4 min-h-0">
+      <div ref={listRef} className="min-h-0 overflow-y-auto px-3 py-4 space-y-4">
         {visibleMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500 py-8">Envoyez le premier message.</p>
         )}
@@ -480,20 +480,21 @@ export function DialogueStream({
         })}
       </div>
 
-      <div className="shrink-0 p-3 border-t border-slate-800 flex gap-2">
+      <div className="border-t border-slate-800 bg-slate-900/95 p-3 flex gap-2 items-center">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && void handleSendText()}
           placeholder="Écrire un message…"
-          className="flex-1 px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500 text-sm"
+          className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500 text-sm"
+          aria-label="Écrire un message"
         />
         <button
           type="button"
           onClick={() => void handleSendText()}
           disabled={!input.trim() || sending}
-          className="shrink-0 px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
+          className="shrink-0 min-h-[44px] px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
         >
           {sending ? '…' : 'Envoyer'}
         </button>
