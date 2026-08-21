@@ -1,10 +1,15 @@
-/** Push FCM — optionnel (MVP Mandala : no-op). */
+/**
+ * Push — envoi via Web Push (VAPID).
+ * Ancien nom FCM conservé pour les appels existants (messages Clairière).
+ */
+import { sendWebPushToUser } from './web-push-send'
+
 export async function sendFcmPush(
-  _userId: number,
+  userId: number,
   _email: string | null,
-  _title: string,
-  _body: string,
-  _url?: string
+  title: string,
+  body: string,
+  url?: string
 ): Promise<void> {
-  // Intégrer Firebase plus tard si besoin.
+  await sendWebPushToUser(userId, title, body, url ?? null)
 }

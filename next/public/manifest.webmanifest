@@ -1,0 +1,19 @@
+{
+  "name": "Mandala",
+  "short_name": "Mandala",
+  "description": "Lieux, communautés et événements",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#7c3aed",
+  "lang": "fr",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

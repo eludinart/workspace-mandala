@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { enablePushNotifications, syncPushSubscriptionIfGranted } from '@/lib/push-client'
 
 const DISMISS_KEY = 'mdl_push_priming_dismissed'
 
 /**
- * Propose les notifications navigateur (PWA / mobile web).
- * Les push FCM natives (Android/iOS) seront branchées sur le même flux plus tard.
+ * Propose les notifications navigateur (PWA / mobile web) et enregistre l’abonnement Web Push.
  */
 export function PushNotificationPriming() {
   const { user } = useAuth()
-  const userId = user && (user as { id?: string | number }).id != null ? String((user as { id: string | number }).id) : null
+  const userId =
+    user && (user as { id?: string | number }).id != null
+      ? String((user as { id: string | number }).id)
+      : null
   const [open, setOpen] = useState(false)
 
   const evaluateOpen = useCallback(() => {
@@ -33,10 +36,18 @@ export function PushNotificationPriming() {
     evaluateOpen()
   }, [evaluateOpen])
 
+  useEffect(() => {
+    if (!userId) return
+    void syncPushSubscriptionIfGranted()
+  }, [userId])
+
   const onAccept = async () => {
     setOpen(false)
     try {
-      await Notification.requestPermission()
+      const result = await enablePushNotifications()
+      if (!result.ok && result.reason === 'denied') {
+        localStorage.setItem(DISMISS_KEY, '1')
+      }
     } catch {
       /* ignore */
     }
@@ -72,6 +83,7 @@ export function PushNotificationPriming() {
           </div>
         </div>
         <p className="text-xs text-slate-500">
+          Sur iPhone : ajoutez d&apos;abord Mandala à l&apos;écran d&apos;accueil, puis activez les notifications.
           Vous pourrez modifier ce choix dans les réglages du navigateur ou du téléphone.
         </p>
         <div className="flex flex-col sm:flex-row gap-2">

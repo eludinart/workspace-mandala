@@ -19,8 +19,16 @@ export const notificationsApi = {
     api.post('/api/notifications/preferences', prefs),
   stats: () => api.get('/api/notifications/stats'),
   ensureTables: () => api.post('/api/notifications/ensure_tables', {}),
+  vapidPublicKey: () => api.get('/api/notifications/vapid_public_key'),
+  registerPushSubscription: (payload: {
+    endpoint: string
+    keys: { p256dh: string; auth: string }
+  }) => api.post('/api/notifications/register_push_subscription', payload),
+  unregisterPushSubscription: (payload: { endpoint: string }) =>
+    api.post('/api/notifications/unregister_push_subscription', payload),
+  /** @deprecated alias → registerPushSubscription */
   registerPushToken: (payload: Record<string, unknown>) =>
-    api.post('/api/notifications/register_push_token', payload),
+    api.post('/api/notifications/register_push_subscription', payload),
   create: (notification: Record<string, unknown>) =>
     api.post('/api/notifications/create', notification),
   adminList: (params: Record<string, unknown> = {}) => {
@@ -29,5 +37,6 @@ export const notificationsApi = {
   },
   adminDelete: (payload: { ids?: number[]; filters?: Record<string, unknown> }) =>
     api.post('/api/notifications/admin_delete', payload),
-  test: () => api.post('/api/notifications/test', {}),
+  test: () => api.post('/api/notifications/test_push', {}),
+  testPush: () => api.post('/api/notifications/test_push', {}),
 }

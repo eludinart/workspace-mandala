@@ -34,6 +34,10 @@ Copier depuis `docker-compose.env.example` et remplir les secrets depuis **Manda
 | `NEXT_PUBLIC_APP_URL` | `https://mandala.eludein.art` |
 | `NEXT_PUBLIC_API_URL` | *(vide)* |
 | `MARIADB_POOL_LIMIT` | `2` |
+| `VAPID_SUBJECT` | `mailto:admin@mandala.eludein.art` |
+| `VAPID_PUBLIC_KEY` | `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | idem (secret) |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | **identique** à `VAPID_PUBLIC_KEY` |
 
 **Build args** (si proposés par Coolify) :
 
@@ -41,6 +45,9 @@ Copier depuis `docker-compose.env.example` et remplir les secrets depuis **Manda
 |-----------|--------|
 | `NEXT_PUBLIC_APP_URL` | même URL HTTPS |
 | `NEXT_PUBLIC_API_URL` | vide |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | même clé publique VAPID |
+
+Push smartphone : [PUSH-SMARTPHONE.md](PUSH-SMARTPHONE.md).
 
 ## 3. Lier la base MariaDB
 

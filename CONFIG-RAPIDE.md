@@ -39,6 +39,15 @@ Variables prod prêtes sur le VPS : `/root/mandala-coolify-production.env` (SSH 
 - `next/.env.local` — Next dev
 - `nogit/` — notes privées
 
+## Notifications push (smartphone)
+
+Checklist : **[docs/PUSH-SMARTPHONE.md](docs/PUSH-SMARTPHONE.md)**
+
+Générer les clés : `npx web-push generate-vapid-keys` puis renseigner dans Coolify / `.env.local` :
+
+- `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (= même clé publique)
+
 ## VPS
 
 ```powershell

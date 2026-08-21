@@ -151,6 +151,12 @@ Script local : `scripts/setup-mariadb-tunnel-mandala.sh` (à exécuter sur le VP
 | `NEXT_PUBLIC_APP_URL` | `https://mandala.eludein.art` |
 | `NEXT_PUBLIC_API_URL` | *(vide)* |
 | `MARIADB_POOL_LIMIT` | `2` |
+| `VAPID_SUBJECT` | `mailto:admin@mandala.eludein.art` |
+| `VAPID_PUBLIC_KEY` | sortie de `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | idem (secret serveur) |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | **identique** à `VAPID_PUBLIC_KEY` |
+
+Push smartphone : [docs/PUSH-SMARTPHONE.md](PUSH-SMARTPHONE.md).
 
 9. **Deploy** → tester `https://votre-domaine/api/health`.
 

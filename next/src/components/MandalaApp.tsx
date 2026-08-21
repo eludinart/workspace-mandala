@@ -54,6 +54,25 @@ export type MandalaNavigate = (
   }
 ) => void
 
+const APP_PAGES_FROM_URL: MandalaPage[] = [
+  'home',
+  'calendar',
+  'events',
+  'members',
+  'messages',
+  'notifications',
+  'account',
+  'charter',
+  'places-map',
+  'place-settings',
+  'place-profile',
+  'place-charter',
+  'place-members',
+  'place-announcements',
+  'managed-places',
+  'admin',
+]
+
 export function MandalaApp() {
   const { user, loading } = useAuth()
   const [mounted, setMounted] = useState(false)
@@ -97,6 +116,47 @@ export function MandalaApp() {
     }
     setPage(p)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const pageParam = params.get('page') as MandalaPage | null
+    if (pageParam && APP_PAGES_FROM_URL.includes(pageParam)) {
+      const channelId = params.get('channelId') ?? params.get('channel_id')
+      const community = params.get('community') ?? params.get('community_slug')
+      const userId = params.get('userId') ?? params.get('user_id')
+      navigate(pageParam, {
+        messagesChannelId: channelId?.trim() || undefined,
+        messagesUserId: userId?.trim() || undefined,
+        communitySlug: community?.trim() || undefined,
+      })
+    }
+  }, [navigate])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string } | null
+      if (!data || data.type !== 'MDL_PUSH_NAV' || !data.url) return
+      try {
+        const u = new URL(data.url, window.location.origin)
+        const pageParam = u.searchParams.get('page') as MandalaPage | null
+        if (pageParam && APP_PAGES_FROM_URL.includes(pageParam)) {
+          navigate(pageParam, {
+            messagesChannelId: u.searchParams.get('channelId') ?? undefined,
+            messagesUserId: u.searchParams.get('userId') ?? undefined,
+            communitySlug: u.searchParams.get('community') ?? undefined,
+          })
+        } else if (u.pathname.startsWith('/app')) {
+          navigate('notifications')
+        }
+      } catch {
+        navigate('notifications')
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [navigate])
 
   const content = useMemo(() => {
     switch (page) {

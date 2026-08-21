@@ -14,6 +14,8 @@ import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
+import { notificationsApi } from '@/api/notifications'
+import { enablePushNotifications, isPushClientSupported } from '@/lib/push-client'
 
 const EMOJI_PRESETS = ['🌸', '🕉️', '🌿', '✨', '🌻', '🦋', '🔥', '💜']
 
@@ -54,6 +56,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [leaving, setLeaving] = useState(false)
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [pushMsg, setPushMsg] = useState<string | null>(null)
+  const [pushBusy, setPushBusy] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -170,6 +174,44 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   }
 
   const leavePlaceName = communities.find((c) => c.slug === leaveSlug)?.name ?? leaveSlug ?? ''
+
+  const handleEnablePush = async () => {
+    setPushBusy(true)
+    setPushMsg(null)
+    try {
+      const result = await enablePushNotifications()
+      if (result.ok) setPushMsg('Notifications activées sur cet appareil.')
+      else if (result.reason === 'denied') setPushMsg('Permission refusée dans le navigateur.')
+      else if (result.reason === 'no_vapid_key')
+        setPushMsg('Clés VAPID manquantes côté serveur — contactez l’admin.')
+      else if (result.reason === 'unsupported')
+        setPushMsg('Cet appareil / navigateur ne prend pas en charge les push web.')
+      else setPushMsg('Impossible d’activer les notifications.')
+    } catch (e: unknown) {
+      setPushMsg(e instanceof ApiError ? e.detail : 'Erreur lors de l’activation')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  const handleTestPush = async () => {
+    setPushBusy(true)
+    setPushMsg(null)
+    try {
+      const res = (await notificationsApi.testPush()) as {
+        ok?: boolean
+        error?: string
+        sent?: number
+        devices?: number
+      }
+      if (res.ok) setPushMsg(`Test envoyé (${res.sent ?? 0} appareil(s)). Mettez l’app en arrière-plan pour vérifier.`)
+      else setPushMsg(res.error ?? 'Échec du test push')
+    } catch (e: unknown) {
+      setPushMsg(e instanceof ApiError ? e.detail : 'Erreur lors du test')
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   return (
     <div className="max-w-lg space-y-6">
@@ -368,10 +410,38 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
 
       <section id="alertes" className="scroll-mt-20 space-y-3">
         <h2 className="text-lg font-semibold text-slate-200">Préférences alertes</h2>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           <p className="text-sm text-slate-400 leading-relaxed">
-            Les préférences de notifications push et e-mail seront configurables ici prochainement.
-            En attendant, consultez le centre de notifications depuis l&apos;en-tête.
+            Activez les notifications push pour recevoir les messages même lorsque Mandala est en
+            arrière-plan. Sur iPhone, ajoutez d&apos;abord le site à l&apos;écran d&apos;accueil.
+          </p>
+          {isPushClientSupported() ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                disabled={pushBusy}
+                onClick={() => void handleEnablePush()}
+                className="px-3 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
+              >
+                Activer sur cet appareil
+              </button>
+              <button
+                type="button"
+                disabled={pushBusy}
+                onClick={() => void handleTestPush()}
+                className="px-3 py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-800 disabled:opacity-50"
+              >
+                Envoyer un test push
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-amber-400/90">
+              Ce navigateur ne prend pas en charge les notifications push web.
+            </p>
+          )}
+          {pushMsg && <p className="text-xs text-slate-300">{pushMsg}</p>}
+          <p className="text-xs text-slate-500">
+            Le centre de notifications in-app reste disponible depuis l&apos;en-tête.
           </p>
         </div>
       </section>

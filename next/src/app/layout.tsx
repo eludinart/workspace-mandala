@@ -12,6 +12,16 @@ export const metadata: Metadata = {
   },
   description: 'Lieux, communautés et événements — France et espace francophone',
   ...(appUrl ? { metadataBase: new URL(appUrl) } : {}),
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Mandala',
+    statusBarStyle: 'default',
+  },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
