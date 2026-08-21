@@ -66,6 +66,36 @@ export const ORGANISATION_NAV: SiteManagerNavItem[] = [
   },
 ]
 
+/**
+ * Vie du lieu — Courses / Logistique / Cercles (tous les membres du lieu).
+ */
+export const PLACE_LIFE_NAV: SiteManagerNavItem[] = [
+  {
+    id: 'courses',
+    label: 'Courses',
+    icon: '🛒',
+    description: 'Liste partagée d’apports',
+    scope: 'active',
+  },
+  {
+    id: 'logistics',
+    label: 'Logistique',
+    icon: '🧰',
+    description: 'Besoins matériel du lieu',
+    scope: 'active',
+  },
+  {
+    id: 'circles',
+    label: 'Cercles',
+    icon: '🔄',
+    description: 'Journal matin / soir + photo tableau',
+    scope: 'active',
+  },
+]
+
+/** @deprecated utiliser PLACE_LIFE_NAV */
+export const PREVIEW_OPS_NAV = PLACE_LIFE_NAV
+
 /** @deprecated Utiliser ORGANISATION_NAV */
 export const SITE_MANAGER_NAV = ORGANISATION_NAV
 
@@ -117,5 +147,8 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   'place-members': 'Membres du lieu',
   'place-announcements': 'Annonces du lieu',
   'managed-places': 'Mes lieux',
+  courses: 'Courses',
+  logistics: 'Logistique',
+  circles: 'Cercles',
   admin: 'Administration',
 }

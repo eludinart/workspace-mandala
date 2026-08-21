@@ -8,6 +8,7 @@ import {
   MAIN_NAV,
   ORGANISATION_NAV,
   ORGANISATION_PLACE_PAGES,
+  PLACE_LIFE_NAV,
   SECONDARY_NAV,
   type AdminTabId,
 } from '@/lib/nav'
@@ -147,24 +148,39 @@ export function AppNavPanel({
           ))}
         </nav>
 
-        {isSiteManager && (
+        <SectionTitle>Vie du lieu</SectionTitle>
+        <nav className="flex flex-col gap-0.5 px-2">
+          {PLACE_LIFE_NAV.map((item) => (
+            <NavButton
+              key={`life-${item.id}`}
+              active={page === item.id}
+              icon={item.icon}
+              label={item.label}
+              description={item.description}
+              onClick={() => go(item.id)}
+            />
+          ))}
+        </nav>
+
+        {(isSiteManager || isAppAdmin) && (
           <>
             <SectionTitle>Organisation</SectionTitle>
             <nav className="flex flex-col gap-0.5 px-2">
-              {ORGANISATION_NAV.map((item) => (
-                <NavButton
-                  key={`org-${item.id}`}
-                  active={
-                    page === item.id ||
-                    (item.id === 'managed-places' && ORGANISATION_PLACE_PAGES.includes(page))
-                  }
-                  icon={item.icon}
-                  label={item.label}
-                  description={item.description}
-                  variant="manager"
-                  onClick={() => go(item.id)}
-                />
-              ))}
+              {isSiteManager &&
+                ORGANISATION_NAV.map((item) => (
+                  <NavButton
+                    key={`org-${item.id}`}
+                    active={
+                      page === item.id ||
+                      (item.id === 'managed-places' && ORGANISATION_PLACE_PAGES.includes(page))
+                    }
+                    icon={item.icon}
+                    label={item.label}
+                    description={item.description}
+                    variant="manager"
+                    onClick={() => go(item.id)}
+                  />
+                ))}
             </nav>
           </>
         )}

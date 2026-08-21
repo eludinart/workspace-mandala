@@ -143,6 +143,11 @@ html.light [class*='text-violet-300'] {
   font-family: inherit;
 }
 
+.m-map-marker-wrap {
+  background: none;
+  border: none;
+}
+
 .m-map-marker {
   display: flex;
   align-items: center;

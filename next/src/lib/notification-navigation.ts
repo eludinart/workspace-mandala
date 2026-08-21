@@ -25,6 +25,9 @@ const APP_PAGES: MandalaPage[] = [
   'place-members',
   'place-announcements',
   'managed-places',
+  'courses',
+  'logistics',
+  'circles',
   'admin',
 ]
 
