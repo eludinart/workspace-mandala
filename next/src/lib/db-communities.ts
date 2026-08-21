@@ -368,21 +368,11 @@ export async function listCommunitiesForUser(userId: number): Promise<Array<Comm
      ORDER BY c.name ASC`,
     [userId]
   )
-  if (memberRows.length > 0) {
-    return memberRows.map((r) => ({
-      ...mapCommunityRow(r),
-      role: String(r.role) as CommunityRole,
-    }))
-  }
-  // Premier accès : rattacher à toutes les communautés actives en "member" (démo)
-  const all = await listCommunities()
-  for (const c of all) {
-    await pool.execute(
-      `INSERT IGNORE INTO ${tM} (community_id, user_id, role) VALUES (?, ?, 'member')`,
-      [c.id, userId]
-    )
-  }
-  return listCommunitiesForUser(userId)
+  if (memberRows.length === 0) return []
+  return memberRows.map((r) => ({
+    ...mapCommunityRow(r),
+    role: String(r.role) as CommunityRole,
+  }))
 }
 
 export type CommunityMemberDisplay = {
@@ -659,9 +649,10 @@ export async function createCommunity(params: {
   return created
 }
 
-/** Rattache l'utilisateur à toutes les communautés actives (membre). */
+/** @deprecated Ne plus rattacher automatiquement à tous les lieux. */
 export async function syncUserToAllActiveCommunities(userId: number): Promise<number> {
   if (!userId) return 0
+  // Conservé uniquement pour scripts ops éventuels — l’app ne l’appelle plus.
   await ensureCommunitiesTables()
   await seedDefaultCommunitiesIfEmpty()
   const pool = getPool()
