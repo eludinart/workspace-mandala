@@ -40,6 +40,11 @@ export const placeListsApi = {
     ),
   summary: (communitySlug: string) =>
     api.get(`/api/place-ops/summary?community_slug=${encodeURIComponent(communitySlug)}`),
+  today: (communitySlug: string, day?: string) => {
+    const q = new URLSearchParams({ community_slug: communitySlug })
+    if (day) q.set('day', day)
+    return api.get(`/api/place-ops/today?${q.toString()}`)
+  },
 }
 
 export const circleJournalApi = {
