@@ -10,6 +10,7 @@ import { AdminActingRoleBar } from '@/components/AdminActingRoleBar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
 import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer'
+import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { useEffect, useState } from 'react'
 
 export function Layout({
@@ -56,6 +57,7 @@ export function Layout({
         />
         <PlaceSwitchBanner />
         <AdminActingRoleBar />
+        <PushNotificationPriming />
         <main
           className={`flex-1 min-h-0 p-4 md:p-6 ${
             page === 'messages'

@@ -21,6 +21,43 @@ export function isPushClientSupported(): boolean {
   )
 }
 
+export type PushDeviceStatus = {
+  supported: boolean
+  /** Permission navigateur + abonnement PushManager présent */
+  active: boolean
+  permission: NotificationPermission | 'unsupported'
+  hasSubscription: boolean
+}
+
+/** Indique si les notifications push sont réellement actives sur cet appareil. */
+export async function getPushDeviceStatus(): Promise<PushDeviceStatus> {
+  if (!isPushClientSupported()) {
+    return {
+      supported: false,
+      active: false,
+      permission: 'unsupported',
+      hasSubscription: false,
+    }
+  }
+  const permission = Notification.permission
+  if (permission !== 'granted') {
+    return { supported: true, active: false, permission, hasSubscription: false }
+  }
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/')
+    const subscription = registration ? await registration.pushManager.getSubscription() : null
+    const hasSubscription = !!subscription
+    return {
+      supported: true,
+      active: hasSubscription,
+      permission,
+      hasSubscription,
+    }
+  } catch {
+    return { supported: true, active: false, permission, hasSubscription: false }
+  }
+}
+
 export async function registerMandalaServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (!isPushClientSupported()) return null
   try {

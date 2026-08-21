@@ -18,7 +18,6 @@ import { AdminPage } from '@/views/AdminPage'
 import { PlaceAnnouncementsPage } from '@/views/PlaceAnnouncementsPage'
 import { NotificationsPage } from '@/views/NotificationsPage'
 import { CharterPage } from '@/views/CharterPage'
-import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate'
 import { TelemetryTracker } from '@/components/TelemetryTracker'
 import type { AdminTabId } from '@/lib/nav'
@@ -239,7 +238,6 @@ export function MandalaApp() {
     <CommunityProvider>
       <OnboardingGate>
         <TelemetryTracker page={page} />
-        <PushNotificationPriming />
         <Layout page={page} onNavigate={navigate}>
           {content}
         </Layout>
