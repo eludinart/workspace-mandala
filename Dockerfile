@@ -15,9 +15,9 @@ ENV SKIP_TYPECHECK=1
 # Plafond heap : laisse de la RAM au kernel (évite OOM kill pendant « Collecting build traces »).
 ENV NODE_OPTIONS=--max-old-space-size=1536
 COPY next/package*.json ./next/
-# Cache npm entre builds (BuildKit) — accélère npm ci quand package-lock change peu.
+# npm install (pas npm ci) : le lockfile Windows peut diverger des deps optionnelles Linux (@emnapi).
 RUN --mount=type=cache,target=/root/.npm \
-    cd next && npm ci
+    cd next && npm install --no-audit --no-fund
 COPY next/ ./next/
 COPY scripts/ ./scripts/
 # Typecheck déjà fait en CI ; build Docker sans tsc pour gagner ~15–25 s.

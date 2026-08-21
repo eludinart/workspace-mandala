@@ -12,8 +12,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV SKIP_TYPECHECK=1
 ENV NODE_OPTIONS=--max-old-space-size=1536
 COPY next/package*.json ./next/
+# npm install (pas npm ci) : le lockfile Windows peut diverger des deps optionnelles Linux (@emnapi).
 RUN --mount=type=cache,target=/root/.npm \
-    cd next && npm ci
+    cd next && npm install --no-audit --no-fund
 COPY next/ ./next/
 COPY scripts/ ./scripts/
 RUN cd next && npm run build:docker
