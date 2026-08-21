@@ -1268,6 +1268,12 @@ export async function createClairiereMessageNotification(
       }
     }
     try {
+      const { invalidateNotifUnreadCache } = await import('./db-notifications')
+      invalidateNotifUnreadCache(recipientId)
+    } catch {
+      /* cache optionnel */
+    }
+    try {
       const { sendFcmPush } = await import('./fcm')
       await sendFcmPush(recipientId, recipientEmail, title, bodyText, actionUrl)
     } catch {

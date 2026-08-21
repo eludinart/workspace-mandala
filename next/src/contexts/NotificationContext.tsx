@@ -41,8 +41,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [items, setItems] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const listLoadedRef = useRef(false)
 
-  const userId = user && (user as { id?: string | number }).id != null ? String((user as { id: string | number }).id) : null
+  const userId =
+    user && (user as { id?: string | number }).id != null
+      ? String((user as { id: string | number }).id)
+      : null
 
   const fetchUnread = useCallback(async () => {
     if (!userId) return
@@ -65,6 +69,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         }
         setItems(data.items ?? [])
         setUnreadCount(data.unread ?? 0)
+        listLoadedRef.current = true
         return data
       } catch {
         return null
@@ -111,10 +116,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [fetchUnread])
 
+  const refreshFromPush = useCallback(() => {
+    void fetchUnread()
+    if (listLoadedRef.current) void fetchList({ per_page: 15 })
+  }, [fetchUnread, fetchList])
+
   useEffect(() => {
     if (!userId) {
       setUnreadCount(0)
       setItems([])
+      listLoadedRef.current = false
       return
     }
     void fetchUnread()
@@ -131,6 +142,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
   }, [fetchUnread])
+
+  // Push reçu (app ouverte) ou clic sur notification OS → mettre à jour la cloche
+  useEffect(() => {
+    if (!userId || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const onMessage = (event: MessageEvent) => {
+      const type = (event.data as { type?: string } | null)?.type
+      if (type === 'MDL_PUSH_RECEIVED' || type === 'MDL_PUSH_NAV') {
+        refreshFromPush()
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [userId, refreshFromPush])
 
   return (
     <NotificationContext.Provider

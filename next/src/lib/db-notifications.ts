@@ -11,10 +11,19 @@
  */
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
+import { cacheDel } from './server-cache'
+import { actionUrlToWebPath, isWebPushConfigured, sendWebPushToUser } from './web-push-send'
 
 const T_NOTIF = () => table('notifications')
 const T_DELIV = () => table('notification_deliveries')
 const T_PREF = () => table('notification_preferences')
+
+export function invalidateNotifUnreadCache(userId: number | number[]): void {
+  const ids = Array.isArray(userId) ? userId : [userId]
+  for (const id of ids) {
+    if (Number.isFinite(id) && id > 0) cacheDel(`notif_unread:${id}`)
+  }
+}
 
 // Singleton : CREATE TABLE une seule fois ; migrations ALTER idempotentes à chaque appel
 let _createTablesPromise: Promise<void> | null = null
@@ -291,6 +300,7 @@ export async function createNotification(
 
   const recipients = await resolveRecipients(input)
   let deliveries = 0
+  const deliveredUserIds: number[] = []
   for (const r of recipients) {
     const email = normalizeEmail(r.email)
     if (!email) continue
@@ -299,7 +309,22 @@ export async function createNotification(
       [notificationId, r.user_id, email]
     )
     deliveries++
+    deliveredUserIds.push(r.user_id)
   }
+  invalidateNotifUnreadCache(deliveredUserIds)
+
+  // Push appareil (best-effort)
+  if (isWebPushConfigured() && deliveredUserIds.length > 0) {
+    const webPath = actionUrlToWebPath(actionUrl)
+    const pushBody = body ?? title
+    const jobs = deliveredUserIds.map((uid) => sendWebPushToUser(uid, title, pushBody, webPath))
+    if (deliveredUserIds.length <= 20) {
+      await Promise.allSettled(jobs)
+    } else {
+      void Promise.allSettled(jobs)
+    }
+  }
+
   return { notification_id: notificationId, deliveries }
 }
 
@@ -385,6 +410,7 @@ export async function markRead(userId: number, ids: number[]): Promise<void> {
      WHERE d.user_id = ? AND d.notification_id IN (${placeholders})`,
     [userId, ...clean]
   )
+  invalidateNotifUnreadCache(userId)
 }
 
 export async function markAllRead(userId: number): Promise<void> {
@@ -393,6 +419,7 @@ export async function markAllRead(userId: number): Promise<void> {
   const pool = getPool()
   const tD = T_DELIV()
   await pool.execute(`UPDATE ${tD} SET read_at = COALESCE(read_at, NOW()) WHERE user_id = ?`, [userId])
+  invalidateNotifUnreadCache(userId)
 }
 
 export async function deleteRead(userId: number): Promise<number> {

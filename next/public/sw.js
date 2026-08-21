@@ -7,6 +7,16 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
+function notifyOpenClients(message) {
+  return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    for (const client of clients) {
+      if (client.url.startsWith(self.location.origin)) {
+        client.postMessage(message)
+      }
+    }
+  })
+}
+
 self.addEventListener('push', (event) => {
   let data = {
     title: 'Mandala',
@@ -28,12 +38,21 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Mandala', {
-      body: data.body || '',
-      icon: '/icon.svg',
-      badge: '/icon.svg',
-      data: { url: data.url || '/app?page=notifications' },
-    })
+    Promise.all([
+      self.registration.showNotification(data.title || 'Mandala', {
+        body: data.body || '',
+        icon: '/icon.svg',
+        badge: '/icon.svg',
+        data: { url: data.url || '/app?page=notifications' },
+      }),
+      // Rafraîchir la cloche / le sous-menu si l'app est ouverte
+      notifyOpenClients({
+        type: 'MDL_PUSH_RECEIVED',
+        title: data.title,
+        body: data.body,
+        url: data.url,
+      }),
+    ])
   )
 })
 
@@ -49,6 +68,7 @@ self.addEventListener('notificationclick', (event) => {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           await client.focus()
           client.postMessage({ type: 'MDL_PUSH_NAV', url: raw })
+          client.postMessage({ type: 'MDL_PUSH_RECEIVED', url: raw })
           return
         }
       }

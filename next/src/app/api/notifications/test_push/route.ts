@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, ApiError } from '@/lib/api-auth'
+import { createNotification, invalidateNotifUnreadCache } from '@/lib/db-notifications'
 import { countPushSubscriptionsForUser } from '@/lib/db-push'
 import { isWebPushConfigured, sendWebPushToUser } from '@/lib/web-push-send'
 
 export const dynamic = 'force-dynamic'
 
-/** Envoie une notification de test à l’utilisateur connecté. */
+/** Envoie une notification de test (cloche in-app + push appareil). */
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await requireAuth(req)
@@ -36,17 +37,35 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await sendWebPushToUser(
-      uid,
-      'Mandala — test',
-      'Si vous voyez ceci, les notifications push fonctionnent sur cet appareil.',
-      '/app?page=notifications'
-    )
+    const title = 'Mandala — test'
+    const body =
+      'Si vous voyez ceci, les notifications push fonctionnent sur cet appareil.'
+    const actionUrl = '/app?page=notifications'
+
+    // Entrée cloche / sous-menu (+ push via createNotification)
+    const created = await createNotification({
+      type: 'system',
+      title,
+      body,
+      action_url: actionUrl,
+      recipient_type: 'user',
+      recipient_id: uid,
+      priority: 'normal',
+      created_by: uid,
+    })
+    invalidateNotifUnreadCache(uid)
+
+    // Si dédoublonnage (double-clic < 20s), createNotification n'a pas renvoyé de push
+    const pushResult = created.deduplicated
+      ? await sendWebPushToUser(uid, title, body, actionUrl)
+      : { sent: devices, gone: 0, errors: 0 }
 
     return NextResponse.json({
-      ok: result.sent > 0,
+      ok: true,
       devices,
-      ...result,
+      in_app: true,
+      notification_id: created.notification_id,
+      ...pushResult,
     })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
