@@ -96,10 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       return
     }
-    const hasSessionHint =
-      !!localStorage.getItem('auth_user') ||
-      (isCapacitor() && !!localStorage.getItem('auth_token'))
-    if (!hasSessionHint) {
+    // Capacitor : pas de cookie httpOnly → besoin d’un token / user en localStorage.
+    // Web : le cookie peut vivre sans auth_user → toujours tenter /api/auth/me.
+    if (
+      isCapacitor() &&
+      !localStorage.getItem('auth_token') &&
+      !localStorage.getItem('auth_user')
+    ) {
       setLoading(false)
       return
     }
@@ -129,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       localStorage.removeItem('auth_token')
       localStorage.removeItem('auth_user')
+      setUser(null)
     } finally {
       setLoading(false)
     }

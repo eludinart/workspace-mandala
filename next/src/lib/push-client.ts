@@ -128,21 +128,39 @@ export async function enablePushNotifications(): Promise<{
     return { ok: false, reason: 'subscribe_incomplete', permission }
   }
 
-  await notificationsApi.registerPushSubscription({
-    endpoint,
-    keys: { p256dh, auth },
-  })
+  try {
+    await notificationsApi.registerPushSubscription({
+      endpoint,
+      keys: { p256dh, auth },
+    })
+  } catch {
+    return { ok: false, reason: 'register_failed', permission }
+  }
 
   return { ok: true, permission }
 }
 
 /** Si la permission est déjà accordée, resynchronise l’abonnement (après login). */
+let syncInFlight: Promise<void> | null = null
+let lastSyncAt = 0
+const SYNC_COOLDOWN_MS = 60_000
+
 export async function syncPushSubscriptionIfGranted(): Promise<void> {
   if (!isPushClientSupported()) return
   if (Notification.permission !== 'granted') return
-  try {
-    await enablePushNotifications()
-  } catch (err) {
-    console.warn('[push] sync failed', err)
-  }
+  if (Date.now() - lastSyncAt < SYNC_COOLDOWN_MS) return
+  if (syncInFlight) return syncInFlight
+
+  syncInFlight = (async () => {
+    try {
+      await enablePushNotifications()
+      lastSyncAt = Date.now()
+    } catch {
+      /* ex. file d’attente MariaDB saturée — non bloquant */
+    } finally {
+      syncInFlight = null
+    }
+  })()
+
+  return syncInFlight
 }

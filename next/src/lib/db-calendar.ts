@@ -21,6 +21,8 @@ export type CalendarPresentUser = {
 export type CalendarDaySummary = {
   day: string // YYYY-MM-DD
   is_disabled: boolean
+  /** Capacité d’inscription pour le jour (défaut 20). */
+  max_participants: number
   present_count: number
   i_am_present: boolean
   present_users: CalendarPresentUser[]
@@ -29,9 +31,12 @@ export type CalendarDaySummary = {
 export type CalendarDayDetail = {
   day: string
   is_disabled: boolean
+  max_participants: number
   present_users: Array<{ user_id: number; pseudo: string; display_name: string }>
   events: Array<Pick<EventRecord, 'id' | 'title' | 'starts_at' | 'ends_at' | 'location' | 'phase'>>
 }
+
+export const DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS = 20
 
 let _ensured = false
 
@@ -90,11 +95,20 @@ export async function ensureCalendarTables(): Promise<void> {
       is_disabled TINYINT(1) NOT NULL DEFAULT 0,
       disabled_by INT DEFAULT NULL,
       disabled_reason VARCHAR(255) DEFAULT NULL,
+      max_participants INT NOT NULL DEFAULT ${DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS},
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uk_comm_day (community_id, day),
       KEY idx_comm_disabled (community_id, is_disabled)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
+
+  await pool
+    .execute(
+      `ALTER TABLE ${tD} ADD COLUMN max_participants INT NOT NULL DEFAULT ${DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS}`
+    )
+    .catch(() => {
+      /* colonne déjà présente */
+    })
 
   await exec(
     pool,
@@ -156,11 +170,56 @@ export async function setCalendarDayDisabled(params: {
   const day = assertDay(params.day)
   const reason = params.reason ? String(params.reason).trim().slice(0, 255) : null
   await pool.execute(
-    `INSERT INTO ${tD} (community_id, day, is_disabled, disabled_by, disabled_reason)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO ${tD} (community_id, day, is_disabled, disabled_by, disabled_reason, max_participants)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE is_disabled = VALUES(is_disabled), disabled_by = VALUES(disabled_by), disabled_reason = VALUES(disabled_reason)`,
-    [params.communityId, day, params.is_disabled ? 1 : 0, params.byUserId || null, reason]
+    [
+      params.communityId,
+      day,
+      params.is_disabled ? 1 : 0,
+      params.byUserId || null,
+      reason,
+      DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS,
+    ]
   )
+}
+
+function clampMaxParticipants(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10)
+  if (!Number.isFinite(n)) return DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS
+  return Math.min(500, Math.max(1, Math.floor(n)))
+}
+
+export async function setCalendarDayMaxParticipants(params: {
+  communityId: number
+  day: string
+  max_participants: number
+  byUserId: number
+}): Promise<{ max_participants: number }> {
+  await ensureCalendarTables()
+  const pool = getPool()
+  const tD = table('calendar_day_settings')
+  const day = assertDay(params.day)
+  const max = clampMaxParticipants(params.max_participants)
+  await pool.execute(
+    `INSERT INTO ${tD} (community_id, day, is_disabled, disabled_by, disabled_reason, max_participants)
+     VALUES (?, ?, 0, NULL, NULL, ?)
+     ON DUPLICATE KEY UPDATE max_participants = VALUES(max_participants)`,
+    [params.communityId, day, max]
+  )
+  return { max_participants: max }
+}
+
+async function getDayMaxParticipants(communityId: number, day: string): Promise<number> {
+  await ensureCalendarTables()
+  const pool = getPool()
+  const tD = table('calendar_day_settings')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT max_participants FROM ${tD} WHERE community_id = ? AND day = ? LIMIT 1`,
+    [communityId, assertDay(day)]
+  )
+  if (!rows[0] || rows[0].max_participants == null) return DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS
+  return clampMaxParticipants(rows[0].max_participants)
 }
 
 async function isDayDisabled(communityId: number, day: string): Promise<boolean> {
@@ -190,6 +249,21 @@ export async function setPresence(params: {
     throw new Error('Cette journée est désactivée par un administrateur.')
   }
   if (params.present) {
+    const [existing] = await pool.execute<RowDataPacket[]>(
+      `SELECT id FROM ${tP} WHERE community_id = ? AND day = ? AND user_id = ? LIMIT 1`,
+      [params.communityId, day, params.userId]
+    )
+    if (!existing?.[0]) {
+      const [countRows] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) AS c FROM ${tP} WHERE community_id = ? AND day = ?`,
+        [params.communityId, day]
+      )
+      const count = Number(countRows[0]?.c ?? 0)
+      const max = await getDayMaxParticipants(params.communityId, day)
+      if (count >= max) {
+        throw new Error(`Capacité atteinte (${max} personne${max > 1 ? 's' : ''} maximum pour ce jour).`)
+      }
+    }
     await pool.execute(
       `INSERT INTO ${tP} (community_id, day, user_id) VALUES (?, ?, ?)
        ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP`,
@@ -276,14 +350,17 @@ export async function getCalendarMonth(params: {
     : new Map<string, CalendarPresentUser[]>()
 
   const [disabledRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(day, '%Y-%m-%d') AS day, is_disabled
+    `SELECT DATE_FORMAT(day, '%Y-%m-%d') AS day, is_disabled, max_participants
      FROM ${tD}
      WHERE community_id = ? AND day >= ? AND day < ?`,
     [params.communityId, start, endExclusive]
   )
   const disabledMap = new Map<string, boolean>()
+  const maxMap = new Map<string, number>()
   for (const r of disabledRows ?? []) {
-    disabledMap.set(String(r.day), Number(r.is_disabled ?? 0) === 1)
+    const d = String(r.day)
+    disabledMap.set(d, Number(r.is_disabled ?? 0) === 1)
+    maxMap.set(d, clampMaxParticipants(r.max_participants))
   }
 
   // Construire toutes les journées du mois (1..N)
@@ -299,7 +376,8 @@ export async function getCalendarMonth(params: {
     days.push({
       day,
       is_disabled,
-      present_count: present_users.length,
+      max_participants: maxMap.get(day) ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS,
+      present_count: countMap.get(day) ?? present_users.length,
       i_am_present: present_users.some((u) => u.user_id === params.viewerUserId),
       present_users,
     })
@@ -333,11 +411,14 @@ export async function getCalendarDayDetail(params: {
 
   const tD = table('calendar_day_settings')
   const [dRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT is_disabled, disabled_reason, disabled_by, updated_at
+    `SELECT is_disabled, disabled_reason, disabled_by, updated_at, max_participants
      FROM ${tD} WHERE community_id = ? AND day = ? LIMIT 1`,
     [params.communityId, day]
   )
   const is_disabled = Number(dRows[0]?.is_disabled ?? 0) === 1
+  const max_participants = clampMaxParticipants(
+    dRows[0]?.max_participants ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS
+  )
   void normalizeDbDateTime(dRows[0]?.updated_at)
 
   const present_users: CalendarDayDetail['present_users'] = []
@@ -387,6 +468,7 @@ export async function getCalendarDayDetail(params: {
     detail: {
       day,
       is_disabled,
+      max_participants,
       present_users,
       events,
     },

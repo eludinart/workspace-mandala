@@ -83,10 +83,6 @@ export function MandalaApp() {
   const [adminTab, setAdminTab] = useState<AdminTabId>('people')
   const [managedPlaceHubSlug, setManagedPlaceHubSlug] = useState<string | null>(null)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
   const navigate = useCallback<MandalaNavigate>((p, opts) => {
     if (opts?.messagesChannelId) {
       setMessagesOpenChannelId(opts.messagesChannelId)
@@ -117,20 +113,63 @@ export function MandalaApp() {
   }, [])
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const pageParam = params.get('page') as MandalaPage | null
-    if (pageParam && APP_PAGES_FROM_URL.includes(pageParam)) {
-      const channelId = params.get('channelId') ?? params.get('channel_id')
-      const community = params.get('community') ?? params.get('community_slug')
-      const userId = params.get('userId') ?? params.get('user_id')
-      navigate(pageParam, {
-        messagesChannelId: channelId?.trim() || undefined,
-        messagesUserId: userId?.trim() || undefined,
-        communitySlug: community?.trim() || undefined,
-      })
+    if (!pageParam || !APP_PAGES_FROM_URL.includes(pageParam)) return
+    const channelId = params.get('channelId') ?? params.get('channel_id')
+    const community = params.get('community') ?? params.get('community_slug')
+    const userId = params.get('userId') ?? params.get('user_id')
+    const eventIdRaw = params.get('eventId')
+    const eventId = eventIdRaw ? Number(eventIdRaw) : undefined
+    const adminTabRaw = params.get('adminTab')
+    const adminTabs: AdminTabId[] = ['people', 'communications', 'telemetry', 'places']
+    const adminTabParam =
+      adminTabRaw && adminTabs.includes(adminTabRaw as AdminTabId)
+        ? (adminTabRaw as AdminTabId)
+        : undefined
+    const hub = params.get('hub')
+    navigate(pageParam, {
+      messagesChannelId: channelId?.trim() || undefined,
+      messagesUserId: userId?.trim() || undefined,
+      communitySlug: community?.trim() || undefined,
+      eventId: eventId != null && Number.isFinite(eventId) ? eventId : undefined,
+      adminTab: adminTabParam,
+      managedPlaceHub: hub,
+    })
+    // bootstrap URL une seule fois
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return
+    const params = new URLSearchParams()
+    params.set('page', page)
+    if (page === 'messages') {
+      if (messagesOpenChannelId) params.set('channelId', messagesOpenChannelId)
+      if (messagesOpenUserId) params.set('userId', messagesOpenUserId)
+      if (messagesCommunitySlug) params.set('community', messagesCommunitySlug)
     }
-  }, [navigate])
+    if (page === 'events' && openEventId != null) params.set('eventId', String(openEventId))
+    if (page === 'admin' && adminTab !== 'people') params.set('adminTab', adminTab)
+    if (page === 'managed-places' && managedPlaceHubSlug) params.set('hub', managedPlaceHubSlug)
+    const nextUrl = `/app?${params.toString()}`
+    const cur = `${window.location.pathname}${window.location.search}`
+    if (cur !== nextUrl) window.history.replaceState(null, '', nextUrl)
+  }, [
+    mounted,
+    page,
+    messagesOpenChannelId,
+    messagesOpenUserId,
+    messagesCommunitySlug,
+    openEventId,
+    adminTab,
+    managedPlaceHubSlug,
+  ])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return

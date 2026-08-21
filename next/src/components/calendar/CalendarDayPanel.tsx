@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   type MonthEvent,
   type MonthDay,
@@ -11,10 +12,13 @@ import {
   phaseSoftBg,
 } from '@/components/calendar/calendar-utils'
 
+const DEFAULT_MAX = 20
+
 export type DayDetailData = {
   detail: {
     day: string
     is_disabled: boolean
+    max_participants?: number
     present_users: PresentUser[]
     events: MonthEvent[]
   }
@@ -34,6 +38,7 @@ export function CalendarDayPanel({
   onClose,
   onToggleSelfPresence,
   onToggleDayDisabled,
+  onSetMaxParticipants,
   onRemoveUser,
   variant,
 }: {
@@ -49,13 +54,39 @@ export function CalendarDayPanel({
   onClose?: () => void
   onToggleSelfPresence: (present: boolean) => void
   onToggleDayDisabled: (disabled: boolean) => void
+  onSetMaxParticipants: (max: number) => void | Promise<void>
   onRemoveUser: (userId: number) => void
   variant: 'sheet' | 'sidebar'
 }) {
+  const maxParticipants =
+    dayDetail?.detail.max_participants ??
+    selectedDayInfo?.max_participants ??
+    DEFAULT_MAX
+  const presentCount =
+    dayDetail?.detail.present_users.length ?? selectedDayInfo?.present_count ?? 0
+  const isFull = presentCount >= maxParticipants
+  const [maxDraft, setMaxDraft] = useState(String(maxParticipants))
+  const [maxBusy, setMaxBusy] = useState(false)
+
+  useEffect(() => {
+    setMaxDraft(String(maxParticipants))
+  }, [selectedDay, maxParticipants])
+
   const shellClass =
     variant === 'sidebar'
       ? 'rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden flex flex-col h-full min-h-[320px]'
-      : 'w-full max-w-lg max-h-[90vh] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl'
+      : 'w-full max-w-lg max-h-[min(90dvh,100%)] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl mb-[env(safe-area-inset-bottom)]'
+
+  const saveMax = async () => {
+    const n = parseInt(maxDraft, 10)
+    if (!Number.isFinite(n) || n < 1) return
+    setMaxBusy(true)
+    try {
+      await onSetMaxParticipants(n)
+    } finally {
+      setMaxBusy(false)
+    }
+  }
 
   return (
     <div className={shellClass}>
@@ -100,12 +131,18 @@ export function CalendarDayPanel({
                   ? 'Cette journée est fermée.'
                   : selectedDayInfo.i_am_present
                     ? 'Vous serez présent(e) ce jour-là.'
-                    : 'Inscrivez-vous pour indiquer votre présence.'}
+                    : isFull
+                      ? `Complet (${presentCount}/${maxParticipants}).`
+                      : 'Inscrivez-vous pour indiquer votre présence.'}
               </p>
             </div>
             <button
               type="button"
-              disabled={selectedDayInfo.is_disabled || presenceBusy}
+              disabled={
+                selectedDayInfo.is_disabled ||
+                presenceBusy ||
+                (!selectedDayInfo.i_am_present && isFull)
+              }
               onClick={() => onToggleSelfPresence(!selectedDayInfo.i_am_present)}
               className={`shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-40 ${
                 selectedDayInfo.i_am_present
@@ -113,28 +150,55 @@ export function CalendarDayPanel({
                   : 'bg-violet-600 text-white hover:bg-violet-500'
               }`}
             >
-              {selectedDayInfo.i_am_present ? 'Annuler' : "Je viens"}
+              {selectedDayInfo.i_am_present ? 'Annuler' : 'Je viens'}
             </button>
           </div>
         )}
 
         {!detailLoading && dayDetail && canManage && (
-          <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-amber-100">Gestion du lieu</p>
-              <p className="text-xs text-slate-400 mt-0.5">Réservé aux gestionnaires et administrateurs.</p>
+          <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-amber-100">Gestion du lieu</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Réservé aux gestionnaires et administrateurs.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onToggleDayDisabled(!dayDetail.detail.is_disabled)}
+                className={`px-3 py-1.5 text-sm rounded-lg border font-medium ${
+                  dayDetail.detail.is_disabled
+                    ? 'border-emerald-600/50 text-emerald-200 hover:bg-emerald-900/30'
+                    : 'border-amber-600/50 text-amber-200 hover:bg-amber-900/30'
+                }`}
+              >
+                {dayDetail.detail.is_disabled ? 'Réouvrir' : 'Fermer le jour'}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => onToggleDayDisabled(!dayDetail.detail.is_disabled)}
-              className={`px-3 py-1.5 text-sm rounded-lg border font-medium ${
-                dayDetail.detail.is_disabled
-                  ? 'border-emerald-600/50 text-emerald-200 hover:bg-emerald-900/30'
-                  : 'border-amber-600/50 text-amber-200 hover:bg-amber-900/30'
-              }`}
-            >
-              {dayDetail.detail.is_disabled ? 'Réouvrir' : 'Fermer le jour'}
-            </button>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex flex-col gap-1 min-w-[8rem]">
+                <span className="text-[11px] uppercase tracking-wide text-amber-200/70">
+                  Places max
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={maxDraft}
+                  onChange={(e) => setMaxDraft(e.target.value)}
+                  className="w-24 rounded-lg border border-amber-800/50 bg-slate-950/60 px-2 py-1.5 text-sm text-slate-100"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={maxBusy || parseInt(maxDraft, 10) === maxParticipants}
+                onClick={() => void saveMax()}
+                className="px-3 py-1.5 text-sm rounded-lg border border-amber-600/50 text-amber-100 hover:bg-amber-900/30 disabled:opacity-40"
+              >
+                Enregistrer
+              </button>
+            </div>
           </div>
         )}
 
@@ -173,7 +237,7 @@ export function CalendarDayPanel({
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Inscrits ({dayDetail.detail.present_users.length})
+                Inscrits ({presentCount}/{maxParticipants})
               </h2>
             </div>
             {dayDetail.detail.present_users.length === 0 ? (

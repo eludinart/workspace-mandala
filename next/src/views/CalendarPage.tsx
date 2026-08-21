@@ -210,6 +210,25 @@ export function CalendarPage() {
     [active?.slug, loadData, openDay, selectedDay]
   )
 
+  const setDayMaxParticipants = useCallback(
+    async (day: string, max_participants: number) => {
+      if (!active?.slug) return
+      setActionMsg(null)
+      try {
+        await calendarApi.setDayMaxParticipants({
+          community_slug: active.slug,
+          day,
+          max_participants,
+        })
+        await loadData()
+        if (selectedDay === day) await openDay(day, { sheet: false })
+      } catch (e: unknown) {
+        setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
+      }
+    },
+    [active?.slug, loadData, openDay, selectedDay]
+  )
+
   const updateSettings = useCallback(
     async (patch: { show_presence?: boolean; show_events?: boolean }) => {
       if (!active?.slug) return
@@ -267,6 +286,7 @@ export function CalendarPage() {
         presenceBusy,
         onToggleSelfPresence: (present: boolean) => void setPresence(selectedDay, present),
         onToggleDayDisabled: (disabled: boolean) => void setDayDisabled(selectedDay, disabled),
+        onSetMaxParticipants: (max: number) => setDayMaxParticipants(selectedDay, max),
         onRemoveUser: (userId: number) => void setPresence(selectedDay, false, userId),
       }
     : null

@@ -78,23 +78,22 @@ export function PushNotificationPriming() {
       setBannerVisible(false)
       return
     }
-    await syncPushSubscriptionIfGranted()
+    // Ne pas attendre le sync API ici (évite « Queue limit reached » au montage / Strict Mode).
     const next = await getPushDeviceStatus()
     setStatus(next)
 
     if (!next.supported || next.active) {
       setModalOpen(false)
       setBannerVisible(false)
+      if (next.active) void syncPushSubscriptionIfGranted()
       return
     }
 
     const snoozed = isSnoozed()
     const sessionHidden = isBannerHiddenThisSession()
 
-    // Bannière tant que non actives (sauf report session)
     setBannerVisible(!sessionHidden)
 
-    // Modal : permission encore « default » et pas en snooze
     if (next.permission === 'default' && !snoozed) {
       setModalOpen(true)
     } else {

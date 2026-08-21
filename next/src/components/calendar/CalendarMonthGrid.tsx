@@ -312,7 +312,9 @@ function WeekRowInner({
                 {d.getDate()}
               </span>
               {showPresence && inMonth && presentCount > 0 && !iAmPresent && (
-                <span className="text-[9px] text-slate-500 mt-1.5 shrink-0 tabular-nums">{presentCount}</span>
+                <span className="text-[9px] text-slate-500 mt-1.5 shrink-0 tabular-nums">
+                  {presentCount}/{cell.info?.max_participants ?? 20}
+                </span>
               )}
               {disabled && inMonth && (
                 <span className="text-[9px] text-slate-600 mt-1 shrink-0" title="Fermé">

@@ -87,7 +87,7 @@ export function EventDetailModal({
         aria-label="Détail de l'événement"
       >
         <div
-          className="w-full max-w-lg max-h-[92vh] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl"
+          className="w-full max-w-lg max-h-[min(92dvh,100%)] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl mb-[env(safe-area-inset-bottom)]"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex-1 min-h-0 overflow-y-auto">

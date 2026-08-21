@@ -20,7 +20,7 @@ const PlacesMap = dynamic(
 )
 
 export function WallDiscoverSection({
-  mapHeightClass = 'h-[min(52vh,28rem)]',
+  mapHeightClass = 'h-[min(40vh,16rem)] sm:h-[min(52vh,28rem)]',
   feedLimit = 24,
   showPlacesList = true,
   onEventClick,

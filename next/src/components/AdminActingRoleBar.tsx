@@ -19,17 +19,17 @@ export function AdminActingRoleBar() {
 
   return (
     <div
-      className={`sticky top-[52px] z-20 shrink-0 border-b text-xs sm:text-sm ${ROLE_STYLES[actingRole]}`}
+      className={`shrink-0 border-b text-xs sm:text-sm ${ROLE_STYLES[actingRole]}`}
       role="region"
       aria-label="Simulation de rôle développeur"
     >
-      <div className="px-3 py-2 sm:px-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+      <div className="px-3 py-2 sm:px-4 flex flex-row items-center gap-2 sm:gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-medium">
+          <p className="font-medium truncate">
             Vue développeur —{' '}
             <span className="text-white">{ACTING_ROLE_LABELS[actingRole]}</span>
           </p>
-          <p className="text-[11px] opacity-80 mt-0.5 line-clamp-2 sm:line-clamp-1">{roleSummary}</p>
+          <p className="text-[11px] opacity-80 mt-0.5 line-clamp-1 hidden sm:block">{roleSummary}</p>
         </div>
         <div className="flex flex-wrap gap-1.5 shrink-0" role="group" aria-label="Choisir le rôle effectif">
           {ROLES.map((r) => (

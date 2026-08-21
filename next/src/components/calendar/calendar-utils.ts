@@ -25,6 +25,7 @@ export type DayEvent = MonthEvent & { spanPosition: EventSpanPosition }
 export type MonthDay = {
   day: string
   is_disabled: boolean
+  max_participants: number
   present_count: number
   i_am_present: boolean
   present_users: PresentUser[]

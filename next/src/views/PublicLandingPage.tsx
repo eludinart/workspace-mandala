@@ -78,7 +78,7 @@ export function PublicLandingPage() {
               <>
                 <Link
                   href="/app"
-                  className="text-sm px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 hidden xs:inline-flex"
+                  className="text-sm px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 hidden sm:inline-flex"
                 >
                   Connexion
                 </Link>
@@ -148,7 +148,7 @@ export function PublicLandingPage() {
               débloquer les annonces complètes, le mur de vos lieux et les brèves des membres.
             </p>
           </div>
-          <WallDiscoverSection mapHeightClass="h-[min(56vh,30rem)]" feedLimit={20} />
+          <WallDiscoverSection mapHeightClass="h-[min(40vh,16rem)] sm:h-[min(56vh,30rem)]" feedLimit={20} />
         </section>
 
         <section id="projet" className="border-y border-slate-800/60 bg-slate-900/30 scroll-mt-16">

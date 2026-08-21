@@ -53,6 +53,7 @@ export function MessagesPage({
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [mobileListTab, setMobileListTab] = useState<'members' | 'dialogues'>('dialogues')
   const openedForRef = useRef<string | null>(null)
   const openedChannelRef = useRef<string | null>(null)
 
@@ -96,7 +97,11 @@ export function MessagesPage({
   }, [openCommunitySlug, active?.slug, setActiveSlug])
 
   useEffect(() => {
-    if (!openWithUserId || !active?.slug) return
+    if (!openWithUserId) {
+      openedForRef.current = null
+      return
+    }
+    if (!active?.slug) return
     if (openCommunitySlug && active.slug !== openCommunitySlug) return
     if (openedForRef.current === openWithUserId) return
     openedForRef.current = openWithUserId
@@ -120,7 +125,10 @@ export function MessagesPage({
   }, [openWithUserId, openCommunitySlug, active?.slug, loadChannels])
 
   useEffect(() => {
-    if (!openWithChannelId) return
+    if (!openWithChannelId) {
+      openedChannelRef.current = null
+      return
+    }
     if (openCommunitySlug && active?.slug !== openCommunitySlug) {
       setActiveSlug(openCommunitySlug)
       return
@@ -211,17 +219,25 @@ export function MessagesPage({
 
   const handleChannelOpened = (channelId: number) => {
     setSelectedId(channelId)
+    setMobileListTab('dialogues')
     void loadChannels()
   }
 
   const mobileChatOpen = selectedId != null
+  // Sur <lg hors chat : un seul panneau selon l’onglet ; ≥lg : les deux.
+  const membersVisibleClass = mobileChatOpen
+    ? 'hidden lg:block lg:min-h-0'
+    : mobileListTab === 'members'
+      ? 'flex flex-col min-h-0 flex-1 lg:block lg:flex-none lg:min-h-0'
+      : 'hidden lg:block lg:min-h-0'
+  const dialoguesVisibleClass = mobileChatOpen
+    ? 'hidden lg:flex lg:min-h-0'
+    : mobileListTab === 'dialogues'
+      ? 'flex flex-col min-h-0 flex-1'
+      : 'hidden lg:flex lg:min-h-0'
 
   return (
-    <div
-      className={`flex-1 min-h-0 flex flex-col gap-3 ${
-        mobileChatOpen ? 'overflow-hidden' : 'overflow-y-auto md:overflow-hidden'
-      }`}
-    >
+    <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
       <div className={mobileChatOpen ? 'hidden lg:block shrink-0' : 'shrink-0'}>
         <h1 className="text-xl sm:text-2xl font-bold">Messages</h1>
         <p className="text-slate-400 text-sm mt-1">
@@ -233,12 +249,53 @@ export function MessagesPage({
         <div className="lg:hidden shrink-0 flex items-center gap-2 -mx-1">
           <button
             type="button"
-            onClick={() => setSelectedId(null)}
+            onClick={() => {
+              setSelectedId(null)
+              setMobileListTab('dialogues')
+            }}
             className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800/80"
             aria-label="Retour à la liste des dialogues"
           >
             <span aria-hidden>←</span>
             Dialogues
+          </button>
+        </div>
+      )}
+
+      {!mobileChatOpen && (
+        <div
+          className="lg:hidden shrink-0 flex rounded-xl border border-slate-800 bg-slate-900/40 p-1 gap-1"
+          role="tablist"
+          aria-label="Sections messages"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileListTab === 'dialogues'}
+            onClick={() => setMobileListTab('dialogues')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mobileListTab === 'dialogues'
+                ? 'bg-violet-600 text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Dialogues
+            {channels.some((c) => c.unreadCount > 0) && (
+              <span className="ml-1.5 text-[10px] opacity-90">●</span>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mobileListTab === 'members'}
+            onClick={() => setMobileListTab('members')}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mobileListTab === 'members'
+                ? 'bg-violet-600 text-white'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Membres
           </button>
         </div>
       )}
@@ -289,12 +346,10 @@ export function MessagesPage({
         className={`flex-1 min-h-0 gap-3 overflow-hidden ${
           mobileChatOpen
             ? 'flex flex-col lg:grid lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] lg:grid-rows-1'
-            : 'grid grid-cols-1 lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] lg:grid-rows-1'
+            : 'flex flex-col lg:grid lg:grid-cols-[minmax(200px,240px)_minmax(200px,260px)_1fr] lg:grid-rows-1'
         }`}
       >
-        <div
-          className={`min-h-[220px] lg:min-h-0 ${mobileChatOpen ? 'hidden lg:block' : ''}`}
-        >
+        <div className={membersVisibleClass}>
           <ConversationMemberSidebar
             onChannelOpened={handleChannelOpened}
             highlightUserId={openWithUserId}
@@ -302,9 +357,7 @@ export function MessagesPage({
         </div>
 
         <section
-          className={`flex flex-col min-h-[200px] lg:min-h-0 border border-slate-800 rounded-xl bg-slate-900/30 overflow-hidden ${
-            mobileChatOpen ? 'hidden lg:flex' : ''
-          }`}
+          className={`border border-slate-800 rounded-xl bg-slate-900/30 overflow-hidden ${dialoguesVisibleClass}`}
         >
           <div className="shrink-0 px-3 py-2 border-b border-slate-800">
             <h2 className="text-sm font-semibold text-slate-200">Dialogues</h2>
@@ -313,7 +366,9 @@ export function MessagesPage({
             {loading && <p className="text-slate-400 text-xs p-2">Chargement…</p>}
             {!loading && channels.length === 0 && (
               <p className="text-slate-500 text-xs p-2 text-center">
-                Sélectionnez un ou plusieurs membres à gauche pour démarrer.
+                Sélectionnez un ou plusieurs membres
+                <span className="lg:inline hidden"> à gauche</span>
+                <span className="lg:hidden"> (onglet Membres)</span> pour démarrer.
               </p>
             )}
             {channels.map((ch) => (

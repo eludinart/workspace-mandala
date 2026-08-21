@@ -27,7 +27,7 @@ export function PlacesMap({
   places,
   selectedSlug,
   onSelect,
-  heightClassName = 'h-[min(52vh,28rem)]',
+  heightClassName = 'h-[min(40vh,16rem)] sm:h-[min(52vh,28rem)]',
   hideCaption = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)

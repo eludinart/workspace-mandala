@@ -135,8 +135,8 @@ function WeekDayCard({
           </div>
         </div>
         {showPresence && (info?.present_count ?? 0) > 0 && (
-          <span className="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-400">
-            {info?.present_count} inscrit(s)
+          <span className="text-xs px-2 py-1 rounded-full bg-slate-800 text-slate-400 tabular-nums">
+            {info?.present_count}/{info?.max_participants ?? 20}
           </span>
         )}
       </div>
@@ -232,13 +232,13 @@ function WeekDayColumn({
           </span>
           {showPresence && (info?.present_count ?? 0) > 0 && (
             <span
-              className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+              className={`text-[10px] px-1.5 py-0.5 rounded-full tabular-nums ${
                 info?.i_am_present
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'bg-slate-800 text-slate-500'
               }`}
             >
-              {info?.present_count}
+              {info?.present_count}/{info?.max_participants ?? 20}
             </span>
           )}
         </div>

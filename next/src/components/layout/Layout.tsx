@@ -59,10 +59,8 @@ export function Layout({
         <AdminActingRoleBar />
         <PushNotificationPriming />
         <main
-          className={`flex-1 min-h-0 p-4 md:p-6 ${
-            page === 'messages'
-              ? 'flex flex-col overflow-hidden pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-6'
-              : 'overflow-auto pb-24'
+          className={`flex-1 min-h-0 p-4 md:p-6 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-6 ${
+            page === 'messages' ? 'flex flex-col overflow-hidden' : 'overflow-auto'
           }`}
         >
           {children}

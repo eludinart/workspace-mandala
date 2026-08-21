@@ -194,7 +194,7 @@ export function WallFeed({
             return (
             <section key={place.id} className="space-y-3">
               <div
-                className="flex items-center gap-3 sticky top-0 z-10 py-2.5 px-3 rounded-xl border backdrop-blur-sm -mx-1"
+                className="flex items-center gap-3 sticky top-0 z-10 py-2.5 px-3 rounded-xl border backdrop-blur-sm -mx-1 bg-slate-950/90"
                 style={{
                   backgroundColor: surface.headerBg,
                   borderColor: surface.cardBorder,
