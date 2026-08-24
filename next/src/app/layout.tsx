@@ -1,9 +1,15 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProviders } from '@/components/AppProviders'
 import { ThemeInitScript } from '@/components/theme/ThemeInitScript'
 
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   title: {
@@ -36,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
         />
       </head>
-      <body className="min-h-screen font-sans antialiased">
+      <body className="h-full font-sans antialiased">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
