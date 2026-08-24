@@ -155,6 +155,7 @@ export function MandalaApp() {
 
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') return
+    if (!user) return
     const params = new URLSearchParams()
     params.set('page', page)
     if (page === 'messages') {
@@ -170,6 +171,7 @@ export function MandalaApp() {
     if (cur !== nextUrl) window.history.replaceState(null, '', nextUrl)
   }, [
     mounted,
+    user,
     page,
     messagesOpenChannelId,
     messagesOpenUserId,

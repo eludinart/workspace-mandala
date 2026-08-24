@@ -53,8 +53,8 @@ export function PublicLandingPage() {
   return (
     <div className="h-full min-h-screen overflow-y-auto scroll-smooth bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
       <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <a href="#top" className="font-bold text-lg tracking-tight shrink-0">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 sm:h-[4.5rem] flex items-center justify-between gap-4">
+          <a href="#top" className="font-bold text-2xl sm:text-3xl tracking-tight shrink-0">
             Mandala
           </a>
           <nav className="hidden sm:flex items-center gap-6 text-sm text-slate-400">
@@ -83,7 +83,7 @@ export function PublicLandingPage() {
                   Connexion
                 </Link>
                 <Link
-                  href="/app"
+                  href="/app?mode=register"
                   className="text-sm px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 font-medium"
                 >
                   S&apos;inscrire
@@ -124,7 +124,7 @@ export function PublicLandingPage() {
                   Explorer le mur
                 </button>
                 <Link
-                  href="/app"
+                  href={user ? '/app' : '/app?mode=register'}
                   className="px-6 py-3 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800/80 font-medium transition-colors text-center"
                 >
                   {user ? 'Voir tout mon fil' : 'Rejoindre un lieu'}
@@ -140,7 +140,7 @@ export function PublicLandingPage() {
           </div>
         </section>
 
-        <section id="mur" className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 scroll-mt-16">
+        <section id="mur" className="max-w-6xl mx-auto px-4 sm:px-6 pb-16 sm:pb-20 scroll-mt-20">
           <div className="mb-8 space-y-2">
             <h2 className="text-2xl sm:text-3xl font-bold">Mur &amp; carte</h2>
             <p className="text-slate-400 text-sm sm:text-base max-w-2xl">
@@ -151,7 +151,7 @@ export function PublicLandingPage() {
           <WallDiscoverSection mapHeightClass="h-[min(40vh,16rem)] sm:h-[min(56vh,30rem)]" feedLimit={20} />
         </section>
 
-        <section id="projet" className="border-y border-slate-800/60 bg-slate-900/30 scroll-mt-16">
+        <section id="projet" className="border-y border-slate-800/60 bg-slate-900/30 scroll-mt-20">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-14 space-y-2">
               <h2 className="text-2xl sm:text-3xl font-bold">Une plateforme, trois promesses</h2>

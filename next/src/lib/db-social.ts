@@ -1359,33 +1359,13 @@ async function ensureSeedsAndLinksTables(pool: Awaited<ReturnType<typeof getPool
   }
 }
 
-/** Dépose une graine (demande de contact) vers un autre utilisateur */
+/** L'envoi de graines entre utilisateurs a été retiré. */
 export async function sendSeed(
-  fromUserId: number,
-  toUserId: number,
-  intentionId: string
+  _fromUserId: number,
+  _toUserId: number,
+  _intentionId: string
 ): Promise<{ seedId: number }> {
-  const pool = getPool()
-  if (fromUserId === toUserId) throw new Error('Impossible de déposer une graine pour soi-même')
-  if (!intentionId?.trim()) throw new Error('intentionId requis')
-
-  await ensureSeedsAndLinksTables(pool)
-  const tSeeds = table('social_seeds')
-
-  const [existing] = await pool.execute<RowDataPacket[]>(
-    `SELECT id FROM ${tSeeds} WHERE from_user_id = ? AND to_user_id = ? AND status = 'pending'`,
-    [fromUserId, toUserId]
-  )
-  if (existing.length > 0) throw new Error('Une graine est déjà en attente pour ce jardinier')
-
-  await pool.execute(
-    `INSERT INTO ${tSeeds} (from_user_id, to_user_id, intention_id, status, sap_spent) VALUES (?, ?, ?, 'pending', 0)`,
-    [fromUserId, toUserId, intentionId.trim()]
-  )
-  const [inserted] = await pool.execute<RowDataPacket[]>(`SELECT LAST_INSERT_ID() as id`)
-  const seedId = Number(inserted?.[0]?.id ?? 0)
-  if (!seedId) throw new Error('Impossible de récupérer l\'id de la graine')
-  return { seedId }
+  throw new Error("L'envoi de graines entre utilisateurs n'est plus disponible")
 }
 
 /** Accepte une graine, crée le lien et le canal, retourne channelId */

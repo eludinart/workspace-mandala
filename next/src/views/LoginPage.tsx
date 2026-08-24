@@ -4,9 +4,22 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { ThemePicker } from '@/components/theme/ThemePicker'
 
+function authModeFromUrl(): 'login' | 'register' {
+  if (typeof window === 'undefined') return 'login'
+  return new URLSearchParams(window.location.search).get('mode') === 'register'
+    ? 'register'
+    : 'login'
+}
+
+function replaceAuthModeUrl(next: 'login' | 'register') {
+  if (typeof window === 'undefined') return
+  const url = next === 'register' ? '/app?mode=register' : '/app'
+  window.history.replaceState(null, '', url)
+}
+
 export function LoginPage() {
   const { login, register } = useAuth()
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'login' | 'register'>(authModeFromUrl)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [firstName, setFirstName] = useState('')
@@ -117,7 +130,9 @@ export function LoginPage() {
           type="button"
           className="mt-4 w-full text-sm text-slate-400 hover:text-violet-300"
           onClick={() => {
-            setMode(mode === 'login' ? 'register' : 'login')
+            const next = mode === 'login' ? 'register' : 'login'
+            setMode(next)
+            replaceAuthModeUrl(next)
             setError(null)
           }}
         >

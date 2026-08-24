@@ -9,7 +9,6 @@ import {
 } from '@/api/members'
 import { adminApi } from '@/api/admin'
 import { managerApi } from '@/api/manager'
-import { socialApi, INTENTIONS } from '@/api/social'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { PlaceOrgBackLink } from '@/components/place/PlaceOrgBackLink'
@@ -61,8 +60,6 @@ export function MembersPage({
   const [filterCommunitySlug, setFilterCommunitySlug] = useState('')
   const [panelMember, setPanelMember] = useState<MemberDirectoryEntry | null>(null)
 
-  const [seedTarget, setSeedTarget] = useState<MemberCardData | null>(null)
-  const [seedIntention, setSeedIntention] = useState(INTENTIONS[0]?.id ?? 'philia')
   const [manageUserId, setManageUserId] = useState<number | null>(null)
   const [removeTarget, setRemoveTarget] = useState<{ userId: number; label: string } | null>(null)
   const [removing, setRemoving] = useState(false)
@@ -146,18 +143,6 @@ export function MembersPage({
   const displayMembers: MemberCardData[] = directoryMode
     ? filteredDirectoryMembers
     : filteredCommunityMembers
-
-  const sendSeed = async () => {
-    if (!seedTarget) return
-    setActionMsg(null)
-    try {
-      await socialApi.sendSeed(String(seedTarget.user_id), seedIntention)
-      setActionMsg(`Graine envoyée à ${seedTarget.pseudo}`)
-      setSeedTarget(null)
-    } catch (e: unknown) {
-      setActionMsg(e instanceof ApiError ? e.detail : 'Erreur envoi graine')
-    }
-  }
 
   const openDirectoryPanel = (m: MemberDirectoryEntry) => {
     if (directoryMode) setPanelMember(m)
@@ -328,7 +313,6 @@ export function MembersPage({
               directoryMode={directoryMode}
               activeSlug={activeSlug}
               onOpenMessages={onOpenMessages}
-              onSeed={setSeedTarget}
               onMemberClick={openDirectoryPanel}
               canManage={canManageActiveCommunity}
               onManage={(id) => setManageUserId(id)}
@@ -385,22 +369,13 @@ export function MembersPage({
               ))}
             </ul>
             {!panelMember.is_me && onOpenMessages && (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSeedTarget(panelMember)}
-                  className="flex-1 text-xs py-2 rounded-lg border border-amber-700/50 text-amber-200"
-                >
-                  🌱 Graine
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onOpenMessages(String(panelMember.user_id))}
-                  className="flex-1 text-xs py-2 rounded-lg border border-violet-700/50 text-violet-200"
-                >
-                  💬 Message
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => onOpenMessages(String(panelMember.user_id))}
+                className="w-full text-xs py-2 rounded-lg border border-violet-700/50 text-violet-200"
+              >
+                💬 Message
+              </button>
             )}
             {canManageActiveCommunity && (
               <button
@@ -414,16 +389,6 @@ export function MembersPage({
           </aside>
         )}
       </div>
-
-      {seedTarget && (
-        <SeedModal
-          target={seedTarget}
-          intention={seedIntention}
-          onIntention={setSeedIntention}
-          onClose={() => setSeedTarget(null)}
-          onSend={() => void sendSeed()}
-        />
-      )}
 
       {manageUserId != null && (
         <AdminUserSheet
@@ -465,7 +430,6 @@ function MemberGrid({
   directoryMode,
   activeSlug,
   onOpenMessages,
-  onSeed,
   onMemberClick,
   canManage,
   onManage,
@@ -475,7 +439,6 @@ function MemberGrid({
   directoryMode: boolean
   activeSlug?: string
   onOpenMessages?: (userId: string) => void
-  onSeed: (m: MemberCardData) => void
   onMemberClick?: (m: MemberDirectoryEntry) => void
   canManage?: boolean
   onManage?: (userId: number) => void
@@ -494,7 +457,6 @@ function MemberGrid({
             directoryMode={directoryMode}
             activeSlug={activeSlug}
             onOpenMessages={onOpenMessages}
-            onSeed={() => {}}
             onClick={isDirectoryMember(me) ? () => onMemberClick?.(me) : undefined}
             isMe
             canManage={canManage}
@@ -518,7 +480,6 @@ function MemberGrid({
               directoryMode={directoryMode}
               activeSlug={activeSlug}
               onOpenMessages={onOpenMessages}
-              onSeed={() => onSeed(m)}
               onClick={isDirectoryMember(m) ? () => onMemberClick?.(m) : undefined}
               canManage={canManage}
               onManage={onManage}
@@ -557,7 +518,6 @@ function MemberCard({
   directoryMode,
   activeSlug,
   onOpenMessages,
-  onSeed,
   onClick,
   isMe,
   canManage,
@@ -568,7 +528,6 @@ function MemberCard({
   directoryMode: boolean
   activeSlug?: string
   onOpenMessages?: (userId: string) => void
-  onSeed: () => void
   onClick?: () => void
   isMe?: boolean
   canManage?: boolean
@@ -604,30 +563,18 @@ function MemberCard({
       </div>
       {!isMe && (
         <div className="flex flex-col gap-2 mt-auto">
-          <div className="flex gap-2">
+          {onOpenMessages && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                onSeed()
+                onOpenMessages(String(member.user_id))
               }}
-              className="flex-1 text-xs py-1.5 rounded-lg border border-amber-700/50 text-amber-200 hover:bg-amber-900/20"
+              className="w-full text-xs py-1.5 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-900/20"
             >
-              🌱 Graine
+              💬 Message
             </button>
-            {onOpenMessages && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onOpenMessages(String(member.user_id))
-                }}
-                className="flex-1 text-xs py-1.5 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-900/20"
-              >
-                💬 Message
-              </button>
-            )}
-          </div>
+          )}
           {canManage && onManage && (
             <button
               type="button"
@@ -670,52 +617,4 @@ function MemberCard({
   }
 
   return inner
-}
-
-function SeedModal({
-  target,
-  intention,
-  onIntention,
-  onClose,
-  onSend,
-}: {
-  target: MemberCardData
-  intention: string
-  onIntention: (v: string) => void
-  onClose: () => void
-  onSend: () => void
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <UserAvatar avatar={target.avatar} avatarEmoji={target.avatar_emoji} size="md" />
-          <h2 className="font-semibold">Graine vers {target.pseudo}</h2>
-        </div>
-        <select
-          value={intention}
-          onChange={(e) => onIntention(e.target.value)}
-          className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
-        >
-          {INTENTIONS.map((i) => (
-            <option key={i.id} value={i.id}>
-              {i.label}
-            </option>
-          ))}
-        </select>
-        <div className="flex gap-2 justify-end">
-          <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-slate-400">
-            Annuler
-          </button>
-          <button
-            type="button"
-            onClick={onSend}
-            className="px-4 py-1.5 text-sm rounded-lg bg-amber-600 text-white"
-          >
-            Envoyer
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 }

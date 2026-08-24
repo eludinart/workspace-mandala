@@ -3,8 +3,6 @@ import { api } from '@/lib/api-client'
 export const socialApi = {
   visitLisiere: (userId: string) =>
     api.get(`/api/social/visit_lisiere?user_id=${encodeURIComponent(userId)}`),
-  sendSeed: (targetUserId: string, intentionId: string) =>
-    api.post('/api/social/send_seed', { targetUserId, intentionId }),
   acceptConnection: (seedId: string) =>
     api.post('/api/social/accept_connection', { seedId }),
   rejectConnection: (seedId: string) =>

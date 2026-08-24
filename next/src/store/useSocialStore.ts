@@ -32,14 +32,12 @@ export interface SocialStoreState {
   lisiereLoading: boolean
   lisiereError: string | null
   relations: Record<string, string>
-  pendingSeeds: Record<string, { seedId: number; targetUserId: number | string }>
   channels: Record<string, { channelId: number; otherUserId?: number; otherPseudo?: string }>
   messagesByChannel: Record<string, ChannelMessage[]>
   temperatureByChannel: Record<string, string>
   setLisiere: (data: LisiereData | null) => void
   clearLisiere: () => void
   loadLisiere: (viewedUserId: string | number) => Promise<LisiereData>
-  sendSeed: (targetUserId: string | number, intentionId: string | number) => Promise<{ seedId: number }>
   acceptConnection: (seedId: number) => Promise<{ channelId: number }>
   loadChannelMessages: (channelId: number | string) => Promise<unknown[]>
   sendMessage: (channelId: number | string, payload: { body?: string; cardSlug?: string }) => Promise<unknown>
@@ -64,7 +62,6 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
   lisiereError: null,
 
   relations: {}, // { [targetUserId]: 'none' | 'pending_out' | 'pending_in' | 'accepted' | 'blocked' }
-  pendingSeeds: {}, // { [targetUserId]: { seedId, targetUserId } } (graines que j'ai envoyées)
   channels: {}, // { [channelId]: { channelId, otherUserId, otherPseudo } }
   messagesByChannel: {}, // { [channelId]: Array<{ id, senderId, body, cardSlug, temperature, createdAt }> }
   temperatureByChannel: {}, // { [channelId]: 'calm' | 'vibrant' | 'tense' | 'breach' }
@@ -91,15 +88,6 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
       })
       throw err
     }
-  },
-
-  sendSeed: async (targetUserId, intentionId) => {
-    const result = (await socialApi.sendSeed(String(targetUserId), String(intentionId))) as { seedId: number }
-    set((s) => ({
-      pendingSeeds: { ...s.pendingSeeds, [String(targetUserId)]: { seedId: result.seedId, targetUserId } },
-      relations: { ...s.relations, [String(targetUserId)]: 'pending_out' },
-    }))
-    return result
   },
 
   acceptConnection: async (seedId) => {
