@@ -34,7 +34,7 @@ export function PlaceSelectionScreen({
   }, [])
 
   const selected = places.find((p) => p.slug === selectedSlug) ?? null
-  const needsInvite = !selected || selected.join_mode !== 'open'
+  const needsInvite = selected?.join_mode === 'invite'
 
   const submit = useCallback(async () => {
     if (!selectedSlug || !selected) {

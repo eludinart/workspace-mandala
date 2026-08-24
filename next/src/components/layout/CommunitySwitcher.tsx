@@ -166,7 +166,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                           setJoiningSlug(c.slug)
                           try {
                             let inviteCode: string | null = null
-                            if (c.join_mode === 'invite' || c.join_mode == null) {
+                            if (c.join_mode === 'invite') {
                               inviteCode =
                                 typeof window !== 'undefined'
                                   ? window.prompt(`Code d’invitation pour « ${c.name} »`)
@@ -191,9 +191,9 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                         ? 'Fermé'
                         : joiningSlug === c.slug
                           ? '…'
-                          : c.join_mode === 'open'
-                            ? 'Rejoindre'
-                            : 'Code…'}
+                          : c.join_mode === 'invite'
+                            ? 'Code…'
+                            : 'Rejoindre'}
                     </button>
                   </div>
                 ))

@@ -114,7 +114,7 @@ function mapCommunityRow(r: RowDataPacket): CommunityRecord {
 function parseJoinMode(v: unknown): 'open' | 'invite' | 'closed' {
   const s = String(v ?? '').trim().toLowerCase()
   if (s === 'open' || s === 'closed' || s === 'invite') return s
-  return 'invite'
+  return 'open'
 }
 
 function mapCommunityManagerRow(r: RowDataPacket): CommunityManagerRecord {
@@ -158,7 +158,7 @@ const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'longitude', ddl: 'longitude DECIMAL(9,6) DEFAULT NULL' },
   { name: 'listed_public', ddl: 'listed_public TINYINT(1) NOT NULL DEFAULT 1' },
   { name: 'profile_public', ddl: 'profile_public TINYINT(1) NOT NULL DEFAULT 1' },
-  { name: 'join_mode', ddl: "join_mode VARCHAR(16) NOT NULL DEFAULT 'invite'" },
+  { name: 'join_mode', ddl: "join_mode VARCHAR(16) NOT NULL DEFAULT 'open'" },
   { name: 'invite_code', ddl: 'invite_code VARCHAR(32) DEFAULT NULL' },
 ]
 
@@ -193,12 +193,37 @@ function generateInviteCode(): string {
 
 async function ensureCommunityInviteCodes(pool: ReturnType<typeof getPool>, tC: string): Promise<void> {
   try {
+    // Codes uniquement pour les lieux en mode invitation (pas pour tous)
     await pool.execute(
       `UPDATE ${tC} SET invite_code = UPPER(SUBSTRING(MD5(CONCAT(id, slug, RAND())), 1, 8))
-       WHERE invite_code IS NULL OR invite_code = ''`
+       WHERE join_mode = 'invite' AND (invite_code IS NULL OR invite_code = '')`
     )
   } catch {
     /* colonnes absentes le temps d'un deploy */
+  }
+}
+
+/** Ancien défaut 'invite' forçait un code partout — repasser en ouvert une seule fois. */
+async function migrateJoinModeDefaultToOpen(pool: ReturnType<typeof getPool>, tC: string): Promise<void> {
+  const tMig = table('mandala_app_migrations')
+  try {
+    await exec(
+      pool,
+      `CREATE TABLE IF NOT EXISTS ${tMig} (
+        name VARCHAR(64) NOT NULL PRIMARY KEY,
+        applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+    )
+    const [ins] = await pool.execute(
+      `INSERT IGNORE INTO ${tMig} (name) VALUES ('join_mode_default_open_v1')`
+    )
+    const affected = Number((ins as { affectedRows?: number }).affectedRows ?? 0)
+    if (!affected) return
+    await pool.execute(
+      `UPDATE ${tC} SET join_mode = 'open' WHERE COALESCE(join_mode, 'invite') = 'invite'`
+    )
+  } catch {
+    /* ignore */
   }
 }
 
@@ -297,6 +322,7 @@ export async function ensureCommunitiesTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureCommunityProfileColumns(pool, tC)
+  await migrateJoinModeDefaultToOpen(pool, tC)
   await ensureCommunityInviteCodes(pool, tC)
   await seedDefaultCommunityGeoHints(pool, tC)
   const tA = table('mandala_charter_acceptances')
@@ -1359,6 +1385,11 @@ export async function updateCommunitySettingsForManager(
     const mode = parseJoinMode(body.join_mode)
     updates.push('join_mode = ?')
     values.push(mode)
+    // Activer « sur invitation » sans code → en générer un automatiquement
+    if (mode === 'invite' && !current.invite_code && !body.rotate_invite_code) {
+      updates.push('invite_code = ?')
+      values.push(generateInviteCode())
+    }
   }
   if (body.rotate_invite_code) {
     updates.push('invite_code = ?')

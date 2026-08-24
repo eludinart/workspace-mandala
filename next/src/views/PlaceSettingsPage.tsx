@@ -51,7 +51,7 @@ export function PlaceSettingsPage({
   const [charter, setCharter] = useState<CharterBlock[]>([])
   const [listedPublic, setListedPublic] = useState(true)
   const [profilePublic, setProfilePublic] = useState(true)
-  const [joinMode, setJoinMode] = useState<'open' | 'invite' | 'closed'>('invite')
+  const [joinMode, setJoinMode] = useState<'open' | 'invite' | 'closed'>('open')
   const [inviteCode, setInviteCode] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
   useEffect(() => {
@@ -80,7 +80,7 @@ export function PlaceSettingsPage({
     setCharter(s.charter ?? [])
     setListedPublic(s.listed_public !== false)
     setProfilePublic(s.profile_public !== false)
-    setJoinMode(s.join_mode === 'open' || s.join_mode === 'closed' ? s.join_mode : 'invite')
+    setJoinMode(s.join_mode === 'invite' || s.join_mode === 'closed' ? s.join_mode : 'open')
     setInviteCode(s.invite_code ?? null)
   }, [])
 
@@ -440,10 +440,14 @@ export function PlaceSettingsPage({
 
           <fieldset className="space-y-3 rounded-xl border border-slate-800 p-3">
             <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
-              Adhésion
+              Adhésion au lieu
             </legend>
+            <p className="text-xs text-slate-500">
+              Par défaut le lieu est ouvert. Activez l’invitation seulement si vous voulez
+              contrôler qui entre (le code se génère automatiquement).
+            </p>
             <label className="block space-y-1">
-              <span className="text-xs text-slate-500">Mode d’entrée</span>
+              <span className="text-xs text-slate-500">Qui peut rejoindre ?</span>
               <select
                 value={joinMode}
                 onChange={(e) =>
@@ -451,45 +455,52 @@ export function PlaceSettingsPage({
                 }
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
               >
-                <option value="invite">Sur invitation (code)</option>
-                <option value="open">Ouvert à tous</option>
-                <option value="closed">Fermé (gestionnaires seulement)</option>
+                <option value="open">Ouvert — libre (recommandé)</option>
+                <option value="invite">Sur invitation — code requis</option>
+                <option value="closed">Fermé — gestionnaires seulement</option>
               </select>
             </label>
-            {(joinMode === 'invite' || inviteCode) && (
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm text-slate-300">
-                  Code :{' '}
-                  <span className="font-mono tracking-widest text-slate-100">
-                    {inviteCode || '—'}
-                  </span>
+            {joinMode === 'invite' && (
+              <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 px-3 py-2.5 space-y-2">
+                <p className="text-xs text-amber-200/90">
+                  Partagez ce code aux personnes que vous invitez. Il apparaît aussi après
+                  enregistrement des paramètres.
                 </p>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => {
-                    void (async () => {
-                      if (!active?.slug) return
-                      setSaving(true)
-                      try {
-                        const data = await communitiesApi.updateSettings(active.slug, {
-                          rotate_invite_code: true,
-                        })
-                        applySettings(data.settings)
-                        setMsg('Nouveau code d’invitation généré.')
-                        setMsgOk(true)
-                      } catch (e: unknown) {
-                        setMsg(e instanceof ApiError ? e.detail : 'Erreur')
-                        setMsgOk(false)
-                      } finally {
-                        setSaving(false)
-                      }
-                    })()
-                  }}
-                  className="text-xs px-2 py-1 rounded border border-slate-600 text-slate-300 hover:bg-slate-800"
-                >
-                  Régénérer
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm text-slate-200">
+                    Code :{' '}
+                    <span className="font-mono tracking-widest text-lg text-slate-50">
+                      {inviteCode || '(généré à l’enregistrement)'}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      void (async () => {
+                        if (!active?.slug) return
+                        setSaving(true)
+                        try {
+                          const data = await communitiesApi.updateSettings(active.slug, {
+                            join_mode: 'invite',
+                            rotate_invite_code: true,
+                          })
+                          applySettings(data.settings)
+                          setMsg('Code d’invitation généré — à partager avec les nouveaux membres.')
+                          setMsgOk(true)
+                        } catch (e: unknown) {
+                          setMsg(e instanceof ApiError ? e.detail : 'Erreur')
+                          setMsgOk(false)
+                        } finally {
+                          setSaving(false)
+                        }
+                      })()
+                    }}
+                    className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-700/80 text-white hover:bg-amber-600 disabled:opacity-50"
+                  >
+                    {inviteCode ? 'Régénérer le code' : 'Générer le code'}
+                  </button>
+                </div>
               </div>
             )}
           </fieldset>
