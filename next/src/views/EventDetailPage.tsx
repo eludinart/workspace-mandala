@@ -262,7 +262,7 @@ export function EventDetailPage({
   const availableMembers = members.filter((m) => !staffIds.has(m.user_id))
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <button type="button" onClick={onBack} className="text-sm text-violet-400 hover:underline">
         ← Retour aux événements
       </button>
@@ -297,7 +297,7 @@ export function EventDetailPage({
             <img
               src={event.cover_image}
               alt=""
-              className="w-full max-h-48 object-cover rounded-xl border border-slate-800"
+              className="w-full max-w-sm max-h-40 object-cover rounded-xl border border-slate-800"
             />
           )}
           {can_manage && (
@@ -589,10 +589,10 @@ export function EventDetailPage({
           {media.length === 0 && !can_manage && (
             <p className="text-slate-500 text-sm italic">Aucune photo.</p>
           )}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
             {media.map((m) => (
               <div key={m.id} className="relative rounded-lg overflow-hidden border border-slate-800">
-                <img src={m.image_data} alt="" className="w-full aspect-square object-cover" />
+                <img src={m.image_data} alt="" className="w-full h-24 sm:h-28 object-cover" />
                 {can_manage && (
                   <button
                     type="button"

@@ -327,7 +327,7 @@ export function EventsPage({
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Événements — {active?.name}</h1>

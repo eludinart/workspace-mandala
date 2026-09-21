@@ -74,7 +74,7 @@ export function HeartWeatherPicker() {
   const current = weatherOption(status)
 
   return (
-    <div className="space-y-3">
+    <div className="m-user-form space-y-3">
       <div>
         <p className="text-sm font-medium text-slate-200">La Météo des Cœurs</p>
         <p className="text-xs text-slate-500 mt-0.5">
@@ -111,7 +111,7 @@ export function HeartWeatherPicker() {
             </p>
           )}
           <label className="block text-xs text-slate-500">
-            Note courte (optionnel, 100 car.)
+            <span>Note courte (optionnel, 100 car.)</span>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value.slice(0, 100))}

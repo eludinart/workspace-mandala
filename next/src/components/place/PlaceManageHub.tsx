@@ -3,6 +3,7 @@
 import type { CommunityAdmin } from '@/api/admin'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
+import { useCommunity } from '@/contexts/CommunityContext'
 import { PLACE_MANAGE_ACTIONS } from '@/lib/place-manage'
 
 export function PlaceManageHub({
@@ -14,6 +15,8 @@ export function PlaceManageHub({
   onBack: () => void
   onNavigate: MandalaNavigate
 }) {
+  const { setActiveSlug } = useCommunity()
+
   return (
     <div className="space-y-6">
       <button
@@ -48,7 +51,10 @@ export function PlaceManageHub({
           <button
             key={action.id}
             type="button"
-            onClick={() => onNavigate(action.id)}
+            onClick={() => {
+              setActiveSlug(place.slug)
+              onNavigate(action.id)
+            }}
             className="text-left rounded-xl border border-slate-800 bg-slate-950/40 p-4 hover:border-sky-600/40 hover:bg-sky-950/20 transition-colors"
           >
             <span className="text-xl" aria-hidden>

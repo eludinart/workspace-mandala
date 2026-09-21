@@ -134,14 +134,18 @@ export const THEME_PALETTES: Record<ThemePaletteId, PaletteTokens> = {
 
 export const THEME_PALETTE_IDS = Object.keys(THEME_PALETTES) as ThemePaletteId[]
 
-export const DEFAULT_THEME_MODE: ThemeMode = 'dark'
+export const DEFAULT_THEME_MODE: ThemeMode = 'light'
 export const DEFAULT_THEME_PALETTE: ThemePaletteId = 'violet'
 
 export const THEME_STORAGE_MODE = 'mdl_theme_mode'
 export const THEME_STORAGE_PALETTE = 'mdl_theme_palette'
+/** Une seule poussée : force le mode clair dans tous les navigateurs (localStorage). */
+export const THEME_FORCE_LIGHT_STAMP = '2026-09-21'
 
 export function parseThemeMode(raw: unknown): ThemeMode {
-  return raw === 'light' ? 'light' : 'dark'
+  if (raw === 'dark') return 'dark'
+  if (raw === 'light') return 'light'
+  return DEFAULT_THEME_MODE
 }
 
 export function parseThemePalette(raw: unknown): ThemePaletteId {

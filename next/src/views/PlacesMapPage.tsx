@@ -47,7 +47,7 @@ export function PlacesMapPage() {
   }, [])
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="w-full space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">Carte des lieux</h1>

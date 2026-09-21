@@ -99,9 +99,9 @@ export function CharterAcceptanceScreen({ slug, initial, onAccepted }: Props) {
   }
 
   return (
-    <div className="w-full max-w-2xl flex flex-col max-h-[min(92vh,48rem)]">
+    <div className="m-user-form w-full max-w-5xl flex flex-col max-h-[min(92vh,48rem)]">
       <header className="shrink-0 text-center space-y-3 pb-4 border-b border-slate-800">
-        <p className="text-xs uppercase tracking-widest text-violet-400/90">Bienvenue</p>
+        <p className="m-user-eyebrow">Bienvenue</p>
         <div className="flex flex-col items-center gap-2">
           <CommunityAvatar
             avatar={data.avatar}
@@ -110,7 +110,7 @@ export function CharterAcceptanceScreen({ slug, initial, onAccepted }: Props) {
             size="lg"
             alt={data.name}
           />
-          <h1 className="text-xl font-bold">Charte — {data.name}</h1>
+          <h1 className="m-user-title text-3xl">Charte — {data.name}</h1>
           {data.tagline && <p className="text-sm text-slate-400">{data.tagline}</p>}
         </div>
         <p className="text-sm text-slate-400 max-w-md mx-auto">

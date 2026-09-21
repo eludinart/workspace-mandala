@@ -86,7 +86,7 @@ export function AddGroupMembersPanel({
           + Ajouter des personnes
         </button>
       ) : (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 space-y-2">
+        <div className="m-user-form rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 space-y-2">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-medium text-slate-200">Ajouter au groupe</p>
             <button

@@ -47,11 +47,11 @@ export function LoginPage() {
       <div className="absolute top-3 right-3 z-10">
         <ThemePicker />
       </div>
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl">
-        <p className="text-3xl font-bold text-center mb-1">Mandala</p>
-        <p className="text-center text-sm text-slate-400 mb-6">Lieux, communautés & événements</p>
+      <div className="m-user-form w-full max-w-md rounded-[1.75rem] border border-slate-800/70 bg-slate-900/75 p-8 sm:p-10 shadow-xl">
+        <p className="m-user-title text-4xl sm:text-[2.75rem] text-center mb-2">Mandala</p>
+        <p className="m-user-eyebrow text-center mb-8">Lieux · communautés · événements</p>
         {mode === 'register' && (
-          <p className="text-xs text-slate-500 text-center mb-4 -mt-2">
+          <p className="text-xs text-slate-500 text-center mb-6 -mt-4 leading-relaxed">
             Après la création du compte, vous choisirez votre lieu puis lirez sa charte.
           </p>
         )}
@@ -121,14 +121,14 @@ export function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3 font-semibold disabled:opacity-50"
+            className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3.5 font-semibold disabled:opacity-50"
           >
             {loading ? '…' : mode === 'login' ? 'Connexion' : 'Créer un compte'}
           </button>
         </form>
         <button
           type="button"
-          className="mt-4 w-full text-sm text-slate-400 hover:text-violet-300"
+          className="mt-5 w-full text-[11px] uppercase tracking-[0.16em] text-slate-400 hover:text-violet-300"
           onClick={() => {
             const next = mode === 'login' ? 'register' : 'login'
             setMode(next)

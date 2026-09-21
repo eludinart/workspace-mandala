@@ -6,9 +6,12 @@ import { managerApi } from '@/api/manager'
 import { ApiError } from '@/lib/api-client'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
 import {
+  COMMUNITY_ROLE_SELECT_OPTIONS,
   formatCommunityRoleLabel,
   isCommunityManagerRole,
+  LAST_COMMUNITY_MANAGER_MESSAGE,
 } from '@/lib/community-role-labels'
+import { assignableAppRole } from '@/lib/app-roles'
 import type { CommunityRole } from '@/lib/db-communities'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { useCommunity } from '@/contexts/CommunityContext'
@@ -82,7 +85,7 @@ export function AdminUserSheet({
       setShowFullLastName(!!u.show_full_last_name)
       setBio(u.bio ?? '')
       setProfilePublic(u.profile_public !== false)
-      setAppRole(u.app_role === 'coach' ? 'site_manager' : u.app_role ?? 'user')
+      setAppRole(assignableAppRole(u.app_role))
       if (communitySlug) {
         setRemoveSlug(communitySlug)
       } else if (u.communities?.length === 1) {
@@ -231,6 +234,11 @@ export function AdminUserSheet({
     removableCommunities.length > 0 &&
     userId !== currentUserId
 
+  const selectedIsSoleManager = !!(
+    selectedRemovePlace &&
+    (profile?.communities ?? []).find((c) => c.slug === selectedRemovePlace.slug)?.is_sole_manager
+  )
+
   const memberLabel = publicName || profile?.name || profile?.email || `Membre #${userId}`
 
   const confirmRemove = async () => {
@@ -345,14 +353,17 @@ export function AdminUserSheet({
                   <label className="block text-sm">
                     <span className="text-slate-500">Rôle application</span>
                     <select
-                      value={appRole}
+                      value={assignableAppRole(appRole)}
                       onChange={(e) => setAppRole(e.target.value)}
                       className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
                     >
                       <option value="user">Utilisateur</option>
-                      <option value="site_manager">Gestionnaire</option>
                       <option value="admin">Administrateur</option>
                     </select>
+                    <span className="mt-1 block text-[11px] text-slate-500">
+                      Le rôle gestionnaire n&apos;est pas global : attribuez-le ci-dessous, lieu par
+                      lieu.
+                    </span>
                   </label>
                 )}
                 <button
@@ -368,6 +379,10 @@ export function AdminUserSheet({
               {(profile.communities?.length ?? 0) > 0 && (
                 <section className="space-y-3 border-t border-slate-800 pt-4">
                   <h3 className="text-xs uppercase tracking-widest text-sky-300">Lieux &amp; rôles</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Gestionnaire = droits d&apos;organisation sur ce lieu uniquement (profil, charte,
+                    membres).
+                  </p>
                   {managedPlaces.length > 0 && (
                     <div className="rounded-lg border border-sky-800/40 bg-sky-950/20 p-3 space-y-2">
                       <p className="text-[10px] uppercase tracking-widest text-sky-400/90">
@@ -412,9 +427,15 @@ export function AdminUserSheet({
                             }
                             className="rounded-lg bg-slate-950 border border-slate-700 px-2 py-1 text-xs shrink-0"
                           >
-                            <option value="member">Membre</option>
-                            <option value="organizer">Gestionnaire</option>
-                            <option value="admin">Gestionnaire (admin)</option>
+                            {COMMUNITY_ROLE_SELECT_OPTIONS.map((opt) => (
+                              <option
+                                key={opt.value}
+                                value={opt.value}
+                                disabled={opt.value === 'member' && !!c.is_sole_manager}
+                              >
+                                {opt.label}
+                              </option>
+                            ))}
                           </select>
                         ) : (
                           <span
@@ -435,6 +456,9 @@ export function AdminUserSheet({
                       Cette personne n&apos;est gestionnaire d&apos;aucun lieu pour le moment.
                     </p>
                   )}
+                  {(profile.communities ?? []).some((c) => c.is_sole_manager) && (
+                    <p className="text-xs text-amber-400/90">{LAST_COMMUNITY_MANAGER_MESSAGE}</p>
+                  )}
                 </section>
               )}
 
@@ -445,6 +469,9 @@ export function AdminUserSheet({
                     Retire la personne du lieu et efface toutes ses données associées à ce lieu
                     (calendrier, Agora, météo…). Le compte Mandala global est conservé.
                   </p>
+                  {selectedIsSoleManager && (
+                    <p className="text-xs text-amber-400/90">{LAST_COMMUNITY_MANAGER_MESSAGE}</p>
+                  )}
                   {!communitySlug && removableCommunities.length > 1 && (
                     <label className="block text-sm">
                       <span className="text-slate-500">Lieu concerné</span>
@@ -469,7 +496,7 @@ export function AdminUserSheet({
                   )}
                   <button
                     type="button"
-                    disabled={!removeSlug}
+                    disabled={!removeSlug || selectedIsSoleManager}
                     onClick={() => setShowRemoveConfirm(true)}
                     className="w-full py-2.5 rounded-lg bg-red-950/50 border border-red-700/60 text-red-200 text-sm font-medium hover:bg-red-950/80 disabled:opacity-50"
                   >

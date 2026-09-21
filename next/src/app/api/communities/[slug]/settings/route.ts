@@ -62,6 +62,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       charter: body.charter,
       listed_public: body.listed_public,
       profile_public: body.profile_public,
+      join_mode: body.join_mode,
+      rotate_invite_code: body.rotate_invite_code,
     })
     return NextResponse.json({
       settings: {

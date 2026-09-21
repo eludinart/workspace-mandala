@@ -232,7 +232,7 @@ export function MandalaApp() {
       case 'account':
         return <AccountPage onNavigate={navigate} />
       case 'charter':
-        return <CharterPage />
+        return <CharterPage onNavigate={navigate} />
       case 'places-map':
         return <DiscoverWallPage onNavigate={navigate} />
       case 'place-settings':
@@ -293,7 +293,7 @@ export function MandalaApp() {
     <CommunityProvider>
       <OnboardingGate>
         <TelemetryTracker page={page} />
-        <Layout page={page} onNavigate={navigate}>
+        <Layout page={page} onNavigate={navigate} adminTab={adminTab}>
           {content}
         </Layout>
       </OnboardingGate>

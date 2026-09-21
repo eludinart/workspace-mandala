@@ -22,8 +22,8 @@ export function PlaceSettingsPage({
   section?: Tab
   onNavigate?: MandalaNavigate
 }) {
-  const { active, refresh } = useCommunity()
-  const { canManageActiveCommunity } = useNavAccess()
+  const { active, refresh, loading: communityLoading } = useCommunity()
+  const { canManageActiveCommunity, loadingManagedPlaces } = useNavAccess()
   const lockedSection = section ?? null
   const [tab, setTab] = useState<Tab>(lockedSection ?? 'profile')
   const [loading, setLoading] = useState(true)
@@ -109,27 +109,29 @@ export function PlaceSettingsPage({
     setSaving(true)
     setMsg(null)
     try {
-      const body: Record<string, unknown> = {
-        name,
-        tagline: tagline || null,
-        description: description || null,
-        address: address || null,
-        postal_code: postalCode || null,
-        city: city || null,
-        country: country || null,
-        location: [city, country].filter(Boolean).join(', ') || null,
-        latitude: latitude.trim() ? Number(latitude) : null,
-        longitude: longitude.trim() ? Number(longitude) : null,
-        website: website || null,
-        contact_email: email || null,
-        logo_emoji: emoji,
-        accent_color: color,
-        charter,
-        listed_public: listedPublic,
-        profile_public: profilePublic,
-        join_mode: joinMode,
-      }
-      if (avatar !== null) body.avatar = avatar
+      const body: Record<string, unknown> =
+        activeTab === 'charter'
+          ? { charter }
+          : {
+              name,
+              tagline: tagline || null,
+              description: description || null,
+              address: address || null,
+              postal_code: postalCode || null,
+              city: city || null,
+              country: country || null,
+              location: [city, country].filter(Boolean).join(', ') || null,
+              latitude: latitude.trim() ? Number(latitude) : null,
+              longitude: longitude.trim() ? Number(longitude) : null,
+              website: website || null,
+              contact_email: email || null,
+              logo_emoji: emoji,
+              accent_color: color,
+              listed_public: listedPublic,
+              profile_public: profilePublic,
+              join_mode: joinMode,
+            }
+      if (activeTab !== 'charter' && avatar !== null) body.avatar = avatar
       const data = await communitiesApi.updateSettings(active.slug, body)
       applySettings(data.settings)
       await refresh()
@@ -166,6 +168,10 @@ export function PlaceSettingsPage({
     }
   }
 
+  if (communityLoading || loadingManagedPlaces) {
+    return <p className="text-slate-500 p-4">Chargement…</p>
+  }
+
   if (!active) {
     return (
       <p className="text-slate-500 p-4">
@@ -187,7 +193,7 @@ export function PlaceSettingsPage({
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+    <div className="w-full space-y-6">
       {onNavigate && active?.slug && (
         <PlaceOrgBackLink onNavigate={onNavigate} hubSlug={active.slug} />
       )}

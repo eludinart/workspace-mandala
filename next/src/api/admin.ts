@@ -54,6 +54,7 @@ export type AdminManagedUser = {
     name: string
     role: string
     logo_emoji?: string | null
+    is_sole_manager?: boolean
   }>
 }
 

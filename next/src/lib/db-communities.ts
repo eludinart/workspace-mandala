@@ -10,7 +10,7 @@ import {
   serializeCharterBlocks,
   type CharterBlock,
 } from './community-charter'
-import { isCommunityManagerRole } from './community-role-labels'
+import { isCommunityManagerRole, LAST_COMMUNITY_MANAGER_MESSAGE } from './community-role-labels'
 import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
 import { geocodeAddress } from './geocode'
@@ -629,6 +629,7 @@ export async function createCommunity(params: {
   logo_emoji?: string
   creatorUserId: number
 }): Promise<CommunityRecord> {
+  if (!params.creatorUserId) throw new Error('Créateur requis')
   await ensureCommunitiesTables()
   const slug = params.slug
     .toLowerCase()
@@ -848,15 +849,17 @@ export async function listCommunitiesManagedByUser(userId: number): Promise<Comm
 export async function assertUserCanManageCommunity(
   userId: number,
   communityId: number,
-  options?: { isAppSiteManager?: boolean }
+  options?: { isAppSiteManager?: boolean; isAppAdmin?: boolean }
 ): Promise<void> {
-  let role: CommunityRole
+  const isAppAdmin = !!(options?.isAppAdmin || options?.isAppSiteManager)
+  let role: CommunityRole = 'member'
   try {
     role = await requireCommunityMembership(userId, communityId)
   } catch {
+    if (isAppAdmin) return
     throw Object.assign(new Error('Accès refusé à ce lieu'), { status: 403 })
   }
-  if (!canManageCommunitySettings(role, false, !!options?.isAppSiteManager)) {
+  if (!canManageCommunitySettings(role, isAppAdmin)) {
     throw Object.assign(new Error('Droits gestionnaire requis pour ce lieu'), { status: 403 })
   }
 }
@@ -1085,6 +1088,64 @@ export async function listCommunityMembersAdmin(communityId: number): Promise<Co
   }))
 }
 
+export async function countCommunityManagers(communityId: number): Promise<number> {
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM ${tM} WHERE community_id = ? AND role IN ('organizer', 'admin')`,
+    [communityId]
+  )
+  return Number(rows[0]?.n ?? 0)
+}
+
+/** Interdit de retirer ou rétrograder le dernier gestionnaire d’un lieu. */
+export async function assertCommunityKeepsAManager(
+  communityId: number,
+  targetUserId: number,
+  nextRole: CommunityRole | null
+): Promise<void> {
+  if (nextRole && isCommunityManagerRole(nextRole)) return
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT role FROM ${tM} WHERE community_id = ? AND user_id = ? LIMIT 1`,
+    [communityId, targetUserId]
+  )
+  if (!isCommunityManagerRole(String(rows[0]?.role ?? ''))) return
+  const n = await countCommunityManagers(communityId)
+  if (n <= 1) {
+    throw Object.assign(new Error(LAST_COMMUNITY_MANAGER_MESSAGE), { status: 409 })
+  }
+}
+
+export async function listPlacesWhereUserIsSoleManager(
+  userId: number
+): Promise<Array<{ id: number; slug: string; name: string }>> {
+  if (!userId) return []
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const tC = table('mandala_communities')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT c.id, c.slug, c.name
+     FROM ${tM} m
+     JOIN ${tC} c ON c.id = m.community_id
+     WHERE m.user_id = ? AND m.role IN ('organizer', 'admin')
+       AND (
+         SELECT COUNT(*) FROM ${tM} m2
+         WHERE m2.community_id = m.community_id AND m2.role IN ('organizer', 'admin')
+       ) = 1`,
+    [userId]
+  )
+  return (rows ?? []).map((r) => ({
+    id: Number(r.id),
+    slug: String(r.slug),
+    name: String(r.name),
+  }))
+}
+
 export async function setCommunityMemberRole(
   communityId: number,
   targetUserId: number,
@@ -1093,6 +1154,7 @@ export async function setCommunityMemberRole(
   if (!['member', 'organizer', 'admin'].includes(role)) {
     throw new Error('Rôle invalide')
   }
+  await assertCommunityKeepsAManager(communityId, targetUserId, role)
   await ensureCommunitiesTables()
   const pool = getPool()
   const tM = table('mandala_community_members')
@@ -1124,6 +1186,8 @@ export async function removeUserFromCommunity(
   if (!mem.length) {
     throw new Error('Cette personne n’est pas membre de ce lieu')
   }
+
+  await assertCommunityKeepsAManager(communityId, targetUserId, null)
 
   const { ensureCalendarTables } = await import('./db-calendar')
   await ensureCalendarTables()
@@ -1185,15 +1249,15 @@ export function canManageCommunitySettings(
   isAppAdmin: boolean,
   isAppSiteManager = false
 ): boolean {
-  return isAppAdmin || isAppSiteManager || role === 'organizer' || role === 'admin'
+  return isAppAdmin || isAppSiteManager || isCommunityManagerRole(role)
 }
 
-/** Gestion d’un lieu dans son contexte (sans bypass administrateur application). */
+/** Gestion d’un lieu : rôle organizer/admin sur ce lieu, ou admin application. */
 export function canManageCommunityInContext(
   role: CommunityRole,
-  isAppSiteManager = false
+  isAppAdmin = false
 ): boolean {
-  return isAppSiteManager || role === 'organizer' || role === 'admin'
+  return isAppAdmin || isCommunityManagerRole(role)
 }
 
 /** Création / édition d’événements : réservée à l’organisation du lieu (pas au simple membre). */
@@ -1210,9 +1274,19 @@ export async function getCommunitySettingsForManager(
   const community = await getCommunityBySlug(slug)
   if (!community) throw new Error('Lieu introuvable')
 
-  const memberRole = await requireCommunityMembership(userId, community.id)
-  const can_manage = canManageCommunityInContext(memberRole, isAppSiteManager)
-  if (!can_manage) throw new Error('Droits gestionnaire requis')
+  let memberRole: CommunityRole | null = null
+  try {
+    memberRole = await requireCommunityMembership(userId, community.id)
+  } catch {
+    if (!isAppSiteManager) {
+      throw Object.assign(new Error('Accès communauté refusé'), { status: 403 })
+    }
+  }
+  const can_manage =
+    isAppSiteManager || (memberRole != null && canManageCommunityInContext(memberRole))
+  if (!can_manage) {
+    throw Object.assign(new Error('Droits gestionnaire requis'), { status: 403 })
+  }
 
   const pool = getPool()
   const tC = table('mandala_communities')

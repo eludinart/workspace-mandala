@@ -1,6 +1,7 @@
 'use client'
 
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
+import type { AdminTabId } from '@/lib/nav'
 import { useAuth } from '@/contexts/AuthContext'
 import { socialApi } from '@/api/social'
 import { useSocialStore } from '@/store/useSocialStore'
@@ -16,10 +17,12 @@ import { useEffect, useState } from 'react'
 export function Layout({
   page,
   onNavigate,
+  adminTab,
   children,
 }: {
   page: MandalaPage
   onNavigate: MandalaNavigate
+  adminTab?: AdminTabId
   children: React.ReactNode
 }) {
   const { user } = useAuth()
@@ -45,7 +48,7 @@ export function Layout({
     <div className="h-full min-h-0 flex flex-col md:flex-row bg-slate-950 text-slate-100">
       <aside className="hidden md:flex md:w-56 lg:w-60 border-r border-slate-800 shrink-0 self-stretch">
         <div className="w-full p-3 flex flex-col min-h-0 sticky top-0 max-h-full">
-          <AppNavPanel page={page} onNavigate={onNavigate} />
+          <AppNavPanel page={page} onNavigate={onNavigate} adminTab={adminTab} />
         </div>
       </aside>
 
@@ -59,8 +62,12 @@ export function Layout({
         <AdminActingRoleBar />
         <PushNotificationPriming />
         <main
-          className={`flex-1 min-h-0 p-4 md:p-6 ${
-            page === 'messages' ? 'flex flex-col overflow-hidden' : 'overflow-auto'
+          className={`flex-1 min-h-0 min-w-0 w-full ${
+            page === 'messages'
+              ? 'flex flex-col overflow-hidden p-4 md:p-6'
+              : page === 'home'
+                ? 'overflow-auto p-0'
+                : 'overflow-auto p-4 md:p-6'
           }`}
         >
           {children}
@@ -72,6 +79,7 @@ export function Layout({
         onClose={() => setMobileNavOpen(false)}
         page={page}
         onNavigate={onNavigate}
+        adminTab={adminTab}
       />
     </div>
   )

@@ -68,7 +68,9 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
       setCommunities(items)
       communitiesRef.current = items
       const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+      const current = activeSlugRef.current
       const pick =
+        items.find((c) => c.slug === current)?.slug ??
         items.find((c) => c.slug === stored)?.slug ??
         items.find((c) => c.slug === 'shambhala')?.slug ??
         items[0]?.slug ??

@@ -9,7 +9,6 @@ import { NextRequest } from 'next/server'
 import { jwtDecode } from './jwt'
 import { authMe, userAccountExists } from './db-auth'
 import { isBootstrapAdminEmail } from './admin-bootstrap'
-import { isSiteManagerAppRole } from './app-roles'
 import { canManageCommunityInContext, canOrganizeCommunityEvents, type CommunityRole } from './db-communities'
 import { getTokenFromCookie } from './auth-cookie'
 import { isDbConfigured } from './db'
@@ -158,7 +157,11 @@ export type CommunityManagerAccess = {
   isAppSiteManager: boolean
 }
 
-/** Droits gestionnaire de lieu (indépendant du mode « administrateur » affiché). */
+/**
+ * Droits globaux d’administration.
+ * Le rôle « gestionnaire » est exclusivement par lieu (`organizer` / `admin` communauté).
+ * L’ancien `app_role=site_manager` n’accorde plus de droits sur tous les lieux.
+ */
 export async function resolveCommunityManagerAccess(userId: number): Promise<CommunityManagerAccess> {
   try {
     const u = await authMe(userId)
@@ -166,7 +169,6 @@ export async function resolveCommunityManagerAccess(userId: number): Promise<Com
     if (isBootstrapAdminEmail(email)) return { isAppAdmin: true, isAppSiteManager: true }
     const r = String(u.app_role || u.wp_role || '').toLowerCase()
     if (r === 'admin' || r === 'administrator') return { isAppAdmin: true, isAppSiteManager: true }
-    if (isSiteManagerAppRole(r)) return { isAppAdmin: false, isAppSiteManager: true }
   } catch {
     /* ignore */
   }
@@ -182,13 +184,13 @@ export async function requireCommunityManagerActor(
   return { userId, uid, ...access }
 }
 
-/** Droits de gestion sur le lieu actif (rôle communauté + éventuel site_manager app). */
+/** Droits de gestion sur un lieu : rôle communauté (organizer/admin) ou admin application. */
 export async function userCanManageInCommunity(
   userId: number,
   communityRole: CommunityRole
 ): Promise<boolean> {
-  const { isAppSiteManager } = await resolveCommunityManagerAccess(userId)
-  return canManageCommunityInContext(communityRole, isAppSiteManager)
+  const { isAppAdmin } = await resolveCommunityManagerAccess(userId)
+  return isAppAdmin || canManageCommunityInContext(communityRole)
 }
 
 /** Création / modification d’événements sur le lieu actif. */

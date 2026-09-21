@@ -3,23 +3,22 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useManagedPlaces } from '@/hooks/useManagedPlaces'
 import { isCommunityManagerRole } from '@/lib/community-role-labels'
-import { isSiteManagerAppRole, normalizeAppRole } from '@/lib/app-roles'
 
-/** Droits d’affichage du menu (utilisateur / gestionnaire / administrateur). */
+/** Droits d’affichage du menu (utilisateur / gestionnaire de lieu / administrateur). */
 export function useNavAccess() {
-  const { isRealAdmin, showAdminUi, actingRole, user } = useAuth()
+  const { isRealAdmin, showAdminUi, actingRole } = useAuth()
   const { active } = useCommunity()
   const { managedPlaces, loadingManagedPlaces } = useManagedPlaces()
 
   return useMemo(() => {
-    const appRole = normalizeAppRole(user?.app_role)
-    const managesActive = isCommunityManagerRole(active?.role)
-    let canManageActiveCommunity = managesActive
-    let canManageAnyPlace =
-      managedPlaces.length > 0 || isSiteManagerAppRole(appRole)
+    const isAppAdmin = showAdminUi
+    const managesActive =
+      isCommunityManagerRole(active?.role) ||
+      managedPlaces.some((p) => p.slug === active?.slug)
+    let canManageActiveCommunity = managesActive || isAppAdmin
+    let canManageAnyPlace = managedPlaces.length > 0 || isAppAdmin
 
     let showSiteManagerNav = canManageAnyPlace
-    const isAppAdmin = showAdminUi
 
     let roleLabel = 'Membre'
     if (isAppAdmin) {
@@ -36,7 +35,8 @@ export function useNavAccess() {
       roleLabel = 'Membre'
     } else if (isRealAdmin && actingRole === 'site_manager') {
       showSiteManagerNav = true
-      canManageAnyPlace = managedPlaces.length > 0 || true
+      canManageAnyPlace = true
+      canManageActiveCommunity = true
       roleLabel = managesActive ? 'Gestionnaire' : 'Gestionnaire · membre'
     }
 
@@ -67,6 +67,5 @@ export function useNavAccess() {
     managedPlaces,
     loadingManagedPlaces,
     showAdminUi,
-    user?.app_role,
   ])
 }

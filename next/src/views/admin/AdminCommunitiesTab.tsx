@@ -9,6 +9,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
+import { COMMUNITY_ROLE_SELECT_OPTIONS, isCommunityManagerRole } from '@/lib/community-role-labels'
 
 export function AdminCommunitiesTab({
   onMessage,
@@ -230,6 +231,8 @@ export function AdminCommunitiesTab({
     }
   }
 
+  const managerCount = members.filter((m) => isCommunityManagerRole(m.role)).length
+
   return (
     <div className="grid lg:grid-cols-[220px_1fr] gap-4">
       <div className="space-y-2">
@@ -275,7 +278,10 @@ export function AdminCommunitiesTab({
 
         {isAppAdminScope && (
         <div className="pt-4 border-t border-slate-800 space-y-2">
-          <p className="text-xs text-slate-500">Nouvelle communauté</p>
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            Vous en devenez automatiquement le gestionnaire. Vous pourrez ensuite attribuer ce rôle
+            à d&apos;autres membres du lieu.
+          </p>
           <input
             value={newSlug}
             onChange={(e) => setNewSlug(e.target.value)}
@@ -610,9 +616,19 @@ export function AdminCommunitiesTab({
                             onChange={(e) => void setMemberRole(m.user_id, e.target.value)}
                             className="rounded bg-slate-950 border border-slate-700 px-1 py-0.5"
                           >
-                            <option value="member">member</option>
-                            <option value="organizer">organizer</option>
-                            <option value="admin">admin</option>
+                            {COMMUNITY_ROLE_SELECT_OPTIONS.map((opt) => (
+                              <option
+                                key={opt.value}
+                                value={opt.value}
+                                disabled={
+                                  opt.value === 'member' &&
+                                  isCommunityManagerRole(m.role) &&
+                                  managerCount <= 1
+                                }
+                              >
+                                {opt.label}
+                              </option>
+                            ))}
                           </select>
                         </td>
                       </tr>

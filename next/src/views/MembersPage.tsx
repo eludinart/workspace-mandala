@@ -192,7 +192,7 @@ export function MembersPage({
   }
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="w-full space-y-4">
       {organisationMode && onNavigate && active?.slug && (
         <PlaceOrgBackLink onNavigate={onNavigate} hubSlug={active.slug} />
       )}
@@ -203,7 +203,7 @@ export function MembersPage({
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             {organisationMode
-              ? `Administration des membres — ${active?.name ?? 'lieu actif'}`
+              ? `Administration des membres — ${active?.name ?? 'lieu actif'}. Attribuez le rôle gestionnaire depuis la fiche d’un membre.`
               : directoryMode
                 ? 'Annuaire multi-communautés'
                 : active?.name
@@ -220,9 +220,9 @@ export function MembersPage({
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end">
-        <label className="flex-1 min-w-[180px] text-xs text-slate-400">
-          Rechercher
+      <div className={`flex flex-wrap gap-3 items-end ${organisationMode ? '' : 'm-user-form'}`}>
+        <label className="flex-1 min-w-[180px] block text-xs text-slate-400">
+          <span>Rechercher</span>
           <input
             value={memberSearch}
             onChange={(e) => setMemberSearch(e.target.value)}
@@ -244,7 +244,7 @@ export function MembersPage({
               setPanelMember(null)
             }
           }}
-          className="rounded-xl border border-slate-800 bg-slate-900/30"
+          className="rounded-xl border border-slate-800 bg-slate-900/30 m-user-form"
         >
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-slate-300 hover:text-white">
             Filtres avancés

@@ -58,18 +58,19 @@ export function WallDiscoverSection({
   }, [])
 
   return (
-    <div className="space-y-8">
-      <div className="grid lg:grid-cols-5 gap-6 lg:gap-8 items-start">
-        <div className="lg:col-span-2 space-y-3 lg:sticky lg:top-20">
+    <div className="space-y-10">
+      <div className="grid lg:grid-cols-5 gap-8 lg:gap-10 items-start">
+        <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20">
           <div>
-            <h2 className="text-xl font-bold text-slate-100">Carte du réseau</h2>
-            <p className="text-sm text-slate-400 mt-1">
+            <p className="m-landing-eyebrow mb-2">Carte</p>
+            <h2 className="text-2xl sm:text-3xl text-slate-100">Le réseau</h2>
+            <p className="text-sm text-slate-400 mt-2">
               {loading
                 ? 'Chargement…'
                 : `${places.length} lieu${places.length > 1 ? 'x' : ''} — cliquez pour explorer`}
             </p>
           </div>
-          <div className="overflow-hidden rounded-2xl border border-slate-800 shadow-xl shadow-black/30">
+          <div className="overflow-hidden rounded-[1.35rem] border border-slate-800 shadow-xl shadow-black/20">
             <PlacesMap
               places={places}
               selectedSlug={selectedSlug}
@@ -89,8 +90,11 @@ export function WallDiscoverSection({
       </div>
 
       {showPlacesList && places.length > 0 && (
-        <section className="space-y-4 pt-4 border-t border-slate-800/80">
-          <h2 className="text-lg font-semibold">Tous les lieux</h2>
+        <section id="lieux" className="space-y-5 pt-6 border-t border-slate-800/70 scroll-mt-16">
+          <div className="text-center sm:text-left space-y-2">
+            <p className="m-landing-eyebrow">Communautés</p>
+            <h2 className="text-2xl sm:text-3xl">Tous les lieux</h2>
+          </div>
           <div className="grid sm:grid-cols-2 gap-4">
             {places.map((place) => (
               <div key={place.slug} id={`mur-lieu-${place.slug}`}>

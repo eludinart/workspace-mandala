@@ -165,7 +165,7 @@ export function CirclesJournalPage() {
   const pad = firstWeekdayMonday(ym)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Cercles</h1>
         <p className="text-sm text-slate-400 mt-1">

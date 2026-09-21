@@ -10,7 +10,7 @@ import type { MandalaNavigate } from '@/components/MandalaApp'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
-import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
+import { formatCommunityRoleLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
@@ -214,9 +214,10 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   }
 
   return (
-    <div className="max-w-lg space-y-6">
+    <div className="m-user-form w-full space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">Mon compte</h1>
+        <p className="m-user-eyebrow mb-1">Espace personnel</p>
+        <h1 className="m-user-title text-3xl">Mon compte</h1>
         <nav className="mt-3 flex flex-wrap gap-2 text-sm" aria-label="Sections du compte">
           {SECTIONS.map((s) => (
             <a
@@ -398,6 +399,11 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
                     Quitter…
                   </button>
                 </div>
+                {isCommunityManagerRole(c.role) && (
+                  <p className="basis-full text-[10px] text-slate-500">
+                    Si vous êtes le seul gestionnaire, désignez un successeur avant de quitter.
+                  </p>
+                )}
               </li>
             ))}
           </ul>

@@ -92,7 +92,7 @@ export function WallFeed({
     <div className={`space-y-4 ${className}`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-100">Fil d&apos;actualité</h2>
+          <h2 className="text-2xl text-slate-100">Fil d&apos;actualité</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {isAuthenticated
               ? memberPlaceCount > 0
@@ -103,7 +103,7 @@ export function WallFeed({
         </div>
         <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
           <div
-            className="inline-flex rounded-xl border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
+            className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
             role="tablist"
             aria-label="Trier le fil"
           >
@@ -119,11 +119,11 @@ export function WallFeed({
                 role="tab"
                 aria-selected={sort === opt.id}
                 onClick={() => setSort(opt.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  sort === opt.id
-                    ? 'bg-violet-600 text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    sort === opt.id
+                      ? 'bg-violet-600 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 {opt.label}
               </button>

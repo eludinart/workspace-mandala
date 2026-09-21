@@ -26,7 +26,7 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
   }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="w-full space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Centre d&apos;alertes</h1>

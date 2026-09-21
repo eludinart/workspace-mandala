@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
@@ -84,11 +85,13 @@ export function AppNavPanel({
   onNavigate,
   onItemClick,
   showBranding = true,
+  adminTab,
 }: {
   page: MandalaPage
   onNavigate: MandalaNavigate
   onItemClick?: () => void
   showBranding?: boolean
+  adminTab?: AdminTabId
 }) {
   const { logout, isRealAdmin, setActingRole, showAdminUi } = useAuth()
   const { isAppAdmin, isSiteManager, roleLabel } = useNavAccess()
@@ -107,8 +110,14 @@ export function AppNavPanel({
       {showBranding && (
         <div className="px-3 pb-3 border-b border-slate-800 shrink-0 space-y-3">
           <div>
-            <p className="text-lg font-bold tracking-tight">Mandala</p>
-            <p className="text-[10px] text-slate-500">Communautés & événements</p>
+            <Link
+              href="/"
+              className="block rounded-lg -mx-1 px-1 py-0.5 hover:bg-slate-800/60 transition-colors"
+              aria-label="Accueil Mandala"
+            >
+              <p className="text-lg font-bold tracking-tight">Mandala</p>
+              <p className="text-[10px] text-slate-500">Communautés & événements</p>
+            </Link>
             <p className="mt-2 inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-400">
               {roleLabel}
             </p>
@@ -167,20 +176,24 @@ export function AppNavPanel({
             <SectionTitle>Organisation</SectionTitle>
             <nav className="flex flex-col gap-0.5 px-2">
               {isSiteManager &&
-                ORGANISATION_NAV.map((item) => (
-                  <NavButton
-                    key={`org-${item.id}`}
-                    active={
-                      page === item.id ||
-                      (item.id === 'managed-places' && ORGANISATION_PLACE_PAGES.includes(page))
-                    }
-                    icon={item.icon}
-                    label={item.label}
-                    description={item.description}
-                    variant="manager"
-                    onClick={() => go(item.id)}
-                  />
-                ))}
+                ORGANISATION_NAV.map((item) => {
+                  const onOwnPage = page === item.id
+                  const onNestedPlacePage =
+                    item.id === 'managed-places' &&
+                    ORGANISATION_PLACE_PAGES.includes(page) &&
+                    !ORGANISATION_NAV.some((nav) => nav.id === page)
+                  return (
+                    <NavButton
+                      key={`org-${item.id}`}
+                      active={onOwnPage || onNestedPlacePage}
+                      icon={item.icon}
+                      label={item.label}
+                      description={item.description}
+                      variant="manager"
+                      onClick={() => go(item.id)}
+                    />
+                  )
+                })}
             </nav>
           </>
         )}
@@ -205,7 +218,7 @@ export function AppNavPanel({
               {ADMIN_NAV.map((item) => (
                 <NavButton
                   key={item.id}
-                  active={page === 'admin'}
+                  active={page === 'admin' && item.adminTab === adminTab}
                   icon={item.icon}
                   label={item.label}
                   description={item.description}

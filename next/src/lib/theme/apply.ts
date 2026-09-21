@@ -1,6 +1,7 @@
 import {
   DEFAULT_THEME_MODE,
   DEFAULT_THEME_PALETTE,
+  THEME_FORCE_LIGHT_STAMP,
   type ThemeMode,
   type ThemePaletteId,
   THEME_PALETTES,
@@ -35,7 +36,12 @@ export function readThemeFromStorage(): { mode: ThemeMode; palette: ThemePalette
     return { mode: DEFAULT_THEME_MODE, palette: DEFAULT_THEME_PALETTE }
   }
   try {
-    const mode = localStorage.getItem('mdl_theme_mode') === 'light' ? 'light' : 'dark'
+    if (localStorage.getItem('mdl_theme_force_light') !== THEME_FORCE_LIGHT_STAMP) {
+      localStorage.setItem('mdl_theme_force_light', THEME_FORCE_LIGHT_STAMP)
+      localStorage.setItem('mdl_theme_mode', 'light')
+    }
+    const storedMode = localStorage.getItem('mdl_theme_mode')
+    const mode = storedMode === 'dark' ? 'dark' : storedMode === 'light' ? 'light' : DEFAULT_THEME_MODE
     const paletteRaw = localStorage.getItem('mdl_theme_palette') ?? DEFAULT_THEME_PALETTE
     const palette = paletteRaw in THEME_PALETTES ? (paletteRaw as ThemePaletteId) : DEFAULT_THEME_PALETTE
     return { mode, palette }

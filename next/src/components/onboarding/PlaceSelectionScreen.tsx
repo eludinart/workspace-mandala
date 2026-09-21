@@ -61,9 +61,10 @@ export function PlaceSelectionScreen({
   }, [inviteCode, onComplete, selected, selectedSlug])
 
   return (
-    <div className="w-full max-w-lg space-y-5">
+    <div className="m-user-form w-full max-w-3xl space-y-5">
       <header className="text-center space-y-2">
-        <p className="text-2xl font-bold">Mandala</p>
+        <p className="m-user-title text-4xl">Mandala</p>
+        <p className="m-user-eyebrow">Bienvenue</p>
         <h1 className="text-lg font-semibold text-slate-100">{title}</h1>
         <p className="text-sm text-slate-400">{subtitle}</p>
       </header>

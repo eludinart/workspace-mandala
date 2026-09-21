@@ -20,7 +20,7 @@ export function AppHeader({
   const clairiereUnread = useSocialStore((s) => s.clairiereUnreadCount)
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
+    <header className="sticky top-0 z-50 shrink-0 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
       <div className="flex items-center gap-2 px-3 py-2 sm:px-4 min-h-[52px]">
         <button
           type="button"

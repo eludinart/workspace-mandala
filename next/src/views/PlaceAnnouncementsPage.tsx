@@ -44,7 +44,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
 
   if (!canManage && !loading) {
     return (
-      <div className="max-w-xl space-y-4">
+      <div className="w-full space-y-4">
         <p className="text-slate-400 text-sm">Accès réservé aux organisateurs du lieu.</p>
         <button
           type="button"
@@ -123,7 +123,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="w-full space-y-5">
       <div>
         <button
           type="button"

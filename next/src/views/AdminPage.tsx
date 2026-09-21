@@ -11,6 +11,7 @@ import { adminApi } from '@/api/admin'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
+import { assignableAppRole } from '@/lib/app-roles'
 
 import type { AdminTabId } from '@/lib/nav'
 type CommMode = 'announcement' | 'broadcast'
@@ -23,6 +24,7 @@ type AdminUser = {
   app_role: string
   wp_role: string
   pseudo: string | null
+  managed_place_count?: number
 }
 
 type AdminNotif = {
@@ -294,7 +296,7 @@ export function AdminPage({
   }
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="w-full space-y-4">
       <AdminCommunityBanner />
       <h1 className="text-2xl font-bold">Administration</h1>
       <div className="flex flex-wrap gap-2">
@@ -318,6 +320,11 @@ export function AdminPage({
 
       {tab === 'people' && (
         <div className="space-y-3">
+          <p className="text-xs text-slate-500">
+            Le rôle <strong className="text-slate-300">gestionnaire</strong> se définit{' '}
+            <strong className="text-slate-300">par lieu</strong> dans la fiche (Lieux &amp; rôles),
+            pas dans le rôle application.
+          </p>
           <div className="flex gap-2">
             <input
               value={userSearch}
@@ -343,6 +350,7 @@ export function AdminPage({
                   <th className="text-left p-2">Nom</th>
                   <th className="text-left p-2">Pseudo</th>
                   <th className="text-left p-2">Rôle app</th>
+                  <th className="text-left p-2">Lieux gérés</th>
                   <th className="text-left p-2 w-20" />
                 </tr>
               </thead>
@@ -355,14 +363,22 @@ export function AdminPage({
                     <td className="p-2">{u.pseudo ?? '—'}</td>
                     <td className="p-2">
                       <select
-                        value={u.app_role === 'coach' ? 'site_manager' : u.app_role}
+                        value={assignableAppRole(u.app_role)}
                         onChange={(e) => void setRole(u.id, e.target.value)}
                         className="rounded bg-slate-950 border border-slate-700 px-1 py-0.5"
                       >
-                        <option value="user">user</option>
-                        <option value="site_manager">gestionnaire</option>
-                        <option value="admin">admin</option>
+                        <option value="user">utilisateur</option>
+                        <option value="admin">administrateur</option>
                       </select>
+                    </td>
+                    <td className="p-2 text-slate-300">
+                      {u.managed_place_count ? (
+                        <span className="text-sky-300">
+                          {u.managed_place_count} lieu{u.managed_place_count > 1 ? 'x' : ''}
+                        </span>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
                     </td>
                     <td className="p-2">
                       <button
@@ -503,7 +519,7 @@ export function AdminPage({
           )}
 
           {commMode === 'broadcast' && (
-            <div className="space-y-4 max-w-lg">
+            <div className="space-y-4 w-full">
               <p className="text-sm text-slate-400">
                 Diffusion in-app vers tous les membres (notification centre).
               </p>

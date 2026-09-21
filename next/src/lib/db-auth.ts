@@ -266,7 +266,7 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
   ;(out as Record<string, unknown>).coach_request_at = meta.mdl_coach_request_at || null
   ;(out as Record<string, unknown>).coach_request_message = meta.mdl_coach_request_message || null
   ;(out as Record<string, unknown>).theme_mode =
-    meta.mdl_theme_mode === 'light' ? 'light' : 'dark'
+    meta.mdl_theme_mode === 'dark' ? 'dark' : 'light'
   ;(out as Record<string, unknown>).theme_palette = meta.mdl_theme_palette || 'violet'
 }
 
@@ -712,6 +712,7 @@ export type AdminUserListItem = {
   wp_role: string
   app_role: string
   pseudo: string | null
+  managed_place_count: number
 }
 
 export async function listUsersAdmin(params: {
@@ -780,8 +781,34 @@ export async function listUsersAdmin(params: {
       wp_role: wpRole,
       app_role: appRole,
       pseudo: r.pseudo ? String(r.pseudo) : null,
+      managed_place_count: 0,
     })
   }
+
+  const ids = items.map((i) => i.id)
+  if (ids.length) {
+    try {
+      const tM = table('mandala_community_members')
+      const placeholders = ids.map(() => '?').join(', ')
+      const [countRows] = await pool.execute<RowDataPacket[]>(
+        `SELECT user_id, COUNT(*) AS n
+         FROM ${tM}
+         WHERE user_id IN (${placeholders}) AND role IN ('organizer', 'admin')
+         GROUP BY user_id`,
+        ids
+      )
+      const managedCounts = new Map<number, number>()
+      for (const row of countRows ?? []) {
+        managedCounts.set(Number(row.user_id), Number(row.n ?? 0))
+      }
+      for (const item of items) {
+        item.managed_place_count = managedCounts.get(item.id) ?? 0
+      }
+    } catch {
+      /* table lieux absente */
+    }
+  }
+
   return { items, total: items.length }
 }
 
@@ -831,7 +858,20 @@ export async function deleteUserAccount(userId: number): Promise<void> {
     throw new Error('Ce compte système ne peut pas être supprimé')
   }
 
-  const { listCommunitiesForUser, removeUserFromCommunity } = await import('./db-communities')
+  const { listCommunitiesForUser, listPlacesWhereUserIsSoleManager, removeUserFromCommunity } =
+    await import('./db-communities')
+  const solePlaces = await listPlacesWhereUserIsSoleManager(userId)
+  if (solePlaces.length) {
+    const names = solePlaces.map((p) => p.name).join(', ')
+    throw Object.assign(
+      new Error(
+        solePlaces.length === 1
+          ? `Impossible de supprimer le compte : vous êtes le seul gestionnaire de « ${names} ». Désignez un autre gestionnaire d’abord.`
+          : `Impossible de supprimer le compte : vous êtes le seul gestionnaire de ${solePlaces.length} lieux (${names}). Désignez un successeur sur chacun d’eux.`
+      ),
+      { status: 409 }
+    )
+  }
   const communities = await listCommunitiesForUser(userId)
   for (const c of communities) {
     await removeUserFromCommunity(c.id, userId)

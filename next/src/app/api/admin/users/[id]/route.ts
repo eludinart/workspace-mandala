@@ -2,11 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ApiError, requireUserManagementAccess } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
 import { authMe, updateProfile, updateUserAppRole } from '@/lib/db-auth'
-import { listCommunitiesForUser } from '@/lib/db-communities'
+import { listCommunitiesForUser, listPlacesWhereUserIsSoleManager } from '@/lib/db-communities'
 
 export const dynamic = 'force-dynamic'
 
 type RouteParams = { params: Promise<{ id: string }> }
+
+async function serializeUserCommunities(userId: number) {
+  const communities = await listCommunitiesForUser(userId)
+  const sole = await listPlacesWhereUserIsSoleManager(userId)
+  const soleIds = new Set(sole.map((p) => p.id))
+  return communities.map((c) => ({
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    role: c.role,
+    logo_emoji: c.logo_emoji,
+    is_sole_manager: soleIds.has(c.id),
+  }))
+}
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
@@ -21,18 +35,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     await requireUserManagementAccess(req, targetId, communitySlug)
 
     const user = await authMe(targetId)
-    const communities = await listCommunitiesForUser(targetId)
     const { avatar: _a, ...rest } = user as Record<string, unknown> & { avatar?: string | null }
     return NextResponse.json({
       ...rest,
       has_avatar: !!(user.avatar && String(user.avatar).length > 0),
-      communities: communities.map((c) => ({
-        id: c.id,
-        slug: c.slug,
-        name: c.name,
-        role: c.role,
-        logo_emoji: c.logo_emoji,
-      })),
+      communities: await serializeUserCommunities(targetId),
     })
   } catch (err: unknown) {
     const e = err as ApiError
@@ -83,18 +90,11 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (Object.keys(allowed).length > 0) {
       user = await updateProfile(targetId, allowed)
     }
-    const communities = await listCommunitiesForUser(targetId)
     const { avatar: _a, ...rest } = user as Record<string, unknown> & { avatar?: string | null }
     return NextResponse.json({
       ...rest,
       has_avatar: !!(user.avatar && String(user.avatar).length > 0),
-      communities: communities.map((c) => ({
-        id: c.id,
-        slug: c.slug,
-        name: c.name,
-        role: c.role,
-        logo_emoji: c.logo_emoji,
-      })),
+      communities: await serializeUserCommunities(targetId),
     })
   } catch (err: unknown) {
     const e = err as ApiError

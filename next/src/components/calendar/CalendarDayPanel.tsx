@@ -118,7 +118,7 @@ export function CalendarDayPanel({
 
         {!detailLoading && showPresence && selectedDayInfo && (
           <div
-            className={`rounded-xl border p-4 flex items-center justify-between gap-3 ${
+            className={`m-user-form rounded-xl border p-4 flex items-center justify-between gap-3 ${
               selectedDayInfo.i_am_present
                 ? 'border-emerald-500/40 bg-emerald-950/25'
                 : 'border-slate-800 bg-slate-950/40'

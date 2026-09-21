@@ -18,10 +18,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const uid = parseInt(userId, 10)
     const { isAppSiteManager } = await resolveCommunityManagerAccess(uid)
     const { slug } = await ctx.params
-    // Admins/gestionnaires application : accès direct. Organisateurs : droits sur le lieu requis.
-    if (!isAppSiteManager) {
-      await getCommunitySettingsForManager(slug, uid, false)
-    }
+    await getCommunitySettingsForManager(slug, uid, isAppSiteManager)
 
     const body = await req.json().catch(() => ({}))
     const result = await geocodeAddress({

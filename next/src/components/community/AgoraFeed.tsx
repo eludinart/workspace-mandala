@@ -133,7 +133,7 @@ export function AgoraFeed() {
       subtitle={`Le mur de ${active.name}${canManage ? ' · modération activée' : ''}`}
       tone="slate"
     >
-      <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 space-y-3">
+      <div className="m-user-form rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 space-y-3">
         <div className="flex items-center gap-3">
           <UserAvatar
             avatar={myAvatar}

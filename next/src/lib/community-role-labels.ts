@@ -14,3 +14,12 @@ export function formatCommunityRoleLabel(role: string | undefined | null): strin
   if (r === 'member') return 'Membre'
   return r || '—'
 }
+
+export const COMMUNITY_ROLE_SELECT_OPTIONS: Array<{ value: CommunityRole; label: string }> = [
+  { value: 'member', label: 'Membre' },
+  { value: 'organizer', label: 'Gestionnaire' },
+  { value: 'admin', label: 'Gestionnaire (admin)' },
+]
+
+export const LAST_COMMUNITY_MANAGER_MESSAGE =
+  'Ce lieu doit conserver au moins un gestionnaire. Attribuez d’abord ce rôle à un autre membre.'

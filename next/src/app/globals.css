@@ -171,3 +171,391 @@ html.light [class*='text-violet-300'] {
   transform: scale(1.12);
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.55), 0 4px 14px rgba(0, 0, 0, 0.45);
 }
+
+/*
+ * Formulaires destinés au public / aux membres — langage visuel inspiré de
+ * Vihara (champs capsule, labels discrets, boutons pill).
+ * Ne pas poser `.m-user-form` sur les écrans gestionnaire ou admin.
+ */
+.m-user-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgb(var(--accent-400));
+}
+
+.m-user-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.m-user-form input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']),
+.m-user-form textarea,
+.m-user-form select {
+  border-radius: 2rem;
+  background-color: rgb(var(--slate-950) / 0.78);
+  border-color: rgb(var(--slate-700) / 0.7);
+  color: rgb(var(--slate-100));
+  outline: none;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.m-user-form textarea {
+  border-radius: 1.35rem;
+}
+
+.m-user-form input:focus:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+.m-user-form textarea:focus,
+.m-user-form select:focus {
+  border-color: rgb(var(--accent-500) / 0.8);
+  box-shadow: 0 0 0 4px rgb(var(--accent-500) / 0.16);
+}
+
+.m-user-form input::placeholder,
+.m-user-form textarea::placeholder {
+  color: rgb(var(--slate-400) / 0.9);
+}
+
+.m-user-form select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%2394a3b8' d='M1.2 1.3 6 6.1l4.8-4.8 1.2 1.2L6 8.5 0 2.5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 1.1rem center;
+  padding-right: 2.5rem;
+}
+
+.m-user-form button[type='submit'],
+.m-user-form button.bg-violet-600 {
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  box-shadow: 0 10px 22px rgb(var(--accent-600) / 0.22);
+  transition:
+    filter 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.m-user-form button[type='submit']:hover:not(:disabled),
+.m-user-form button.bg-violet-600:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.m-user-form button[type='submit']:active:not(:disabled),
+.m-user-form button.bg-violet-600:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.m-user-form button.border-slate-600,
+.m-user-form button.border-slate-700,
+.m-user-form button.border-dashed {
+  border-radius: 9999px;
+}
+
+.m-user-form input[type='checkbox'],
+.m-user-form input[type='radio'] {
+  accent-color: rgb(var(--accent-500));
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.m-user-form label.block > span {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+html.light .m-user-form input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='button']):not([type='submit']):not([type='reset']),
+html.light .m-user-form textarea,
+html.light .m-user-form select {
+  background-color: #fff;
+  border-color: rgb(170 140 130 / 0.28);
+  box-shadow: 0 1px 2px rgb(90 50 40 / 0.05);
+}
+
+html.light .m-user-form input:focus:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']),
+html.light .m-user-form textarea:focus,
+html.light .m-user-form select:focus {
+  border-color: rgb(var(--accent-500) / 0.7);
+  box-shadow: 0 0 0 4px rgb(var(--accent-500) / 0.12);
+}
+
+/*
+ * Landing pages (/, Découvrir, Accueil) — composition inspirée de Vihara Home 3.
+ * Titres serif, barre bordeaux, boutons capsule, cartes aérées.
+ */
+.m-landing {
+  --m-wine: rgb(var(--accent-700));
+  --m-wine-soft: rgb(var(--accent-500) / 0.14);
+}
+
+.m-landing h1,
+.m-landing h2,
+.m-landing h3 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+
+.m-landing-eyebrow {
+  font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgb(var(--accent-400));
+}
+
+.m-landing-logo {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.m-landing-top {
+  background: rgb(var(--slate-950));
+}
+
+html.light .m-landing-top {
+  background: #f7f2ec;
+}
+
+.m-landing-nav {
+  background: var(--m-wine);
+  color: #fff;
+}
+
+.m-landing-nav a {
+  color: rgb(255 255 255 / 0.82);
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.95rem 0.65rem;
+  display: inline-flex;
+  transition: color 0.15s ease;
+}
+
+.m-landing-nav a:hover,
+.m-landing-nav a[aria-current='page'] {
+  color: #fff;
+}
+
+.m-landing-hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.m-landing-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 70% 80% at 50% 0%, rgb(var(--accent-600) / 0.28), transparent 62%),
+    radial-gradient(circle at 88% 80%, rgb(var(--accent-500) / 0.12), transparent 42%);
+}
+
+.m-landing-hero-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-weight: 500;
+  font-size: clamp(2.4rem, 6vw, 4.4rem);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+}
+
+.m-landing-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.95rem 1.7rem;
+  background: rgb(var(--accent-600));
+  color: #fff;
+  box-shadow: 0 12px 28px rgb(var(--accent-600) / 0.28);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.m-landing-btn:hover {
+  filter: brightness(1.08);
+}
+
+.m-landing-btn--ghost {
+  background: transparent;
+  color: rgb(var(--slate-100));
+  box-shadow: none;
+  border: 1px solid rgb(var(--slate-700) / 0.8);
+}
+
+html.light .m-landing-btn--ghost {
+  color: rgb(var(--slate-200));
+}
+
+.m-landing-icon-card {
+  text-align: center;
+  padding: 1.5rem 1rem 1.75rem;
+}
+
+.m-landing-icon-mark {
+  width: 4.25rem;
+  height: 4.25rem;
+  margin: 0 auto 1.1rem;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  background: var(--m-wine-soft);
+  color: rgb(var(--accent-400));
+}
+
+.m-landing a.bg-violet-600,
+.m-landing button.bg-violet-600,
+.m-landing a.inline-flex.bg-violet-600 {
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.m-landing-card {
+  border-radius: 1.25rem;
+  border: 1px solid rgb(var(--slate-800) / 0.85);
+  background: rgb(var(--slate-900) / 0.55);
+}
+
+html.light .m-landing-card {
+  background: #fff;
+  border-color: rgb(180 150 140 / 0.22);
+  box-shadow: 0 10px 30px rgb(90 50 40 / 0.05);
+}
+
+.m-landing-footer {
+  background: rgb(var(--slate-950));
+  border-top: 1px solid rgb(var(--slate-800));
+}
+
+html.light .m-landing-footer {
+  background: #f3ece6;
+}
+
+/* Accueil connecté — hero photo pleine largeur + fondu à gauche */
+.m-home-hero {
+  position: relative;
+  min-height: 24rem;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.m-home-hero-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center right;
+}
+
+.m-home-hero-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--slate-950)) 0%,
+    rgb(var(--slate-950) / 0.94) 26%,
+    rgb(var(--slate-950) / 0.52) 48%,
+    rgb(var(--slate-950) / 0.12) 70%,
+    transparent 100%
+  );
+}
+
+.m-home-hero-copy {
+  position: relative;
+  z-index: 2;
+  max-width: 36rem;
+  padding: 2.5rem 1.25rem 2.75rem;
+}
+
+.m-home-hero-title {
+  color: rgb(var(--slate-100));
+}
+
+.m-home-hero .m-landing-btn--ghost {
+  color: rgb(var(--slate-100));
+  border-color: rgb(var(--slate-500) / 0.55);
+}
+
+@media (min-width: 768px) {
+  .m-home-hero {
+    min-height: 28rem;
+  }
+  .m-home-hero-copy {
+    max-width: 38rem;
+    padding: 3.25rem 2.5rem 3.5rem 2.75rem;
+  }
+  .m-home-program {
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+  }
+}
+
+.m-home-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.6rem;
+  padding: 0.55rem 0.4rem;
+  border-radius: 0.85rem;
+  background: rgb(var(--accent-600));
+  color: #fff;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.m-home-date-day {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 600;
+}
+
+.m-home-date-month {
+  margin-top: 0.2rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.m-home-program {
+  display: grid;
+  gap: 1.75rem;
+  align-items: center;
+}

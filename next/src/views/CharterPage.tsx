@@ -5,6 +5,8 @@ import { communitiesApi, type MemberCharterView } from '@/api/communities'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
+import { useNavAccess } from '@/hooks/useNavAccess'
+import type { MandalaNavigate } from '@/components/MandalaApp'
 
 function formatAcceptedAt(iso: string | null): string | null {
   if (!iso) return null
@@ -20,8 +22,9 @@ function formatAcceptedAt(iso: string | null): string | null {
   }
 }
 
-export function CharterPage() {
+export function CharterPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { active } = useCommunity()
+  const { canManageActiveCommunity } = useNavAccess()
   const [data, setData] = useState<MemberCharterView | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +53,7 @@ export function CharterPage() {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <div className="w-full space-y-5">
       <header className="flex gap-4 items-start">
         <CommunityAvatar
           avatar={active.avatar}
@@ -59,7 +62,7 @@ export function CharterPage() {
           size="lg"
           alt={active.name}
         />
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold">Charte — {active.name}</h1>
           {active.tagline && <p className="text-sm text-slate-400 mt-1">{active.tagline}</p>}
           {data?.accepted && data.accepted_at && (
@@ -72,6 +75,15 @@ export function CharterPage() {
               La charte a été mise à jour — une nouvelle validation sera demandée à la prochaine
               connexion.
             </p>
+          )}
+          {canManageActiveCommunity && onNavigate && (
+            <button
+              type="button"
+              onClick={() => onNavigate('place-charter')}
+              className="mt-3 text-sm px-3 py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500 text-white"
+            >
+              Modifier la charte
+            </button>
           )}
         </div>
       </header>

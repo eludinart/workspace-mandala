@@ -292,7 +292,7 @@ export function CalendarPage() {
     : null
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 pb-2">
+    <div className="w-full space-y-4 pb-2">
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">

@@ -112,7 +112,7 @@ export function ConversationMemberSidebar({
   }
 
   return (
-    <aside className="flex flex-col h-full min-h-0 border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden">
+    <aside className="m-user-form flex flex-col h-full min-h-0 border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden">
       <div className="shrink-0 p-3 border-b border-slate-800 space-y-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">Membres du lieu</h2>

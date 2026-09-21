@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
+import type { AdminTabId } from '@/lib/nav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
 
 export function MobileNavDrawer({
@@ -9,11 +10,13 @@ export function MobileNavDrawer({
   onClose,
   page,
   onNavigate,
+  adminTab,
 }: {
   open: boolean
   onClose: () => void
   page: MandalaPage
   onNavigate: MandalaNavigate
+  adminTab?: AdminTabId
 }) {
   useEffect(() => {
     if (!open) return
@@ -56,6 +59,7 @@ export function MobileNavDrawer({
             onNavigate={onNavigate}
             onItemClick={onClose}
             showBranding={false}
+            adminTab={adminTab}
           />
         </div>
       </aside>

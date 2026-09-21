@@ -51,7 +51,7 @@ export function ManagedPlacesPage({
 
   if (hubSlug && hubPlace) {
     return (
-      <div className="max-w-2xl">
+      <div className="w-full">
         <PlaceManageHub
           place={hubPlace}
           onBack={() => onHubSlugChange(null)}
@@ -68,14 +68,14 @@ export function ManagedPlacesPage({
         <p className="text-sm text-slate-400">
           Vous n&apos;êtes gestionnaire d&apos;aucun lieu pour le moment. Demandez à un
           administrateur de vous attribuer le rôle <strong className="text-slate-300">gestionnaire</strong>{' '}
-          sur une communauté existante.
+          <em>sur ce lieu</em> (fiche membre → Lieux &amp; rôles), et non un rôle application global.
         </p>
       </div>
     )
   }
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="w-full space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Mes lieux</h1>
         <p className="text-sm text-slate-400">

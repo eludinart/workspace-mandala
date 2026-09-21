@@ -87,7 +87,7 @@ export function FeedSection({
               aria-expanded={!collapsed}
               aria-label={collapsed ? 'Développer la section' : 'Réduire la section'}
             >
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-xl text-slate-100 flex items-center gap-2">
                 {icon && <span aria-hidden>{icon}</span>}
                 {title}
                 <span className="text-slate-500 text-sm font-normal" aria-hidden>
@@ -98,7 +98,7 @@ export function FeedSection({
             </button>
           ) : (
             <>
-              <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <h2 className="text-xl text-slate-100 flex items-center gap-2">
                 {icon && <span aria-hidden>{icon}</span>}
                 {title}
               </h2>

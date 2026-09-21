@@ -43,10 +43,10 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
   return (
     <article
       id={`lieu-${place.slug}`}
-      className={`rounded-2xl border p-5 transition-all scroll-mt-24 ${
+      className={`m-landing-card p-6 transition-all scroll-mt-24 ${
         selected
-          ? 'border-violet-500/50 bg-violet-950/25 ring-1 ring-violet-500/30'
-          : 'border-slate-800 bg-slate-900/50 hover:border-slate-600'
+          ? 'ring-1 ring-violet-500/40 border-violet-500/40'
+          : 'hover:border-slate-600'
       }`}
     >
       <button
@@ -62,7 +62,7 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
           alt={place.name}
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-lg font-semibold text-slate-100">{place.name}</h3>
+          <h3 className="text-xl text-slate-100">{place.name}</h3>
           {place.tagline && <p className="text-sm text-violet-300/80">{place.tagline}</p>}
           {displayAddress && <p className="text-xs text-slate-500">📍 {displayAddress}</p>}
         </div>
@@ -78,7 +78,7 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
         {place.profile_public !== false ? (
           <Link
             href={`/lieux/${encodeURIComponent(place.slug)}`}
-            className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium"
+            className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white font-medium"
           >
             Voir le profil →
           </Link>

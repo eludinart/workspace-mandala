@@ -480,7 +480,7 @@ export function DialogueStream({
         })}
       </div>
 
-      <div className="border-t border-slate-800 bg-slate-900/95 p-3 flex gap-2 items-center">
+      <div className="m-user-form border-t border-slate-800 bg-slate-900/95 p-3 flex gap-2 items-center">
         <input
           type="text"
           value={input}

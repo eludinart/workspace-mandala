@@ -161,7 +161,7 @@ export function PlaceListPage({ kind }: { kind: PlaceListKind }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="w-full space-y-4">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-100">{meta.title}</h1>
         <p className="text-sm text-slate-400 mt-1">{meta.hint}</p>
@@ -190,7 +190,7 @@ export function PlaceListPage({ kind }: { kind: PlaceListKind }) {
       </div>
 
       {view === 'active' && (
-        <div className="space-y-2">
+        <div className="m-user-form space-y-2">
           {!showForm ? (
             <button
               type="button"
@@ -409,10 +409,10 @@ export function PlaceListPage({ kind }: { kind: PlaceListKind }) {
                 </div>
 
                 {expanded && (
-                  <div className="pl-7 space-y-3 border-t border-slate-800/80 pt-3">
+                  <div className="m-user-form pl-7 space-y-3 border-t border-slate-800/80 pt-3">
                     {canEditDetails && view === 'active' ? (
                       <div className="space-y-2">
-                        <label className="block text-xs text-slate-400">Description</label>
+                        <label className="block text-xs text-slate-400"><span>Description</span></label>
                         <textarea
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
@@ -498,7 +498,7 @@ export function PlaceListPage({ kind }: { kind: PlaceListKind }) {
                 )}
 
                 {view === 'active' && isMine && (
-                  <div className="flex flex-wrap items-center gap-2 pl-7">
+                  <div className="m-user-form flex flex-wrap items-center gap-2 pl-7">
                     <label className="text-xs text-slate-400 flex items-center gap-2">
                       Date d’apport
                       <input

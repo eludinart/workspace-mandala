@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic'
 import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
-import { ThemePicker } from '@/components/theme/ThemePicker'
+import { useAuth } from '@/contexts/AuthContext'
+import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 
 const PlacesMap = dynamic(
   () => import('@/components/public/PlacesMap').then((m) => m.PlacesMap),
@@ -48,6 +49,7 @@ function directionsUrl(place: PublicCommunityProfile): string | null {
 }
 
 export function PlacePublicProfile({ place }: { place: PublicCommunityProfile }) {
+  const { user, loading: authLoading } = useAuth()
   const website = place.website?.trim()
   const email = place.contact_email?.trim()
   const address = composeAddress(place)
@@ -57,25 +59,8 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
   const hasCharter = place.charter && place.charter.length > 0
 
   return (
-    <div className="h-full min-h-screen overflow-y-auto scroll-smooth bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/85 backdrop-blur-md">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          <Link href="/" className="font-bold text-lg tracking-tight shrink-0">
-            Mandala
-          </Link>
-          <div className="flex items-center gap-2 shrink-0">
-            <ThemePicker />
-            <Link
-              href="/#carte"
-              className="text-sm px-3 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800"
-            >
-              ← Tous les lieux
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-10">
+    <PublicSiteChrome user={user} authLoading={authLoading}>
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14 space-y-10">
         <nav className="text-xs text-slate-500">
           <Link href="/" className="hover:text-slate-300">
             Accueil
@@ -98,7 +83,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
             alt={place.name}
           />
           <div className="min-w-0 flex-1 space-y-3">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">{place.name}</h1>
+            <h1 className="m-landing-hero-title !text-4xl sm:!text-5xl">{place.name}</h1>
             {place.tagline && (
               <p className="text-lg text-violet-300/90 leading-snug">{place.tagline}</p>
             )}
@@ -109,7 +94,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                   href={normalizeWebsite(website)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 font-medium"
+                  className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 font-medium"
                 >
                   🌐 Site web
                 </a>
@@ -272,14 +257,15 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
         </div>
       </main>
 
-      <footer className="border-t border-slate-800 py-8 text-center text-xs text-slate-600">
-        <p>Mandala — lieux, communautés &amp; événements</p>
+      <footer className="m-landing-footer py-10 text-center text-xs text-slate-500">
+        <p className="m-landing-logo text-[11px] tracking-[0.35em] text-slate-400 mb-3">Mandala</p>
+        <p>Lieux, communautés &amp; événements</p>
         <p className="mt-1">
-          <Link href="/#carte" className="hover:text-slate-400">
-            Voir tous les lieux sur la carte
+          <Link href="/#lieux" className="hover:text-slate-300">
+            Voir tous les lieux
           </Link>
         </p>
       </footer>
-    </div>
+    </PublicSiteChrome>
   )
 }

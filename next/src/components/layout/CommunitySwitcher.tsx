@@ -103,6 +103,10 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
           </button>
           {showCreate && (
             <div className="space-y-2 rounded-xl border border-slate-800 p-3">
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                En créant ce lieu, vous en devenez automatiquement le gestionnaire. Vous pourrez
+                ensuite attribuer ce rôle à d&apos;autres membres.
+              </p>
               <input
                 value={newSlug}
                 onChange={(e) => setNewSlug(e.target.value)}
@@ -143,7 +147,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
             </div>
           )}
           {available.length > 0 && (
-            <div className="pt-2 border-t border-slate-800 space-y-2">
+            <div className="m-user-form pt-2 border-t border-slate-800 space-y-2">
               <p className="text-[10px] uppercase tracking-widest text-slate-500">Rejoindre</p>
               {catalogLoading ? (
                 <p className="text-sm text-slate-400">Chargement…</p>
