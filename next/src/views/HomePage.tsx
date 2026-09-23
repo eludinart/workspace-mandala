@@ -95,7 +95,7 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
 
   return (
     <div className="m-landing m-home pb-10">
-      <section className="m-home-hero">
+      <section className="m-home-hero mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-6 rounded-[1.35rem]">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={heroImage} alt="" className="m-home-hero-media" />

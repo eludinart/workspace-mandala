@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { AppProviders } from '@/components/AppProviders'
 import { ThemeInitScript } from '@/components/theme/ThemeInitScript'
+import { VisualViewportSync } from '@/components/VisualViewportSync'
 
 const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
 
@@ -9,6 +10,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
 }
 
 export const metadata: Metadata = {
@@ -42,7 +44,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
         />
       </head>
-      <body className="h-full font-sans antialiased">
+      <body className="font-sans antialiased">
+        <VisualViewportSync />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

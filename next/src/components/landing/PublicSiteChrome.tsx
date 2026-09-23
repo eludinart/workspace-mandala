@@ -25,7 +25,8 @@ export function PublicSiteChrome({
   children: ReactNode
 }) {
   return (
-    <div className="m-landing h-full min-h-screen overflow-y-auto scroll-smooth bg-slate-950 text-slate-100">
+    <div className="m-landing flex-1 h-full min-h-0 flex flex-col bg-slate-950 text-slate-100">
+      <div className="flex-1 min-h-0 overflow-y-auto scroll-smooth pb-[env(safe-area-inset-bottom,0px)]">
       <div className="m-landing-top relative z-[60]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="justify-self-start">
@@ -62,6 +63,7 @@ export function PublicSiteChrome({
       </nav>
 
       {children}
+      </div>
     </div>
   )
 }

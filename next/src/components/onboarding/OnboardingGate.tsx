@@ -85,25 +85,33 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950 relative">
+    <div className="relative flex-1 h-full min-h-0 overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950">
       <div className="absolute top-3 right-3 z-10">
         <ThemePicker />
       </div>
 
       {phase === 'loading' && (
-        <p className="text-sm text-slate-400">Préparation de votre espace…</p>
+        <div className="flex-1 min-h-0 flex items-center justify-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+          <p className="text-sm text-slate-400">Préparation de votre espace…</p>
+        </div>
       )}
 
       {phase === 'place' && (
-        <PlaceSelectionScreen
-          title="Rejoignez un lieu"
-          subtitle="Choisissez le lieu sur lequel vous souhaitez vous inscrire. Vous pourrez en rejoindre d'autres plus tard."
-          onComplete={handlePlaceJoined}
-        />
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-h-full flex flex-col items-center justify-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+            <PlaceSelectionScreen
+              title="Rejoignez un lieu"
+              subtitle="Choisissez le lieu sur lequel vous souhaitez vous inscrire. Vous pourrez en rejoindre d'autres plus tard."
+              onComplete={handlePlaceJoined}
+            />
+          </div>
+        </div>
       )}
 
       {phase === 'charter' && charterSlug && (
-        <CharterAcceptanceScreen slug={charterSlug} onAccepted={handleCharterAccepted} />
+        <div className="flex-1 min-h-0 flex flex-col px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] sm:px-6 sm:pt-6">
+          <CharterAcceptanceScreen slug={charterSlug} onAccepted={handleCharterAccepted} />
+        </div>
       )}
     </div>
   )

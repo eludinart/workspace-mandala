@@ -75,7 +75,7 @@ export function CalendarDayPanel({
   const shellClass =
     variant === 'sidebar'
       ? 'rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden flex flex-col h-full min-h-[320px]'
-      : 'w-full max-w-lg max-h-[min(90dvh,100%)] rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl mb-[env(safe-area-inset-bottom)]'
+      : 'm-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl'
 
   const saveMax = async () => {
     const n = parseInt(maxDraft, 10)

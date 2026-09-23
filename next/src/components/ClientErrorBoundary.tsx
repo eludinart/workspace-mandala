@@ -24,7 +24,7 @@ export class ClientErrorBoundary extends React.Component<Props, State> {
     const { error } = this.state
     if (error) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 bg-slate-950 text-slate-100">
+        <div className="flex-1 h-full min-h-0 overflow-y-auto flex flex-col items-center justify-center gap-4 px-8 pt-8 pb-[max(2rem,env(safe-area-inset-bottom,0px))] bg-slate-950 text-slate-100">
           <h1 className="text-xl font-bold">L&apos;application a rencontré une erreur</h1>
           <p className="text-sm text-slate-400 text-center max-w-md font-mono break-all">
             {error.message}

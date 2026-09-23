@@ -79,7 +79,7 @@ export function PlaceSelectionScreen({
       )}
 
       {!loading && places.length > 0 && (
-        <ul className="space-y-3 max-h-[min(52vh,28rem)] overflow-y-auto pr-1">
+        <ul className="space-y-3 max-h-[min(52svh,28rem)] overflow-y-auto pr-1">
           {places.map((place) => {
             const selected = selectedSlug === place.slug
             return (

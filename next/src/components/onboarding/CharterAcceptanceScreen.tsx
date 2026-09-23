@@ -99,7 +99,7 @@ export function CharterAcceptanceScreen({ slug, initial, onAccepted }: Props) {
   }
 
   return (
-    <div className="m-user-form w-full max-w-5xl flex flex-col max-h-[min(92vh,48rem)]">
+    <div className="m-user-form w-full max-w-5xl mx-auto flex flex-col flex-1 min-h-0 max-h-[48rem]">
       <header className="shrink-0 text-center space-y-3 pb-4 border-b border-slate-800">
         <p className="m-user-eyebrow">Bienvenue</p>
         <div className="flex flex-col items-center gap-2">

@@ -43,11 +43,13 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950 relative">
-      <div className="absolute top-3 right-3 z-10">
-        <ThemePicker />
-      </div>
-      <div className="m-user-form w-full max-w-md rounded-[1.75rem] border border-slate-800/70 bg-slate-900/75 p-8 sm:p-10 shadow-xl">
+    <div className="relative flex-1 h-full min-h-0 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="relative min-h-full flex items-center justify-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+        <div className="absolute top-3 right-3 z-10">
+          <ThemePicker />
+        </div>
+        <div className="m-user-form w-full max-w-md rounded-[1.75rem] border border-slate-800/70 bg-slate-900/75 p-8 sm:p-10 shadow-xl">
         <p className="m-user-title text-4xl sm:text-[2.75rem] text-center mb-2">Mandala</p>
         <p className="m-user-eyebrow text-center mb-8">Lieux · communautés · événements</p>
         {mode === 'register' && (
@@ -138,6 +140,8 @@ export function LoginPage() {
         >
           {mode === 'login' ? "Pas encore de compte ? S'inscrire" : 'Déjà inscrit ? Se connecter'}
         </button>
+        </div>
+      </div>
       </div>
     </div>
   )

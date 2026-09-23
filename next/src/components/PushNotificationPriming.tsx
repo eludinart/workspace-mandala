@@ -224,7 +224,7 @@ export function PushNotificationPriming() {
             aria-modal="true"
             aria-labelledby="push-priming-title"
           >
-            <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-5 space-y-4 mb-[env(safe-area-inset-bottom)]">
+            <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl p-5 space-y-4 m-above-os-chrome">
               <div className="flex items-start gap-3">
                 <span className="text-3xl shrink-0" aria-hidden>
                   🔔

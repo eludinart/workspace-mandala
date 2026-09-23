@@ -272,12 +272,12 @@ export function MandalaApp() {
   }, [page, messagesOpenUserId, messagesOpenChannelId, messagesCommunitySlug, openEventId, adminTab, managedPlaceHubSlug, navigate])
 
   if (!mounted) {
-    return <div className="min-h-screen bg-slate-950" aria-busy="true" />
+    return <div className="flex-1 h-full min-h-0 bg-slate-950" aria-busy="true" />
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-slate-900 px-6 text-center">
+      <div className="flex-1 h-full min-h-0 overflow-y-auto flex flex-col items-center justify-center gap-3 bg-slate-900 px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] text-center">
         <p className="text-sm text-slate-400">Chargement…</p>
         <p className="text-xs text-slate-600 max-w-sm">
           Si cet écran reste bloqué, vérifiez que le serveur tourne (

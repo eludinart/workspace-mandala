@@ -50,12 +50,12 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
       className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4"
       style={{
         paddingTop: 'max(env(safe-area-inset-top), 0px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom), 0px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), var(--vv-bottom-inset, 0px))',
       }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-slate-700 bg-slate-900 shadow-xl max-h-[90vh] flex flex-col">
+      <div className="m-sheet-max w-full sm:max-w-md rounded-t-2xl sm:rounded-xl border border-slate-700 bg-slate-900 shadow-xl flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
           <h2 className="font-semibold">Mes communautés</h2>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-white text-xl" aria-label="Fermer">×</button>
