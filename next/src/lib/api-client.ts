@@ -111,7 +111,8 @@ async function _tryRefreshToken(): Promise<boolean> {
 async function request(
   path: string,
   options: RequestInit & { headers?: Record<string, string> } = {},
-  _isRetry = false
+  _isRetry = false,
+  _timeoutRetry = false
 ): Promise<unknown> {
   const base = getBase()
   const url = path.startsWith('http') ? path : `${base}${path}`
@@ -148,8 +149,9 @@ async function request(
 
   // Sur Capacitor, ajouter Authorization: Bearer si token disponible
   const token = getAuthToken()
+  const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isForm ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -158,7 +160,7 @@ async function request(
 
   let res: Response
   try {
-    const timeoutMs = 25_000
+    const timeoutMs = isForm ? 120_000 : 25_000
     res = await fetch(url, {
       ...options,
       headers,
@@ -169,8 +171,17 @@ async function request(
     const isTimeout =
       networkErr instanceof Error &&
       (networkErr.name === 'TimeoutError' || networkErr.name === 'AbortError')
+    const method = (options.method || 'GET').toUpperCase()
+    if (
+      !_timeoutRetry &&
+      networkErr instanceof Error &&
+      networkErr.name === 'TimeoutError' &&
+      (method === 'GET' || method === 'HEAD')
+    ) {
+      return request(path, options, _isRetry, true)
+    }
     const msg = isTimeout
-      ? 'Le serveur met trop de temps à répondre. Réessayez ou redémarrez le serveur de dev.'
+      ? 'Le chargement a pris trop de temps. Réessayez dans un instant.'
       : base
         ? `Impossible de joindre le serveur (${url}). Vérifiez votre connexion.`
         : 'Impossible de joindre le serveur. Vérifiez votre connexion.'
@@ -203,10 +214,12 @@ async function request(
     !_isRetry &&
     !path.includes('/auth/login') &&
     !path.includes('/auth/refresh') &&
-    !path.includes('/auth/register')
+    !path.includes('/auth/register') &&
+    !path.includes('/auth/forgot-password') &&
+    !path.includes('/auth/reset-password')
   ) {
     const refreshed = await _tryRefreshToken()
-    if (refreshed) return request(path, options, true)
+    if (refreshed) return request(path, options, true, _timeoutRetry)
     // Refresh échoué : sur Capacitor, le token localStorage est la source de vérité → nettoyer.
     // Sur web, le cookie httpOnly est géré par le serveur → ne pas toucher localStorage
     // pour éviter de déconnecter l'utilisateur à cause d'une erreur réseau transitoire.
@@ -302,6 +315,7 @@ export const api = {
   get: (path: string) => request(path),
   post: (path: string, body: unknown = {}) =>
     request(path, { method: 'POST', body: JSON.stringify(body) }),
+  postForm: (path: string, body: FormData) => request(path, { method: 'POST', body }),
   put: (path: string, body: unknown) =>
     request(path, { method: 'PUT', body: JSON.stringify(body) }),
   patch: (path: string, body: unknown) =>

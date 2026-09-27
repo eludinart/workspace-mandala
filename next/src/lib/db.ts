@@ -79,6 +79,29 @@ export function isDbConfigured(): boolean {
   return !!(DB_HOST && DB_NAME && DB_USER && DB_PASSWORD)
 }
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __mdl_schema_once: Map<string, Promise<void>> | undefined
+}
+
+/**
+ * Exécute un DDL une seule fois par process Node.
+ * Le cache vit sur globalThis : il survit au rechargement des modules (HMR)
+ * et déduplique les requêtes parallèles qui arriveraient avant la fin.
+ */
+export function ensureOnce(key: string, run: () => Promise<void>): Promise<void> {
+  if (!isDbConfigured()) return Promise.resolve()
+  const gates = (globalThis.__mdl_schema_once ??= new Map())
+  const existing = gates.get(key)
+  if (existing) return existing
+  const pending = run().catch((err) => {
+    if (gates.get(key) === pending) gates.delete(key)
+    throw err
+  })
+  gates.set(key, pending)
+  return pending
+}
+
 /** Infos de connexion (pour affichage admin, sans mot de passe) */
 export function getDbConnectionInfo(): {
   host: string

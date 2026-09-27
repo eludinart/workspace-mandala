@@ -6,6 +6,11 @@ import type { MandalaNavigate } from '@/components/MandalaApp'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNotifications, type NotificationItem } from '@/contexts/NotificationContext'
 import { navigateFromNotification } from '@/lib/notification-navigation'
+import {
+  BELL_READ_PREVIEW_LIMIT,
+  isChatNotification,
+  splitNotificationsForDisplay,
+} from '@/lib/notification-retention'
 
 const ICONS: Record<string, string> = {
   announcement: '📢',
@@ -25,9 +30,9 @@ const PRIORITY_RING: Record<string, string> = {
 type AlertFilter = 'all' | 'unread' | 'announcement'
 
 const FILTER_TABS: { id: AlertFilter; label: string }[] = [
-  { id: 'all', label: 'Tout' },
   { id: 'unread', label: 'Non lus' },
-  { id: 'announcement', label: 'Annonces' },
+  { id: 'all', label: 'Tout' },
+  { id: 'announcement', label: 'Infos' },
 ]
 
 function timeAgo(dateStr: string) {
@@ -41,24 +46,78 @@ function timeAgo(dateStr: string) {
   return `il y a ${days} j`
 }
 
+function AlertRow({ n, onClick }: { n: NotificationItem; onClick: () => void }) {
+  const unread = !n.read_at
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left px-4 py-3 flex gap-3 transition-colors hover:bg-slate-800/60 border-b border-slate-800/50 ${
+        unread ? 'bg-amber-500/10 border-l-2 border-l-amber-400' : 'opacity-80'
+      } ${PRIORITY_RING[n.priority ?? ''] ?? ''}`}
+    >
+      <span className="text-lg shrink-0 mt-0.5">{ICONS[n.type ?? ''] ?? '🔔'}</span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2">
+          <p
+            className={`text-sm leading-tight truncate ${
+              unread ? 'font-semibold text-slate-50' : 'font-normal text-slate-500'
+            }`}
+          >
+            {n.title}
+          </p>
+          {unread && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1.5" />}
+        </div>
+        {n.body && (
+          <p className={`text-xs mt-0.5 line-clamp-2 ${unread ? 'text-slate-300' : 'text-slate-600'}`}>
+            {n.body}
+          </p>
+        )}
+        {n.created_at && (
+          <p className={`text-[10px] mt-1 ${unread ? 'text-amber-200/70' : 'text-slate-600'}`}>
+            {timeAgo(n.created_at)}
+          </p>
+        )}
+      </div>
+    </button>
+  )
+}
+
 export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const { setActiveSlug, active } = useCommunity()
   const { unreadCount, items, loading, fetchList, markRead, markAllRead, deleteRead } =
     useNotifications()
   const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState<AlertFilter>('all')
+  const [filter, setFilter] = useState<AlertFilter>('unread')
   const anchorRef = useRef<HTMLButtonElement>(null)
+  const filterTouchedRef = useRef(false)
 
   const filtered = items.filter((n) => {
+    const chat = isChatNotification(n.type, n.source_type)
+    if (chat) return filter === 'all' && !!n.read_at
     if (filter === 'unread') return !n.read_at
     if (filter === 'announcement') return (n.type ?? '').includes('announcement')
     return true
   })
+  const { unread: unreadItems, read: readItems } = splitNotificationsForDisplay(
+    filtered,
+    filter === 'unread' ? 0 : BELL_READ_PREVIEW_LIMIT
+  )
+  const showReadSection = readItems.length > 0
+  const hasRecentReads = filtered.some((n) => n.read_at)
 
   const toggle = useCallback(() => {
-    if (!open) void fetchList({ per_page: 15 })
+    if (!open) {
+      filterTouchedRef.current = false
+      void fetchList({ per_page: 30 })
+    }
     setOpen((o) => !o)
   }, [open, fetchList])
+
+  useEffect(() => {
+    if (!open || filterTouchedRef.current) return
+    setFilter(unreadCount > 0 ? 'unread' : 'all')
+  }, [open, unreadCount])
 
   useEffect(() => {
     if (!open) return
@@ -160,7 +219,10 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setFilter(tab.id)}
+                      onClick={() => {
+                        filterTouchedRef.current = true
+                        setFilter(tab.id)
+                      }}
                       className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${
                         filter === tab.id
                           ? 'bg-violet-600/40 text-slate-100 font-medium'
@@ -168,6 +230,9 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
                       }`}
                     >
                       {tab.label}
+                      {tab.id === 'unread' && unreadCount > 0 && (
+                        <span className="ml-1 tabular-nums text-amber-300">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -177,53 +242,68 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
                     <div className="px-4 py-8 text-center text-sm text-slate-500">
                       Chargement…
                     </div>
-                  ) : filtered.length === 0 ? (
+                  ) : unreadItems.length === 0 && readItems.length === 0 ? (
                     <div className="px-4 py-8 text-center text-sm text-slate-500">
                       {filter === 'unread'
                         ? 'Aucune alerte non lue'
                         : filter === 'announcement'
-                          ? 'Aucune annonce'
-                          : 'Aucune alerte'}
+                          ? 'Aucune info'
+                          : 'Aucune alerte pour le moment. Les messages restent sur le bouton Messages.'}
+                      {filter === 'unread' && hasRecentReads && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            filterTouchedRef.current = true
+                            setFilter('all')
+                          }}
+                          className="mt-3 block mx-auto text-xs text-violet-400 hover:underline"
+                        >
+                          Voir les dernières lues
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    filtered.map((n) => (
-                      <button
-                        key={n.delivery_id ?? n.id}
-                        type="button"
-                        onClick={() => handleClick(n)}
-                        className={`w-full text-left px-4 py-3 flex gap-3 transition-colors hover:bg-slate-800/60 ${
-                          !n.read_at ? 'bg-violet-950/30' : ''
-                        } ${PRIORITY_RING[n.priority ?? ''] ?? ''} border-b border-slate-800/50 last:border-b-0`}
-                      >
-                        <span className="text-lg shrink-0 mt-0.5">{ICONS[n.type ?? ''] ?? '🔔'}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start gap-2">
-                            <p
-                              className={`text-sm leading-tight truncate ${
-                                !n.read_at ? 'font-semibold text-slate-100' : 'text-slate-400'
-                              }`}
-                            >
-                              {n.title}
-                            </p>
-                            {!n.read_at && (
-                              <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0 mt-1.5" />
-                            )}
-                          </div>
-                          {n.body && (
-                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{n.body}</p>
-                          )}
-                          {n.created_at && (
-                            <p className="text-[10px] text-slate-600 mt-1">{timeAgo(n.created_at)}</p>
-                          )}
-                        </div>
-                      </button>
-                    ))
+                    <>
+                      {unreadItems.length > 0 && showReadSection && (
+                        <p className="px-4 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                          Non lues
+                        </p>
+                      )}
+                      {unreadItems.map((n) => (
+                        <AlertRow key={n.delivery_id ?? n.id} n={n} onClick={() => handleClick(n)} />
+                      ))}
+                      {filter === 'unread' && hasRecentReads && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            filterTouchedRef.current = true
+                            setFilter('all')
+                          }}
+                          className="w-full px-4 py-2.5 text-left text-xs text-slate-500 hover:text-slate-300 hover:bg-slate-800/40"
+                        >
+                          Voir les dernières lues
+                        </button>
+                      )}
+                      {showReadSection && (
+                        <>
+                          <p className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-t border-slate-800">
+                            Notifications lues
+                          </p>
+                          {readItems.map((n) => (
+                            <AlertRow key={n.delivery_id ?? n.id} n={n} onClick={() => handleClick(n)} />
+                          ))}
+                          <p className="px-4 py-2 text-[10px] text-slate-600">
+                            Conservées 90 jours, dans la limite des 100 dernières.
+                          </p>
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
 
-                {items.length > 0 && (
+                {filtered.length > 0 && (
                   <div className="border-t border-slate-800 px-4 py-2 flex items-center justify-between gap-2 shrink-0">
-                    {items.some((n) => n.read_at) ? (
+                    {filtered.some((n) => n.read_at) ? (
                       <button
                         type="button"
                         onClick={() => void deleteRead()}

@@ -3,7 +3,7 @@
  * Portée : par communauté.
  */
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, table } from './db'
 import { normalizeDbDateTime } from './format-datetime'
 import { listEventsForCommunityBetween, type EventRecord } from './db-mandala-events'
 
@@ -38,8 +38,6 @@ export type CalendarDayDetail = {
 
 export const DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS = 20
 
-let _ensured = false
-
 function assertDay(day: string): string {
   const d = String(day ?? '').trim()
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('Jour invalide (YYYY-MM-DD)')
@@ -65,7 +63,7 @@ function monthRange(ym: string): { start: string; endExclusive: string } {
 }
 
 export async function ensureCalendarTables(): Promise<void> {
-  if (_ensured || !isDbConfigured()) return
+  return ensureOnce('calendar', async () => {
   const pool = getPool()
   const tP = table('calendar_presence')
   const tD = table('calendar_day_settings')
@@ -119,8 +117,7 @@ export async function ensureCalendarTables(): Promise<void> {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
-
-  _ensured = true
+  })
 }
 
 export async function getCalendarSettings(communityId: number): Promise<CalendarSettings> {

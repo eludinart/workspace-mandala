@@ -2,11 +2,9 @@
  * L'Agora — brèves communautaires (logistique / inspiration).
  */
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, table } from './db'
 import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
-
-let _postTablesEnsured = false
 
 export type PostType = 'logistics' | 'inspiration'
 
@@ -24,7 +22,7 @@ export type CommunityPostRow = {
 }
 
 export async function ensurePostTables(): Promise<void> {
-  if (_postTablesEnsured || !isDbConfigured()) return
+  return ensureOnce('posts', async () => {
   await ensureCommunitiesTables()
   const pool = getPool()
   const t = table('mandala_posts')
@@ -42,7 +40,7 @@ export async function ensurePostTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureWallPublicColumn(pool, t)
-  _postTablesEnsured = true
+  })
 }
 
 function isPostType(v: unknown): v is PostType {

@@ -2,7 +2,7 @@ import type { MandalaPage } from '@/components/MandalaApp'
 
 export { ORGANISATION_PLACE_PAGES } from '@/lib/place-manage'
 
-export type AdminTabId = 'people' | 'communications' | 'telemetry' | 'places'
+export type AdminTabId = 'people' | 'communications' | 'telemetry' | 'places' | 'support'
 
 export type MainNavItem = {
   id: MandalaPage
@@ -43,7 +43,8 @@ export const MAIN_NAV: MainNavItem[] = [
 ]
 
 export const SECONDARY_NAV: SecondaryNavItem[] = [
-  { id: 'charter', label: 'Charte du lieu', icon: '📜' },
+  { id: 'skills', label: 'Compétences', icon: '✨' },
+  { id: 'resources', label: 'Ressources', icon: '📚' },
   { id: 'notifications', label: 'Alertes', icon: '🔔' },
   { id: 'account', label: 'Mon compte', icon: '👤' },
 ]
@@ -70,6 +71,20 @@ export const ORGANISATION_NAV: SiteManagerNavItem[] = [
  * Vie du lieu — Courses / Logistique / Cercles (tous les membres du lieu).
  */
 export const PLACE_LIFE_NAV: SiteManagerNavItem[] = [
+  {
+    id: 'skills',
+    label: 'Annuaire du lieu',
+    icon: '✨',
+    description: 'Compétences visibles dans ce lieu',
+    scope: 'active',
+  },
+  {
+    id: 'resources',
+    label: 'Ressources du lieu',
+    icon: '📚',
+    description: 'Textes, recettes, vidéos et documents',
+    scope: 'active',
+  },
   {
     id: 'courses',
     label: 'Courses',
@@ -110,7 +125,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
   },
   {
     id: 'admin-comms',
-    label: 'Annonces & campagnes',
+    label: 'Infos & campagnes',
     icon: '📣',
     adminTab: 'communications',
     description: 'Notifications et diffusions',
@@ -129,6 +144,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     adminTab: 'places',
     description: 'Tous les sites enregistrés',
   },
+  {
+    id: 'admin-support',
+    label: 'Retours',
+    icon: '🛟',
+    adminTab: 'support',
+    description: 'Questions et bugs signalés',
+  },
 ]
 
 export const PAGE_LABELS: Record<MandalaPage, string> = {
@@ -137,6 +159,8 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   events: 'Événements',
   members: 'Membres',
   messages: 'Messages',
+  skills: 'Compétences',
+  resources: 'Ressources',
   notifications: 'Alertes',
   account: 'Mon compte',
   charter: 'Charte du lieu',
@@ -145,6 +169,7 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   'place-profile': 'Profil du lieu',
   'place-charter': 'Charte du lieu',
   'place-members': 'Membres du lieu',
+  'place-invites': 'Invitations',
   'place-announcements': 'Annonces du lieu',
   'managed-places': 'Mes lieux',
   courses: 'Courses',

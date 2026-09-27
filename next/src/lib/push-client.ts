@@ -21,6 +21,31 @@ export function isPushClientSupported(): boolean {
   )
 }
 
+function isIosDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/i.test(ua)) return true
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+function isStandaloneDisplay(): boolean {
+  if (typeof window === 'undefined') return false
+  const nav = navigator as Navigator & { standalone?: boolean }
+  if (nav.standalone === true) return true
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches
+  )
+}
+
+/** iPhone / iPad ouvert dans Safari : le push n’existe qu’après « Sur l’écran d’accueil ». */
+export function needsIosHomeScreenForPush(): boolean {
+  return isIosDevice() && !isStandaloneDisplay()
+}
+
+export const IOS_PUSH_HOME_SCREEN_HINT =
+  'Touchez Partager, puis Sur l’écran d’accueil, puis rouvrez Mandala depuis cette icône.'
+
 export type PushDeviceStatus = {
   supported: boolean
   /** Permission navigateur + abonnement PushManager présent */

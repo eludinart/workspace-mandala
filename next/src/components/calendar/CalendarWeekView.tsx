@@ -108,27 +108,40 @@ function WeekDayCard({
     <button
       type="button"
       onClick={onSelect}
-      className={`w-full text-left rounded-2xl border p-4 transition-colors ${
-        selected
-          ? 'border-violet-500/60 bg-violet-950/25 ring-1 ring-violet-500/30'
-          : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+      className={`w-full text-left rounded-2xl border-2 p-4 transition-colors ${
+        disabled
+          ? selected
+            ? 'border-red-400 bg-red-950/55 ring-2 ring-violet-300/70'
+            : 'border-red-500 bg-red-950/45 hover:bg-red-950/60'
+          : selected
+            ? 'border-emerald-400 bg-emerald-950/45 ring-2 ring-violet-300/70'
+            : 'border-emerald-600/80 bg-emerald-950/35 hover:bg-emerald-950/50'
       }`}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-3">
           <span
-            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl ${
-              isToday ? 'bg-violet-600 text-white' : 'bg-slate-800 text-slate-200'
+            className={`flex flex-col items-center justify-center w-12 h-12 rounded-xl text-white ${
+              isToday
+                ? 'bg-violet-600 ring-2 ring-offset-2 ring-offset-transparent ' +
+                  (disabled ? 'ring-red-300' : 'ring-emerald-300')
+                : disabled
+                  ? 'bg-red-600'
+                  : 'bg-emerald-600'
             }`}
           >
             <span className="text-[10px] uppercase font-medium opacity-80">{shortWeekdayFr(day)}</span>
             <span className="text-lg font-bold leading-none">{d.getDate()}</span>
           </span>
           <div>
-            <p className="text-sm font-semibold text-slate-200 capitalize">
+            <p className="text-sm font-semibold text-slate-100 capitalize">
               {d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </p>
-            {disabled && <p className="text-xs text-slate-500">Journée fermée</p>}
+            <p
+              className={`text-xs font-semibold ${disabled ? 'text-red-200' : 'text-emerald-200'}`}
+            >
+              {disabled ? 'Journée fermée' : 'Journée ouverte'}
+            </p>
             {info?.i_am_present && (
               <p className="text-xs text-emerald-400 font-medium">Vous êtes inscrit(e)</p>
             )}
@@ -214,18 +227,36 @@ function WeekDayColumn({
     <button
       type="button"
       onClick={onSelect}
-      className={`flex flex-col min-h-[280px] rounded-xl border p-2 text-left transition-colors ${
-        selected
-          ? 'border-violet-500/50 bg-violet-950/20'
-          : 'border-slate-800/60 bg-slate-950/30 hover:bg-slate-900/50'
+      className={`flex flex-col min-h-[280px] rounded-xl border-2 p-2 text-left transition-colors ${
+        disabled
+          ? selected
+            ? 'border-red-400 bg-red-950/50 ring-2 ring-violet-300/70'
+            : 'border-red-500/80 bg-red-950/40 hover:bg-red-950/55'
+          : selected
+            ? 'border-emerald-400 bg-emerald-950/40 ring-2 ring-violet-300/70'
+            : 'border-emerald-600/70 bg-emerald-950/30 hover:bg-emerald-950/45'
       }`}
     >
-      <div className="shrink-0 pb-2 border-b border-slate-800/80 mb-2">
-        <p className="text-[10px] uppercase tracking-wide text-slate-500">{shortWeekdayFr(day)}</p>
+      <div
+        className={`shrink-0 pb-2 border-b mb-2 ${
+          disabled ? 'border-red-500/40' : 'border-emerald-500/30'
+        }`}
+      >
+        <p
+          className={`text-[10px] uppercase tracking-wide font-semibold ${
+            disabled ? 'text-red-200' : 'text-emerald-200'
+          }`}
+        >
+          {shortWeekdayFr(day)} · {disabled ? 'Fermé' : 'Ouvert'}
+        </p>
         <div className="flex items-center justify-between mt-0.5">
           <span
-            className={`text-lg font-bold ${
-              isToday ? 'flex items-center justify-center w-8 h-8 rounded-full bg-violet-600 text-white' : 'text-slate-200'
+            className={`text-lg font-bold text-white flex items-center justify-center w-8 h-8 rounded-full ${
+              isToday
+                ? `bg-violet-600 ring-2 ${disabled ? 'ring-red-300' : 'ring-emerald-300'}`
+                : disabled
+                  ? 'bg-red-600'
+                  : 'bg-emerald-600'
             }`}
           >
             {d.getDate()}
@@ -242,7 +273,6 @@ function WeekDayColumn({
             </span>
           )}
         </div>
-        {disabled && <p className="text-[9px] text-slate-500 mt-1">Fermé</p>}
       </div>
 
       <div className="flex-1 min-h-0 space-y-1.5 overflow-y-auto">

@@ -41,8 +41,8 @@ self.addEventListener('push', (event) => {
     Promise.all([
       self.registration.showNotification(data.title || 'Mandala', {
         body: data.body || '',
-        icon: '/icon.svg',
-        badge: '/icon.svg',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
         data: { url: data.url || '/app?page=notifications' },
       }),
       // Rafraîchir la cloche / le sous-menu si l'app est ouverte

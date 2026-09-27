@@ -24,12 +24,14 @@ export function WallDiscoverSection({
   feedLimit = 24,
   showPlacesList = true,
   onEventClick,
+  onOpenProfile,
   initialSort = 'date',
 }: {
   mapHeightClass?: string
   feedLimit?: number
   showPlacesList?: boolean
   onEventClick?: (eventId: number) => void
+  onOpenProfile?: (userId: number) => void
   initialSort?: WallFeedSort
 }) {
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
@@ -85,6 +87,7 @@ export function WallDiscoverSection({
             initialSort={initialSort}
             limit={feedLimit}
             onEventClick={onEventClick}
+            onOpenProfile={onOpenProfile}
           />
         </div>
       </div>

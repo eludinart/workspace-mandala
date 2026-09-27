@@ -80,6 +80,37 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+function PlaceCharterAccess({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={`w-full text-left rounded-xl border p-2.5 transition-colors ${
+        active
+          ? 'border-violet-500/70 bg-violet-600/30'
+          : 'border-violet-500/45 bg-violet-600/15 hover:border-violet-400/70 hover:bg-violet-600/25'
+      }`}
+    >
+      <p className="text-[10px] uppercase tracking-widest font-semibold text-violet-400">
+        Charte du lieu
+      </p>
+      <div className="flex items-center gap-2 mt-1.5 min-w-0">
+        <span className="text-base shrink-0 leading-none" aria-hidden>
+          📜
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-100 truncate">Consulter la charte</p>
+          <p className="text-[10px] text-slate-500 truncate">Règles et engagements de ce lieu</p>
+        </div>
+        <span className="text-violet-400 shrink-0 text-sm" aria-hidden>
+          →
+        </span>
+      </div>
+    </button>
+  )
+}
+
 export function AppNavPanel({
   page,
   onNavigate,
@@ -123,12 +154,14 @@ export function AppNavPanel({
             </p>
           </div>
           <ActivePlaceBar />
+          <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />
         </div>
       )}
 
       {!showBranding && (
-        <div className="px-2 pb-2 border-b border-slate-800 shrink-0">
+        <div className="px-2 pb-2 border-b border-slate-800 shrink-0 space-y-2">
           <ActivePlaceBar />
+          <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />
         </div>
       )}
 

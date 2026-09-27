@@ -10,8 +10,12 @@
  * sans dépendre du catch-all stub.
  */
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, isDbConfigured, table } from './db'
 import { cacheDel } from './server-cache'
+import {
+  READ_NOTIFICATION_KEEP_COUNT,
+  READ_NOTIFICATION_RETENTION_DAYS,
+} from './notification-retention'
 import { actionUrlToWebPath, isWebPushConfigured, sendWebPushToUser } from './web-push-send'
 
 const T_NOTIF = () => table('notifications')
@@ -25,20 +29,13 @@ export function invalidateNotifUnreadCache(userId: number | number[]): void {
   }
 }
 
-// Singleton : CREATE TABLE une seule fois ; migrations ALTER idempotentes à chaque appel
-let _createTablesPromise: Promise<void> | null = null
 let _notificationsHasLegacyUserId: boolean | null = null
 
 export async function ensureNotificationsTables(): Promise<void> {
-  if (!isDbConfigured()) return
-  if (!_createTablesPromise) {
-    _createTablesPromise = _createNotificationsTables().catch((err) => {
-      _createTablesPromise = null
-      throw err
-    })
-  }
-  await _createTablesPromise
-  await _migrateNotificationsTables()
+  return ensureOnce('notifications', async () => {
+    await _createNotificationsTables()
+    await _migrateNotificationsTables()
+  })
 }
 
 async function _createNotificationsTables(): Promise<void> {
@@ -109,6 +106,7 @@ async function _migrateNotificationsTables(): Promise<void> {
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS user_email VARCHAR(255) DEFAULT NULL`,
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS channel_id INT DEFAULT NULL`,
     `ALTER TABLE ${tD} ADD COLUMN IF NOT EXISTS delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE ${tD} ADD INDEX IF NOT EXISTS idx_read_at (read_at)`,
     `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS body TEXT DEFAULT NULL`,
     `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS action_url VARCHAR(255) DEFAULT NULL`,
     `ALTER TABLE ${tN} ADD COLUMN IF NOT EXISTS action_label VARCHAR(80) DEFAULT NULL`,
@@ -328,9 +326,116 @@ export async function createNotification(
   return { notification_id: notificationId, deliveries }
 }
 
+const GLOBAL_PURGE_INTERVAL_MS = 60 * 60 * 1000
+let _lastGlobalPurgeAt = 0
+let _globalPurgeInFlight = false
+
+async function deleteOrphanNotifications(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  recipientId?: number
+): Promise<void> {
+  const tN = T_NOTIF()
+  const tD = T_DELIV()
+  const recipientClause = recipientId != null ? 'AND n.recipient_id = ?' : ''
+  const params = recipientId != null ? [recipientId] : []
+  await pool.execute(
+    `DELETE n FROM ${tN} n
+     LEFT JOIN ${tD} d ON d.notification_id = n.id
+     WHERE d.id IS NULL
+       AND n.created_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)
+       ${recipientClause}
+     LIMIT 400`,
+    params
+  )
+}
+
+/**
+ * Retire les lectures trop anciennes, puis ne garde que les plus récentes.
+ * Les non lues ne sont pas touchées.
+ */
+export async function purgeReadNotificationsForUser(userId: number): Promise<void> {
+  if (!isDbConfigured() || !Number.isFinite(userId) || userId <= 0) return
+  try {
+    await ensureNotificationsTables()
+    const pool = getPool()
+    const tD = T_DELIV()
+    const days = READ_NOTIFICATION_RETENTION_DAYS
+    const keep = READ_NOTIFICATION_KEEP_COUNT
+    await pool.execute(
+      `DELETE FROM ${tD}
+       WHERE user_id = ?
+         AND read_at IS NOT NULL
+         AND read_at < DATE_SUB(NOW(), INTERVAL ${days} DAY)`,
+      [userId]
+    )
+    await pool.execute(
+      `DELETE FROM ${tD}
+       WHERE user_id = ?
+         AND read_at IS NOT NULL
+         AND id NOT IN (
+           SELECT id FROM (
+             SELECT id FROM ${tD}
+             WHERE user_id = ? AND read_at IS NOT NULL
+             ORDER BY read_at DESC, id DESC
+             LIMIT ${keep}
+           ) recent_reads
+         )`,
+      [userId, userId]
+    )
+    await deleteOrphanNotifications(pool, userId)
+  } catch (err) {
+    console.error('[notifications] purge user', err)
+  }
+}
+
+/**
+ * Purge globale, au plus une fois par heure : lectures anciennes, alertes expirées,
+ * puis notifications orphelines. Ne bloque pas le compteur non lu.
+ */
+export function scheduleGlobalNotificationPurge(): void {
+  const now = Date.now()
+  if (_globalPurgeInFlight || now - _lastGlobalPurgeAt < GLOBAL_PURGE_INTERVAL_MS) return
+  _globalPurgeInFlight = true
+  _lastGlobalPurgeAt = now
+  void runGlobalNotificationPurge()
+    .catch((err) => console.error('[notifications] purge globale', err))
+    .finally(() => {
+      _globalPurgeInFlight = false
+    })
+}
+
+async function runGlobalNotificationPurge(): Promise<void> {
+  if (!isDbConfigured()) return
+  await ensureNotificationsTables()
+  const pool = getPool()
+  const tD = T_DELIV()
+  const tN = T_NOTIF()
+  const days = READ_NOTIFICATION_RETENTION_DAYS
+
+  for (let batch = 0; batch < 5; batch++) {
+    const [res] = await pool.execute(
+      `DELETE FROM ${tD}
+       WHERE read_at IS NOT NULL
+         AND read_at < DATE_SUB(NOW(), INTERVAL ${days} DAY)
+       LIMIT 1000`
+    )
+    if (Number((res as ResultSetHeader).affectedRows ?? 0) < 1000) break
+  }
+
+  await pool.execute(
+    `DELETE d FROM ${tD} d
+     INNER JOIN ${tN} n ON n.id = d.notification_id
+     WHERE n.expires_at IS NOT NULL AND n.expires_at <= NOW()
+     LIMIT 1000`
+  )
+
+  await deleteOrphanNotifications(pool)
+}
+
 export async function unreadCountForUser(userId: number): Promise<number> {
   if (!isDbConfigured()) return 0
   await ensureNotificationsTables()
+  scheduleGlobalNotificationPurge()
   const pool = getPool()
   const tD = T_DELIV()
   const tN = T_NOTIF()
@@ -339,21 +444,45 @@ export async function unreadCountForUser(userId: number): Promise<number> {
      FROM ${tD} d
      JOIN ${tN} n ON n.id = d.notification_id
      WHERE d.user_id = ? AND d.read_at IS NULL
-       AND (n.expires_at IS NULL OR n.expires_at > NOW())`,
+       AND (n.expires_at IS NULL OR n.expires_at > NOW())
+       AND NOT (
+         COALESCE(n.source_type, '') = 'clairiere_channel'
+         OR n.type IN ('chat_new_message', 'chat_message', 'clairiere_message')
+       )`,
     [userId]
   )
   return Number(rows?.[0]?.c ?? 0)
 }
 
-export async function listForUser(params: { userId: number; per_page?: number; page?: number }): Promise<{ items: Record<string, unknown>[]; unread: number }> {
-  if (!isDbConfigured()) return { items: [], unread: 0 }
-  await ensureNotificationsTables()
-  const pool = getPool()
+function mapNotificationRow(r: RowDataPacket): Record<string, unknown> {
+  return {
+    id: String(r.id),
+    type: String(r.type ?? ''),
+    title: String(r.title ?? ''),
+    body: r.body ?? null,
+    action_url: r.action_url ?? null,
+    action_label: r.action_label ?? null,
+    priority: String(r.priority ?? 'normal'),
+    created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+    source_type: r.source_type != null ? String(r.source_type) : null,
+    source_id: r.source_id != null ? String(r.source_id) : null,
+    channel_id: r.channel_id != null ? String(r.channel_id) : null,
+    delivery_id: String(r.delivery_id ?? ''),
+    read_at: r.read_at ? new Date(r.read_at).toISOString() : null,
+  }
+}
+
+async function selectUserNotifications(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  userId: number,
+  readState: 'unread' | 'read',
+  limit: number,
+  offset: number
+): Promise<Record<string, unknown>[]> {
   const tD = T_DELIV()
   const tN = T_NOTIF()
-  const perPage = Math.min(50, Math.max(1, params.per_page ?? 20))
-  const page = Math.max(1, params.page ?? 1)
-  const offset = (page - 1) * perPage
+  const readClause = readState === 'unread' ? 'd.read_at IS NULL' : 'd.read_at IS NOT NULL'
+  const orderBy = readState === 'unread' ? 'n.created_at DESC' : 'd.read_at DESC, n.created_at DESC'
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
         n.id as id,
@@ -373,27 +502,30 @@ export async function listForUser(params: { userId: number; per_page?: number; p
      JOIN ${tN} n ON n.id = d.notification_id
      WHERE d.user_id = ?
        AND (n.expires_at IS NULL OR n.expires_at > NOW())
-     ORDER BY n.created_at DESC
+       AND ${readClause}
+     ORDER BY ${orderBy}
      LIMIT ? OFFSET ?`,
-    [params.userId, perPage, offset]
+    [userId, limit, offset]
   )
-  const items = rows.map((r) => ({
-    id: String(r.id),
-    type: String(r.type ?? ''),
-    title: String(r.title ?? ''),
-    body: r.body ?? null,
-    action_url: r.action_url ?? null,
-    action_label: r.action_label ?? null,
-    priority: String(r.priority ?? 'normal'),
-    created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
-    source_type: r.source_type != null ? String(r.source_type) : null,
-    source_id: r.source_id != null ? String(r.source_id) : null,
-    channel_id: r.channel_id != null ? String(r.channel_id) : null,
-    delivery_id: String(r.delivery_id ?? ''),
-    read_at: r.read_at ? new Date(r.read_at).toISOString() : null,
-  }))
+  return rows.map(mapNotificationRow)
+}
+
+export async function listForUser(params: { userId: number; per_page?: number; page?: number }): Promise<{ items: Record<string, unknown>[]; unread: number }> {
+  if (!isDbConfigured()) return { items: [], unread: 0 }
+  await ensureNotificationsTables()
+  const pool = getPool()
+  await purgeReadNotificationsForUser(params.userId)
+  scheduleGlobalNotificationPurge()
+  const perPage = Math.min(50, Math.max(1, params.per_page ?? 20))
+  const page = Math.max(1, params.page ?? 1)
+  const offset = (page - 1) * perPage
+  const unreadItems = await selectUserNotifications(pool, params.userId, 'unread', perPage, offset)
+  const readItems =
+    page === 1
+      ? await selectUserNotifications(pool, params.userId, 'read', READ_NOTIFICATION_KEEP_COUNT, 0)
+      : []
   const unread = await unreadCountForUser(params.userId)
-  return { items, unread }
+  return { items: [...unreadItems, ...readItems], unread }
 }
 
 export async function markRead(userId: number, ids: number[]): Promise<void> {
@@ -420,6 +552,7 @@ export async function markAllRead(userId: number): Promise<void> {
   const tD = T_DELIV()
   await pool.execute(`UPDATE ${tD} SET read_at = COALESCE(read_at, NOW()) WHERE user_id = ?`, [userId])
   invalidateNotifUnreadCache(userId)
+  await purgeReadNotificationsForUser(userId)
 }
 
 export async function deleteRead(userId: number): Promise<number> {
@@ -428,6 +561,7 @@ export async function deleteRead(userId: number): Promise<number> {
   const pool = getPool()
   const tD = T_DELIV()
   const [res] = await pool.execute(`DELETE FROM ${tD} WHERE user_id = ? AND read_at IS NOT NULL`, [userId])
+  await deleteOrphanNotifications(pool, userId)
   return Number((res as ResultSetHeader).affectedRows ?? 0)
 }
 

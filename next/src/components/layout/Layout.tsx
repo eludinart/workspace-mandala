@@ -12,17 +12,20 @@ import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
 import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer'
 import { PushNotificationPriming } from '@/components/PushNotificationPriming'
+import { HelpButton } from '@/components/help/HelpButton'
 import { useEffect, useState } from 'react'
 
 export function Layout({
   page,
   onNavigate,
   adminTab,
+  onBack,
   children,
 }: {
   page: MandalaPage
   onNavigate: MandalaNavigate
   adminTab?: AdminTabId
+  onBack?: () => void
   children: React.ReactNode
 }) {
   const { user } = useAuth()
@@ -44,6 +47,15 @@ export function Layout({
     setMobileNavOpen(false)
   }, [page])
 
+  if (page === 'messages') {
+    return (
+      <div className="h-full min-h-0 flex flex-col bg-slate-950 text-slate-100">
+        <main className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">{children}</main>
+        <HelpButton page={page} />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full min-h-0 flex flex-col md:flex-row bg-slate-950 text-slate-100">
       <aside className="hidden md:flex md:w-56 lg:w-60 border-r border-slate-800 shrink-0 self-stretch">
@@ -57,22 +69,39 @@ export function Layout({
           page={page}
           onNavigate={onNavigate}
           onOpenMenu={() => setMobileNavOpen(true)}
+          onBack={onBack}
         />
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="md:hidden shrink-0 flex items-center gap-1 px-3 min-h-[44px] text-sm font-medium text-violet-300 hover:bg-slate-800/40 border-b border-slate-800"
+            aria-label="Page précédente"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M15 5.5 8.5 12l6.5 6.5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Retour
+          </button>
+        )}
         <PlaceSwitchBanner />
         <AdminActingRoleBar />
         <PushNotificationPriming />
         <main
           className={`flex-1 min-h-0 min-w-0 w-full ${
-            page === 'messages'
-              ? 'flex flex-col overflow-hidden p-4 md:p-6'
-              : page === 'home'
-                ? 'overflow-auto p-0'
-                : 'overflow-auto p-4 md:p-6'
+            page === 'home' ? 'overflow-auto p-0' : 'overflow-auto p-4 md:p-6'
           }`}
         >
           {children}
         </main>
         <BottomNav page={page} onNavigate={onNavigate} />
+        <HelpButton page={page} />
       </div>
       <MobileNavDrawer
         open={mobileNavOpen}

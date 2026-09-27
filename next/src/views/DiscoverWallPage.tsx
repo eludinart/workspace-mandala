@@ -2,6 +2,7 @@
 
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
+import { OPEN_SKILL_USER_KEY } from '@/components/skills/SkillsDirectory'
 
 /**
  * Mur d'actualité + carte du réseau (espace connecté `/app`).
@@ -19,11 +20,46 @@ export function DiscoverWallPage({ onNavigate }: { onNavigate?: MandalaNavigate 
         </p>
       </header>
 
+      {onNavigate && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigate('skills')}
+            className="m-landing-icon-card hover:opacity-90 transition-opacity text-left w-full"
+          >
+            <div className="m-landing-icon-mark" aria-hidden>
+              ✨
+            </div>
+            <h2 className="text-xl mb-1">Compétences</h2>
+            <p className="text-sm text-slate-400 leading-relaxed">Annuaire des savoir-faire</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('resources')}
+            className="m-landing-icon-card hover:opacity-90 transition-opacity text-left w-full"
+          >
+            <div className="m-landing-icon-mark" aria-hidden>
+              📚
+            </div>
+            <h2 className="text-xl mb-1">Ressources</h2>
+            <p className="text-sm text-slate-400 leading-relaxed">Recettes, textes, vidéos et documents</p>
+          </button>
+        </div>
+      )}
+
       <WallDiscoverSection
         feedLimit={40}
         onEventClick={
           onNavigate
             ? (eventId) => onNavigate('events', { eventId })
+            : undefined
+        }
+        onOpenProfile={
+          onNavigate
+            ? (userId) => {
+                sessionStorage.setItem(OPEN_SKILL_USER_KEY, String(userId))
+                onNavigate('skills')
+              }
             : undefined
         }
       />

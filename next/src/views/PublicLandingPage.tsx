@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
+import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
+import { ResourceLibrary } from '@/components/resources/ResourceLibrary'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 
 const FEATURES = [
@@ -114,6 +116,14 @@ export function PublicLandingPage() {
             </p>
           </div>
           <WallDiscoverSection mapHeightClass="h-[min(40vh,16rem)] sm:h-[min(56vh,30rem)]" feedLimit={20} />
+        </section>
+
+        <section id="competences" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 scroll-mt-16">
+          <SkillsDirectory variant="public" />
+        </section>
+
+        <section id="ressources" className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 scroll-mt-16">
+          <ResourceLibrary variant="public" />
         </section>
 
         <section id="projet" className="scroll-mt-16 py-16 sm:py-20 bg-slate-900/40">

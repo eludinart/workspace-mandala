@@ -61,6 +61,13 @@ export const socialApi = {
     api.get(`/api/social/channel_messages?channel_id=${encodeURIComponent(channelId)}`),
   sendMessage: (channelId: string, payload: Record<string, unknown>) =>
     api.post('/api/social/send_message', { channelId, ...payload }),
+  sendMessageWithFile: (channelId: string, body: string, file: File) => {
+    const form = new FormData()
+    form.set('channelId', channelId)
+    if (body) form.set('body', body)
+    form.set('file', file)
+    return api.postForm('/api/social/send_message', form)
+  },
   presenceHeartbeat: () => api.get('/api/social/presence_heartbeat'),
   clairiereUnreadCount: () =>
     api.get('/api/social/clairiere_unread_count') as Promise<{ count: number }>,

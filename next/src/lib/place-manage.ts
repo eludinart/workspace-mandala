@@ -28,6 +28,12 @@ export const PLACE_MANAGE_ACTIONS: PlaceManageAction[] = [
     description: 'Rôles et équipe',
   },
   {
+    id: 'place-invites',
+    label: 'Invitations',
+    icon: '✉️',
+    description: 'Ajouter des membres et envoyer un lien',
+  },
+  {
     id: 'place-announcements',
     label: 'Annonces du lieu',
     icon: '📢',
@@ -52,5 +58,6 @@ export const ORGANISATION_PLACE_PAGES: MandalaPage[] = [
   'place-profile',
   'place-charter',
   'place-members',
+  'place-invites',
   'place-announcements',
 ]

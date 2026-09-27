@@ -4,12 +4,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useSocialStore, type ChannelMessage } from '@/store/useSocialStore'
 import { socialApi } from '@/api/social'
-import { TemperatureIndicator } from './TemperatureIndicator'
 import { GroupParticipantsPreview } from './GroupParticipantsPreview'
 import { AddGroupMembersPanel } from './AddGroupMembersPanel'
 import { MessageBubble } from './MessageBubble'
 import { UserAvatar } from '@/components/UserAvatar'
 import type { CommunityMember } from '@/api/members'
+import { chatDayKey, formatChatDayLabel } from '@/lib/format-datetime'
+import {
+  CHAT_FILE_ACCEPT,
+  chatFileError,
+  formatFileSize,
+  isChatImagePreview,
+  resolveChatFileMime,
+} from '@/lib/chat-attachments'
+import { ApiError } from '@/lib/api-client'
 
 export function DialogueStream({
   channelId,
@@ -25,6 +33,7 @@ export function DialogueStream({
   onGroupRenamed,
   communityMembers = [],
   onGroupMembersChanged,
+  onBack,
 }: {
   channelId: number
   otherPseudo?: string
@@ -39,6 +48,7 @@ export function DialogueStream({
   onGroupRenamed?: (name: string) => void
   communityMembers?: CommunityMember[]
   onGroupMembersChanged?: () => void
+  onBack?: () => void
 }) {
   const { user } = useAuth()
   const u = user as {
@@ -55,7 +65,6 @@ export function DialogueStream({
 
   const {
     messagesByChannel,
-    temperatureByChannel,
     loadChannelMessages,
     sendMessage,
     toggleMessageReaction,
@@ -63,6 +72,11 @@ export function DialogueStream({
   } = useSocialStore()
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [filePreview, setFilePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [pendingMessages, setPendingMessages] = useState<ChannelMessage[]>([])
   const [renaming, setRenaming] = useState(false)
   const [editingName, setEditingName] = useState(false)
@@ -74,11 +88,17 @@ export function DialogueStream({
   const [iconEmojiDraft, setIconEmojiDraft] = useState('')
   const [iconImageDraft, setIconImageDraft] = useState<string | null>(null)
   const [iconError, setIconError] = useState<string | null>(null)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [unreadFromId, setUnreadFromId] = useState<number | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [readCursorReady, setReadCursorReady] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const unreadBoundaryRef = useRef<HTMLDivElement>(null)
+  const readCursorCaptured = useRef(false)
+  const initialScrollDone = useRef(false)
 
   const messages = messagesByChannel[String(channelId)] || []
   const visibleMessages = [...messages, ...pendingMessages]
-  const temperature = temperatureByChannel[String(channelId)] || 'calm'
   const canRename = isGroup && createdBy != null && meId != null && Number(createdBy) === Number(meId)
 
   useEffect(() => {
@@ -96,14 +116,47 @@ export function DialogueStream({
     setEditingName(false)
   }, [iconEditing, otherAvatarEmoji, otherAvatar, isGroup])
 
+  const fitMessageInput = useCallback(() => {
+    const el = messageInputRef.current
+    if (!el) return
+    const max = 160
+    el.style.height = 'auto'
+    const next = Math.min(Math.max(el.scrollHeight, 44), max)
+    el.style.height = `${next}px`
+    el.style.overflowY = el.scrollHeight > max ? 'auto' : 'hidden'
+  }, [])
+
+  useEffect(() => {
+    fitMessageInput()
+  }, [input, fitMessageInput])
+
+  useEffect(() => {
+    setInfoOpen(false)
+    setEditingName(false)
+    setIconEditing(false)
+    setUnreadFromId(null)
+    setUnreadCount(0)
+    setReadCursorReady(false)
+    readCursorCaptured.current = false
+    initialScrollDone.current = false
+  }, [channelId])
+
   useEffect(() => {
     if (!channelId) return
+    let alive = true
     let inFlight = false
     const refresh = async () => {
       if (inFlight) return
       inFlight = true
       try {
-        await loadChannelMessages(channelId)
+        const loaded = await loadChannelMessages(channelId)
+        if (!alive) return
+        if (!readCursorCaptured.current) {
+          readCursorCaptured.current = true
+          setUnreadFromId(loaded.unreadFromMessageId)
+          setUnreadCount(loaded.unreadCount)
+          setReadCursorReady(true)
+        }
         markChannelRead?.(channelId)
       } finally {
         inFlight = false
@@ -116,6 +169,7 @@ export function DialogueStream({
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      alive = false
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
     }
@@ -123,20 +177,23 @@ export function DialogueStream({
 
   useEffect(() => {
     const el = listRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight
-    })
-  }, [channelId])
-
-  useEffect(() => {
-    const el = listRef.current
-    if (!el) return
-    requestAnimationFrame(() => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-      if (nearBottom) el.scrollTop = el.scrollHeight
-    })
-  }, [visibleMessages.length])
+    if (!el || !readCursorReady || visibleMessages.length === 0) return
+    if (!initialScrollDone.current) {
+      requestAnimationFrame(() => {
+        const boundary = unreadBoundaryRef.current
+        if (unreadFromId != null && boundary) {
+          const delta = boundary.getBoundingClientRect().top - el.getBoundingClientRect().top
+          el.scrollTop += delta - 120
+        } else {
+          el.scrollTop = el.scrollHeight
+        }
+        initialScrollDone.current = true
+      })
+      return
+    }
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    if (nearBottom) el.scrollTop = el.scrollHeight
+  }, [readCursorReady, unreadFromId, visibleMessages.length])
 
   const resolveSender = useCallback(
     (msg: ChannelMessage, isMe: boolean) => {
@@ -188,10 +245,42 @@ export function DialogueStream({
     ],
   )
 
+  const clearFile = () => {
+    setFile(null)
+    setFilePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const pickFile = (next: File | null) => {
+    setSendError(null)
+    if (filePreview) URL.revokeObjectURL(filePreview)
+    setFilePreview(null)
+    if (!next) {
+      setFile(null)
+      return
+    }
+    const problem = chatFileError(next)
+    if (problem) {
+      setFile(null)
+      setSendError(problem)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    setFile(next)
+    const mime = resolveChatFileMime(next)
+    if (isChatImagePreview(mime)) setFilePreview(URL.createObjectURL(next))
+  }
+
   const handleSendText = async () => {
     const text = input.trim()
-    if (!text || sending) return
+    const attachment = file
+    if ((!text && !attachment) || sending) return
     const tempId = `tmp-${Date.now()}`
+    const mime = attachment ? resolveChatFileMime(attachment) : ''
+    const preview = attachment && isChatImagePreview(mime) ? URL.createObjectURL(attachment) : null
     setPendingMessages((prev) => [
       ...prev,
       {
@@ -203,13 +292,31 @@ export function DialogueStream({
         senderAvatar: meAvatar,
         senderAvatarEmoji: meAvatarEmoji,
         reactions: [],
+        localPreviewUrl: preview,
+        attachment: attachment
+          ? { mime, name: attachment.name, size: attachment.size }
+          : null,
       },
     ])
     setInput('')
+    clearFile()
     setSending(true)
+    setSendError(null)
     try {
-      await sendMessage(channelId, { body: text })
+      await sendMessage(channelId, { body: text, file: attachment ?? undefined })
+      requestAnimationFrame(() => {
+        const el = listRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      })
+    } catch (e: unknown) {
+      setInput(text)
+      if (attachment) {
+        setFile(attachment)
+        if (isChatImagePreview(mime)) setFilePreview(URL.createObjectURL(attachment))
+      }
+      setSendError(e instanceof ApiError ? e.detail : 'Envoi impossible')
     } finally {
+      if (preview) URL.revokeObjectURL(preview)
       setPendingMessages((prev) => prev.filter((m) => String(m.id) !== tempId))
       setSending(false)
     }
@@ -270,103 +377,117 @@ export function DialogueStream({
     reader.readAsDataURL(file)
   }
 
+  const statusLabel = isGroup
+    ? `${memberCount ?? (memberIds.length || Object.keys(participantsById).length)} participants`
+    : otherIsOnline
+      ? 'en ligne'
+      : 'hors ligne'
+
   return (
-    <div className="min-h-0 flex-1 grid grid-rows-[auto_minmax(0,1fr)_auto] rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden lg:min-h-[min(70vh,600px)]">
-      <header className="px-3 py-2 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <TemperatureIndicator temperature={temperature} className="shrink-0" />
-          <UserAvatar
-            avatar={otherAvatar}
-            avatarEmoji={otherAvatarEmoji ?? (isGroup ? '👥' : undefined)}
-            size="sm"
-            alt={otherPseudo}
-          />
-          {!isGroup && (
-            <span
-              className={`inline-block w-2 h-2 rounded-full shrink-0 ${otherIsOnline ? 'bg-emerald-500' : 'bg-slate-500'}`}
+    <div className="min-h-0 min-w-0 w-full max-w-full flex-1 grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto] bg-slate-950 overflow-hidden">
+      <header className="min-w-0 bg-slate-950/95 border-b border-slate-800">
+        <div className="flex items-center gap-1 px-1 py-1.5 min-h-[56px]">
+          <button
+            type="button"
+            onClick={onBack}
+            className="lg:hidden inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-full text-violet-400 hover:bg-slate-800/80 shrink-0"
+            aria-label="Retour aux messages"
+          >
+            <ChevronLeftIcon />
+          </button>
+          <span className="relative shrink-0">
+            <UserAvatar
+              avatar={otherAvatar}
+              avatarEmoji={otherAvatarEmoji ?? (isGroup ? '👥' : undefined)}
+              size="sm"
+              alt={otherPseudo}
             />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 min-w-0">
-              {editingName ? (
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <input
-                    value={nameDraft}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void submitRename()
-                      if (e.key === 'Escape') setEditingName(false)
-                    }}
-                    autoFocus
-                    className="min-w-0 flex-1 px-2.5 py-1.5 rounded-lg border border-slate-700 bg-slate-950 text-slate-100 text-sm"
-                    aria-label="Nom du groupe"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void submitRename()}
-                    disabled={renaming}
-                    className="px-2.5 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50"
-                    aria-label="Enregistrer le nom"
-                  >
-                    {renaming ? '…' : 'OK'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingName(false)}
-                    disabled={renaming}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800 disabled:opacity-50"
-                    aria-label="Annuler"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <span className="text-sm font-medium truncate block flex-1 min-w-0">
-                    {otherPseudo || 'Dialogue'}
-                  </span>
-                  {canRename && !iconEditing && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingName(true)
-                          setIconEditing(false)
-                        }}
-                        className="px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
-                        aria-label="Renommer le groupe"
-                        title="Renommer"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIconEditing(true)
-                          setEditingName(false)
-                        }}
-                        className="px-2 py-1 rounded-lg border border-slate-700 text-slate-300 text-[11px] hover:bg-slate-800"
-                        aria-label="Modifier l'icône du groupe"
-                        title="Icône"
-                      >
-                        🖼️
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-            <span className="text-[11px] text-slate-500">
-              {isGroup
-                ? `${memberCount ?? (memberIds.length || Object.keys(participantsById).length)} participants`
-                : otherIsOnline
-                  ? 'En ligne'
-                  : 'Hors ligne'}
-            </span>
-            {renameError && <span className="text-[11px] text-red-400 block mt-0.5">{renameError}</span>}
+            {!isGroup && otherIsOnline && (
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1 px-1">
+            <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Dialogue'}</p>
+            <p className={`text-xs truncate ${!isGroup && otherIsOnline ? 'text-emerald-400' : 'text-slate-400'}`}>
+              {statusLabel}
+            </p>
           </div>
+          {isGroup && (
+            <button
+              type="button"
+              onClick={() => setInfoOpen((v) => !v)}
+              className={`shrink-0 min-w-[44px] min-h-[44px] rounded-full text-sm ${
+                infoOpen ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/80'
+              }`}
+              aria-expanded={infoOpen}
+              aria-label="Infos du groupe"
+            >
+              ···
+            </button>
+          )}
         </div>
-        {iconEditing && canRename && (
+        {infoOpen && isGroup && (
+          <div className="max-h-[46vh] overflow-y-auto border-t border-slate-800 bg-slate-900/90 px-3 py-3 space-y-3">
+            {canRename && (
+              <div className="flex flex-wrap items-center gap-2">
+                {editingName ? (
+                  <>
+                    <input
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void submitRename()
+                        if (e.key === 'Escape') setEditingName(false)
+                      }}
+                      autoFocus
+                      className="min-w-0 flex-1 px-3 py-2 rounded-full border border-slate-700 bg-slate-950 text-slate-100 text-sm"
+                      aria-label="Nom du groupe"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void submitRename()}
+                      disabled={renaming}
+                      className="px-3 py-2 rounded-full bg-violet-600 text-white text-xs font-medium hover:bg-violet-500 disabled:opacity-50"
+                    >
+                      {renaming ? '…' : 'OK'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingName(false)}
+                      disabled={renaming}
+                      className="px-3 py-2 rounded-full border border-slate-700 text-slate-300 text-xs hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingName(true)
+                        setIconEditing(false)
+                      }}
+                      className="px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 text-xs hover:bg-slate-800"
+                    >
+                      Renommer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIconEditing(true)
+                        setEditingName(false)
+                      }}
+                      className="px-3 py-1.5 rounded-full border border-slate-700 text-slate-300 text-xs hover:bg-slate-800"
+                    >
+                      Icône
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {renameError && <p className="text-xs text-red-400">{renameError}</p>}
+            {iconEditing && canRename && (
           <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -438,67 +559,167 @@ export function DialogueStream({
                 {iconSaving ? '…' : 'Enregistrer'}
               </button>
             </div>
+            </div>
+            )}
           </div>
         )}
-        {isGroup && memberIds.length > 0 && (
-          <>
-            <GroupParticipantsPreview
-              memberIds={memberIds}
-              participantsById={participantsById}
-              meId={meId}
-            />
+        {isGroup && (
+          <div className="px-3 pb-2 space-y-1 border-t border-slate-800/70">
+            {memberIds.length > 0 && (
+              <GroupParticipantsPreview
+                memberIds={memberIds}
+                participantsById={participantsById}
+                meId={meId}
+              />
+            )}
             <AddGroupMembersPanel
               channelId={channelId}
               existingMemberIds={memberIds}
               communityMembers={communityMembers}
               onMembersAdded={onGroupMembersChanged}
             />
-          </>
+          </div>
         )}
       </header>
 
-      <div ref={listRef} className="min-h-0 overflow-y-auto px-3 py-4 space-y-4">
+      <div ref={listRef} className="m-chat-wallpaper min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-3 space-y-1">
         {visibleMessages.length === 0 && (
-          <p className="text-center text-sm text-slate-500 py-8">Envoyez le premier message.</p>
+          <p className="text-center text-sm text-slate-500 py-16">Envoyez le premier message.</p>
         )}
         {visibleMessages.map((msg, index) => {
           const isMe = msg.senderId === meId
           const itemKey = String(msg.id ?? msg.messageId ?? index)
           const sender = resolveSender(msg, isMe)
+          const day = chatDayKey(msg.createdAt)
+          const prevDay = index > 0 ? chatDayKey(visibleMessages[index - 1]?.createdAt) : ''
+          const showDay = day !== '' && day !== prevDay
+          const showUnreadBoundary =
+            unreadFromId != null && Number(msg.id ?? msg.messageId) === unreadFromId
           return (
-            <MessageBubble
-              key={itemKey}
-              msg={msg}
-              isMe={isMe}
-              displayName={sender.displayName}
-              avatar={sender.avatar}
-              avatarEmoji={sender.avatarEmoji}
-              meId={meId}
-              onReact={handleReact}
-            />
+            <div key={itemKey}>
+              {showUnreadBoundary && (
+                <div
+                  ref={unreadBoundaryRef}
+                  className="flex items-center gap-3 py-3"
+                  role="separator"
+                  aria-label={
+                    unreadCount > 1
+                      ? `${unreadCount} messages non lus`
+                      : '1 message non lu'
+                  }
+                >
+                  <span className="h-px flex-1 bg-violet-500/80" />
+                  <span className="shrink-0 rounded-full bg-violet-600 px-3 py-1 text-[12px] font-semibold text-white">
+                    {unreadCount > 1 ? `${unreadCount} messages non lus` : '1 message non lu'}
+                  </span>
+                  <span className="h-px flex-1 bg-violet-500/80" />
+                </div>
+              )}
+              {showDay && (
+                <p className="mx-auto my-2 w-fit rounded-full bg-slate-900/90 px-3 py-1 text-[11px] text-slate-300 shadow-sm">
+                  {formatChatDayLabel(msg.createdAt)}
+                </p>
+              )}
+              <MessageBubble
+                msg={msg}
+                isMe={isMe}
+                displayName={sender.displayName}
+                avatar={sender.avatar}
+                avatarEmoji={sender.avatarEmoji}
+                meId={meId}
+                showAvatar={isGroup && !isMe}
+                showName={isGroup && !isMe}
+                onReact={handleReact}
+              />
+            </div>
           )
         })}
       </div>
 
-      <div className="m-user-form border-t border-slate-800 bg-slate-900/95 p-3 flex gap-2 items-center">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && void handleSendText()}
-          placeholder="Écrire un message…"
-          className="flex-1 min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-950 text-slate-100 placeholder-slate-500 text-sm"
-          aria-label="Écrire un message"
-        />
-        <button
-          type="button"
-          onClick={() => void handleSendText()}
-          disabled={!input.trim() || sending}
-          className="shrink-0 min-h-[44px] px-4 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
-        >
-          {sending ? '…' : 'Envoyer'}
-        </button>
+      <div className="m-chat-composer min-w-0 border-t border-slate-800 bg-slate-950/95 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] space-y-2">
+        {file && (
+          <div className="flex items-center gap-2 min-w-0 rounded-xl border border-slate-700 bg-slate-950/70 px-2 py-1.5">
+            {filePreview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={filePreview} alt="" className="h-10 w-10 rounded-lg object-cover shrink-0" />
+            ) : (
+              <span className="shrink-0 text-lg" aria-hidden>📄</span>
+            )}
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-200">
+              {file.name}
+              <span className="text-slate-500"> · {formatFileSize(file.size)}</span>
+            </span>
+            <button
+              type="button"
+              onClick={clearFile}
+              className="shrink-0 text-xs text-slate-400 hover:text-slate-200 px-2 py-1"
+            >
+              Retirer
+            </button>
+          </div>
+        )}
+        {sendError && <p className="text-xs text-red-400">{sendError}</p>}
+        <div className="flex gap-2 items-end min-w-0">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={CHAT_FILE_ACCEPT}
+            className="sr-only"
+            aria-label="Choisir une photo ou un document"
+            onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={sending}
+            className="shrink-0 h-11 w-11 rounded-full border border-slate-700 text-lg text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            aria-label="Joindre une photo ou un document"
+            title="Photo ou document"
+          >
+            📎
+          </button>
+          <textarea
+            ref={messageInputRef}
+            value={input}
+            rows={1}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                void handleSendText()
+              }
+            }}
+            placeholder="Écrire un message…"
+            className="m-chat-input flex-1 min-w-0 w-0 min-h-[44px] px-4 py-2.5 rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-[15px] leading-snug resize-none"
+            aria-label="Écrire un message"
+          />
+          <button
+            type="button"
+            onClick={() => void handleSendText()}
+            disabled={(!input.trim() && !file) || sending}
+            className="shrink-0 h-11 w-11 rounded-full bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-40 disabled:bg-slate-700 inline-flex items-center justify-center"
+            aria-label="Envoyer"
+          >
+            {sending ? <span className="text-sm">…</span> : <SendIcon />}
+          </button>
+        </div>
       </div>
     </div>
+  )
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M15 5.5 8.5 12l6.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function SendIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M3.2 20.8 21 12 3.2 3.2l2.1 7.1L16.2 12l-10.9 1.7-2.1 7.1Z" />
+    </svg>
   )
 }

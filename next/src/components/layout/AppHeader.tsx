@@ -12,16 +12,37 @@ export function AppHeader({
   page,
   onNavigate,
   onOpenMenu,
+  onBack,
 }: {
   page: MandalaPage
   onNavigate: MandalaNavigate
   onOpenMenu: () => void
+  onBack?: () => void
 }) {
   const clairiereUnread = useSocialStore((s) => s.clairiereUnreadCount)
 
   return (
     <header className="sticky top-0 z-50 shrink-0 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">
       <div className="flex items-center gap-2 px-3 py-2 sm:px-4 min-h-[52px]">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="hidden md:flex items-center justify-center gap-0.5 min-w-[44px] min-h-[44px] -ml-1 rounded-xl text-violet-300 hover:bg-slate-800/80 shrink-0"
+            aria-label="Page précédente"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M15 5.5 8.5 12l6.5 6.5"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="hidden sm:inline text-sm font-medium pr-1">Retour</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={onOpenMenu}

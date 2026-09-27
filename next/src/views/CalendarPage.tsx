@@ -365,7 +365,13 @@ export function CalendarPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 px-1">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-400 px-1">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-emerald-600" /> Jour ouvert
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-red-600" /> Jour fermé
+        </span>
         {showEvents && (
           <>
             <span className="flex items-center gap-1.5">

@@ -5,6 +5,7 @@ import { telemetryApi, type TelemetryEventItem } from '@/api/telemetry'
 import { AdminCommunityBanner } from '@/components/admin/AdminCommunityBanner'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { AdminCommunitiesTab } from '@/views/admin/AdminCommunitiesTab'
+import { AdminSupportTab } from '@/components/admin/AdminSupportTab'
 import { authApi } from '@/api/auth'
 import { notificationsApi } from '@/api/notifications'
 import { adminApi } from '@/api/admin'
@@ -53,6 +54,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'communications', label: 'Communications' },
   { id: 'telemetry', label: 'Télémétrie' },
   { id: 'places', label: 'Lieux & communautés' },
+  { id: 'support', label: 'Retours' },
 ]
 
 function normalizeAdminTab(tab?: AdminTabId | 'technical'): AdminTabId {
@@ -173,7 +175,7 @@ export function AdminPage({
         </p>
         <p className="text-xs text-amber-200/80">
           Passez en mode Administrateur pour accéder à la télémétrie, aux utilisateurs et aux
-          annonces.
+          infos.
         </p>
         <button
           type="button"
@@ -218,7 +220,7 @@ export function AdminPage({
         priority: 'normal',
       })
       setMsgOk(true)
-      setMsg('Annonce envoyée')
+      setMsg('Info envoyée')
       setNTitle('')
       setNBody('')
       void loadAdminNotifs()
@@ -243,7 +245,7 @@ export function AdminPage({
         respect_email_optout: true,
       }
       const { id } = (await adminApi.broadcasts.create({
-        title: bTitle || 'Annonce Mandala',
+        title: bTitle || 'Info Mandala',
         audience,
         channels: {
           inapp: {
@@ -282,12 +284,12 @@ export function AdminPage({
   }
 
   const deleteAdminNotif = async (id: number) => {
-    if (!window.confirm('Supprimer cette annonce et ses envois ?')) return
+    if (!window.confirm('Supprimer cette info et ses envois ?')) return
     setMsg(null)
     try {
       await notificationsApi.adminDelete({ ids: [id] })
       setMsgOk(true)
-      setMsg('Annonce supprimée')
+      setMsg('Info supprimée')
       void loadAdminNotifs()
     } catch (e: unknown) {
       setMsgOk(false)
@@ -425,7 +427,7 @@ export function AdminPage({
                   : 'border-slate-800 hover:border-slate-600'
               }`}
             >
-              <p className="font-semibold text-sm">Message rapide (Annonces)</p>
+              <p className="font-semibold text-sm">Message rapide (Infos)</p>
               <p className="text-xs text-slate-500 mt-1">
                 Notification in-app immédiate, ciblée par rôle si besoin.
               </p>
@@ -449,7 +451,7 @@ export function AdminPage({
           {commMode === 'announcement' && (
             <div className="grid md:grid-cols-2 gap-4">
               <div className="rounded-xl border border-slate-800 p-4 space-y-3">
-                <h2 className="font-semibold text-sm">Nouvelle annonce in-app</h2>
+                <h2 className="font-semibold text-sm">Nouvelle info</h2>
                 <input
                   value={nTitle}
                   onChange={(e) => setNTitle(e.target.value)}
@@ -492,7 +494,7 @@ export function AdminPage({
                 </button>
               </div>
               <div className="space-y-2">
-                <h2 className="font-semibold text-sm">Historique annonces</h2>
+                <h2 className="font-semibold text-sm">Historique des infos</h2>
                 {adminNotifs.map((n) => (
                   <div
                     key={n.id}
@@ -636,6 +638,8 @@ export function AdminPage({
           </div>
         </section>
       )}
+
+      {tab === 'support' && <AdminSupportTab />}
 
       {tab === 'places' && (
         <section className="space-y-3">

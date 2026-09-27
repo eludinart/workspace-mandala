@@ -9,6 +9,7 @@ type Props = {
   subtitle?: string
   onComplete: (slug: string, inviteCode?: string | null) => Promise<void>
   initialSlug?: string | null
+  initialInviteCode?: string | null
 }
 
 export function PlaceSelectionScreen({
@@ -16,11 +17,12 @@ export function PlaceSelectionScreen({
   subtitle = 'Sélectionnez au moins un lieu pour rejoindre la communauté Mandala.',
   onComplete,
   initialSlug = null,
+  initialInviteCode = null,
 }: Props) {
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(initialSlug)
-  const [inviteCode, setInviteCode] = useState('')
+  const [inviteCode, setInviteCode] = useState(initialInviteCode ?? '')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -33,19 +35,25 @@ export function PlaceSelectionScreen({
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    if (initialSlug) setSelectedSlug(initialSlug)
+    if (initialInviteCode) setInviteCode(initialInviteCode)
+  }, [initialInviteCode, initialSlug])
+
   const selected = places.find((p) => p.slug === selectedSlug) ?? null
-  const needsInvite = selected?.join_mode === 'invite'
+  const inviteOnly = !!initialSlug && !selected && !loading
+  const needsInvite = inviteOnly || selected?.join_mode === 'invite'
 
   const submit = useCallback(async () => {
-    if (!selectedSlug || !selected) {
+    if (!selectedSlug) {
       setError('Veuillez sélectionner un lieu.')
       return
     }
-    if (selected.join_mode === 'closed') {
+    if (selected?.join_mode === 'closed') {
       setError('Ce lieu n’accepte pas les adhésions libres.')
       return
     }
-    if (selected.join_mode === 'invite' && !inviteCode.trim()) {
+    if ((inviteOnly || selected?.join_mode === 'invite') && !inviteCode.trim()) {
       setError('Code d’invitation requis pour ce lieu.')
       return
     }
@@ -58,7 +66,7 @@ export function PlaceSelectionScreen({
     } finally {
       setSubmitting(false)
     }
-  }, [inviteCode, onComplete, selected, selectedSlug])
+  }, [inviteCode, inviteOnly, onComplete, selected, selectedSlug])
 
   return (
     <div className="m-user-form w-full max-w-3xl space-y-5">
@@ -71,7 +79,16 @@ export function PlaceSelectionScreen({
 
       {loading && <p className="text-sm text-slate-500 text-center py-8">Chargement des lieux…</p>}
 
-      {!loading && places.length === 0 && (
+      {inviteOnly && (
+        <div className="rounded-xl border border-violet-700/50 bg-violet-950/30 p-4 space-y-2">
+          <p className="text-sm text-violet-100 font-medium">Lieu privé · {initialSlug}</p>
+          <p className="text-xs text-slate-400">
+            Ce lieu n’apparaît pas dans le catalogue public. Utilisez le code reçu pour le rejoindre.
+          </p>
+        </div>
+      )}
+
+      {!loading && !inviteOnly && places.length === 0 && (
         <p className="text-sm text-amber-300/90 text-center py-6 rounded-xl border border-amber-800/40 bg-amber-950/20 px-4">
           Aucun lieu n&apos;est disponible pour le moment. Réessayez plus tard ou contactez
           l&apos;équipe.
@@ -81,14 +98,14 @@ export function PlaceSelectionScreen({
       {!loading && places.length > 0 && (
         <ul className="space-y-3 max-h-[min(52svh,28rem)] overflow-y-auto pr-1">
           {places.map((place) => {
-            const selected = selectedSlug === place.slug
+            const isSelected = selectedSlug === place.slug
             return (
               <li key={place.slug}>
                 <button
                   type="button"
                   onClick={() => setSelectedSlug(place.slug)}
                   className={`w-full text-left rounded-xl border p-4 transition-colors ${
-                    selected
+                    isSelected
                       ? 'border-violet-500/60 bg-violet-950/40 ring-1 ring-violet-500/30'
                       : 'border-slate-800 bg-slate-950/40 hover:border-slate-600'
                   }`}
@@ -101,22 +118,22 @@ export function PlaceSelectionScreen({
                       size="md"
                       alt={place.name}
                     />
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="font-semibold text-slate-100">{place.name}</p>
+                    <span className="min-w-0">
+                      <span className="font-medium text-slate-100 block">{place.name}</span>
                       {place.tagline && (
-                        <p className="text-xs text-violet-300/80">{place.tagline}</p>
+                        <span className="text-xs text-slate-500 block mt-0.5">{place.tagline}</span>
                       )}
-                      {place.location && (
-                        <p className="text-xs text-slate-500">📍 {place.location}</p>
+                      {place.join_mode === 'invite' && (
+                        <span className="text-[10px] uppercase tracking-widest text-amber-300/90 mt-1 block">
+                          Sur invitation
+                        </span>
                       )}
-                      {place.description ? (
-                        <p className="text-sm text-slate-400 leading-relaxed mt-2 line-clamp-4">
-                          {place.description}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-slate-500 italic mt-2">Description à venir.</p>
+                      {place.join_mode === 'closed' && (
+                        <span className="text-[10px] uppercase tracking-widest text-slate-500 mt-1 block">
+                          Fermé
+                        </span>
                       )}
-                    </div>
+                    </span>
                   </div>
                 </button>
               </li>
@@ -125,15 +142,15 @@ export function PlaceSelectionScreen({
         </ul>
       )}
 
-      {needsInvite && selected && selected.join_mode !== 'closed' && (
+      {needsInvite && selectedSlug && selected?.join_mode !== 'closed' && (
         <label className="block space-y-1">
           <span className="text-xs text-slate-400">Code d’invitation</span>
           <input
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="Ex. A1B2C3D4"
-            className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2.5 text-sm tracking-widest uppercase"
-            autoComplete="off"
+            className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm font-mono tracking-widest"
+            placeholder="CODE"
+            autoCapitalize="characters"
           />
         </label>
       )}
@@ -145,13 +162,17 @@ export function PlaceSelectionScreen({
         disabled={
           submitting ||
           !selectedSlug ||
-          places.length === 0 ||
-          selected?.join_mode === 'closed'
+          selected?.join_mode === 'closed' ||
+          (needsInvite && !inviteCode.trim())
         }
         onClick={() => void submit()}
-        className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3 font-semibold disabled:opacity-50"
+        className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3.5 font-semibold disabled:opacity-50"
       >
-        {submitting ? '…' : 'Continuer avec ce lieu'}
+        {submitting
+          ? '…'
+          : selected?.join_mode === 'closed'
+            ? 'Lieu fermé'
+            : 'Rejoindre ce lieu'}
       </button>
     </div>
   )

@@ -3,7 +3,7 @@
  */
 import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, isDbConfigured, table } from './db'
 import {
   charterRequiresAcceptance,
   parseCharterBlocks,
@@ -140,8 +140,6 @@ export function parseCommunityAvatarInput(avatar: unknown): string | null | unde
   }
   return avatar
 }
-
-let _ensured = false
 
 const PROFILE_COLUMN_DEFS: Array<{ name: string; ddl: string }> = [
   { name: 'description', ddl: 'description TEXT DEFAULT NULL' },
@@ -291,7 +289,7 @@ async function seedDefaultCommunityGeoHints(
 }
 
 export async function ensureCommunitiesTables(): Promise<void> {
-  if (_ensured || !isDbConfigured()) return
+  return ensureOnce('communities', async () => {
   const pool = getPool()
   const tC = table('mandala_communities')
   const tM = table('mandala_community_members')
@@ -338,7 +336,7 @@ export async function ensureCommunitiesTables(): Promise<void> {
       KEY idx_community (community_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
-  _ensured = true
+  })
 }
 
 export async function seedDefaultCommunitiesIfEmpty(): Promise<void> {
@@ -1165,6 +1163,149 @@ export async function setCommunityMemberRole(
   if (Number((res as { affectedRows?: number }).affectedRows ?? 0) === 0) {
     throw new Error('Membre introuvable dans cette communauté')
   }
+}
+
+/** Ajoute un compte Mandala déjà existant au lieu (gestionnaire), sans code d’invitation. */
+export async function addMemberToCommunityByManager(
+  communityId: number,
+  targetUserId: number
+): Promise<{ already_member: boolean }> {
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const tUsers = table('users')
+  const [users] = await pool.execute<RowDataPacket[]>(
+    `SELECT ID FROM ${tUsers} WHERE ID = ? LIMIT 1`,
+    [targetUserId]
+  )
+  if (!users[0]) throw Object.assign(new Error('Utilisateur introuvable'), { status: 404 })
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT role FROM ${tM} WHERE community_id = ? AND user_id = ? LIMIT 1`,
+    [communityId, targetUserId]
+  )
+  if (existing[0]) return { already_member: true }
+  await pool.execute(
+    `INSERT INTO ${tM} (community_id, user_id, role) VALUES (?, ?, 'member')`,
+    [communityId, targetUserId]
+  )
+  return { already_member: false }
+}
+
+export type InviteCandidate = {
+  id: number
+  email: string
+  name: string
+  pseudo: string
+  avatar_emoji: string
+}
+
+/** Comptes Mandala qui ne sont pas encore membres de ce lieu. */
+export async function listUsersNotInCommunity(params: {
+  communityId: number
+  search?: string
+  limit?: number
+}): Promise<InviteCandidate[]> {
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tUsers = table('users')
+  const tM = table('mandala_community_members')
+  const tMeta = table('usermeta')
+  const limit = Math.min(50, Math.max(1, params.limit ?? 30))
+  const search = String(params.search ?? '').trim().toLowerCase()
+  const values: Array<string | number> = [params.communityId]
+  let searchSql = ''
+  if (search) {
+    searchSql = ` AND (
+      LOWER(u.user_email) LIKE ? OR LOWER(u.user_login) LIKE ? OR LOWER(u.display_name) LIKE ?
+      OR LOWER(COALESCE(p.meta_value, '')) LIKE ?
+    )`
+    const q = `%${search}%`
+    values.push(q, q, q, q)
+  }
+  values.push(limit)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT u.ID AS id, u.user_email AS email, u.display_name AS name,
+            COALESCE(p.meta_value, u.display_name, CONCAT('user_', u.ID)) AS pseudo,
+            COALESCE(e.meta_value, '🌸') AS avatar_emoji
+     FROM ${tUsers} u
+     LEFT JOIN ${tMeta} p ON p.user_id = u.ID AND p.meta_key = 'mdl_pseudo'
+     LEFT JOIN ${tMeta} e ON e.user_id = u.ID AND e.meta_key = 'mdl_avatar_emoji'
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ${tM} m WHERE m.community_id = ? AND m.user_id = u.ID
+     )
+     ${searchSql}
+     ORDER BY u.display_name ASC, u.user_email ASC
+     LIMIT ${limit}`,
+    values.slice(0, -1)
+  )
+  return (rows ?? []).map((r) => ({
+    id: Number(r.id),
+    email: String(r.email ?? ''),
+    name: String(r.name ?? ''),
+    pseudo: String(r.pseudo ?? `user_${r.id}`),
+    avatar_emoji: String(r.avatar_emoji || '🌸'),
+  }))
+}
+
+/**
+ * Garantit un code d’invitation utilisable pour un lien.
+ * Si le lieu est fermé, passe en mode « sur invitation » (sans le rendre public).
+ */
+export async function ensureCommunityInviteAccess(
+  communityId: number,
+  opts?: { rotate?: boolean }
+): Promise<{
+  slug: string
+  name: string
+  invite_code: string
+  join_mode: 'open' | 'invite' | 'closed'
+  join_mode_changed: boolean
+}> {
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tC = table('mandala_communities')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id, slug, name, join_mode, invite_code FROM ${tC} WHERE id = ? AND is_active = 1 LIMIT 1`,
+    [communityId]
+  )
+  const row = rows[0]
+  if (!row) throw Object.assign(new Error('Lieu introuvable'), { status: 404 })
+  let mode = parseJoinMode(row.join_mode)
+  let code = row.invite_code != null ? String(row.invite_code).trim() : ''
+  let joinModeChanged = false
+  const updates: string[] = []
+  const values: Array<string | number> = []
+  if (mode === 'closed') {
+    mode = 'invite'
+    updates.push('join_mode = ?')
+    values.push('invite')
+    joinModeChanged = true
+  }
+  if (opts?.rotate || !code) {
+    code = generateInviteCode()
+    updates.push('invite_code = ?')
+    values.push(code)
+  }
+  if (updates.length) {
+    values.push(communityId)
+    await pool.execute(`UPDATE ${tC} SET ${updates.join(', ')} WHERE id = ?`, values)
+  }
+  return {
+    slug: String(row.slug),
+    name: String(row.name),
+    invite_code: code,
+    join_mode: mode,
+    join_mode_changed: joinModeChanged,
+  }
+}
+
+export function buildCommunityInvitePath(slug: string, inviteCode: string): string {
+  const q = new URLSearchParams({
+    join: slug,
+    invite: inviteCode,
+    mode: 'register',
+  })
+  return `/app?${q.toString()}`
 }
 
 /**

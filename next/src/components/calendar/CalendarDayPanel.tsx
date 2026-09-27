@@ -72,10 +72,17 @@ export function CalendarDayPanel({
     setMaxDraft(String(maxParticipants))
   }, [selectedDay, maxParticipants])
 
+  const dayClosed = dayDetail?.detail.is_disabled ?? selectedDayInfo?.is_disabled ?? false
   const shellClass =
     variant === 'sidebar'
-      ? 'rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden flex flex-col h-full min-h-[320px]'
-      : 'm-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col shadow-2xl'
+      ? `rounded-2xl border-2 overflow-hidden flex flex-col h-full min-h-[320px] ${
+          dayClosed
+            ? 'border-red-500/70 bg-red-950/20'
+            : 'border-emerald-600/60 bg-emerald-950/15'
+        }`
+      : `m-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border-2 overflow-hidden flex flex-col shadow-2xl ${
+          dayClosed ? 'border-red-500/70 bg-slate-900' : 'border-emerald-600/60 bg-slate-900'
+        }`
 
   const saveMax = async () => {
     const n = parseInt(maxDraft, 10)
@@ -90,10 +97,22 @@ export function CalendarDayPanel({
 
   return (
     <div className={shellClass}>
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-950/50 shrink-0">
+      <div
+        className={`flex items-center justify-between gap-2 px-4 py-3 border-b shrink-0 ${
+          dayClosed
+            ? 'border-red-500/40 bg-red-950/50'
+            : 'border-emerald-500/30 bg-emerald-950/40'
+        }`}
+      >
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500">Journée</p>
-          <p className="font-semibold capitalize text-sm sm:text-base leading-tight">
+          <p
+            className={`text-[10px] uppercase tracking-widest font-semibold ${
+              dayClosed ? 'text-red-200' : 'text-emerald-200'
+            }`}
+          >
+            {dayClosed ? 'Jour fermé' : 'Jour ouvert'}
+          </p>
+          <p className="font-semibold capitalize text-sm sm:text-base leading-tight text-slate-50">
             {dayLabelFr(selectedDay)}
           </p>
         </div>

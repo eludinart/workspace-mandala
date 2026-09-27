@@ -1,8 +1,9 @@
 /**
  * Opérations auth/account sur MariaDB (tables WordPress).
  */
+import { createHash, randomBytes } from 'crypto'
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, isDbConfigured, table } from './db'
 import { verifyWordPressPassword } from './auth-wordpress'
 import { hash } from 'bcryptjs'
 import { isBootstrapAdminEmail } from './admin-bootstrap'
@@ -15,11 +16,9 @@ import {
   validatePersonName,
 } from './mandala-display-name'
 
-let _authTablesEnsured = false
-
 /** Crée mdl_users, mdl_usermeta, mdl_mandala_app_roles si absentes. */
 export async function ensureAuthTables(): Promise<void> {
-  if (_authTablesEnsured || !isDbConfigured()) return
+  return ensureOnce('auth', async () => {
   const pool = getPool()
   const tUsers = table('users')
   const tMeta = table('usermeta')
@@ -64,7 +63,7 @@ export async function ensureAuthTables(): Promise<void> {
       KEY idx_app_role (app_role)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
-  _authTablesEnsured = true
+  })
 }
 
 export type UserRecord = {
@@ -532,6 +531,12 @@ async function upsertUsermeta(userId: number, metaKey: string, metaValue: string
   }
 }
 
+async function deleteUsermeta(userId: number, metaKey: string): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  await pool.execute(`DELETE FROM ${tbl} WHERE user_id = ? AND meta_key = ?`, [userId, metaKey])
+}
+
 async function forceUsermeta(userId: number, metaKey: string, metaValue: string): Promise<void> {
   const pool = getPool()
   const tbl = table('usermeta')
@@ -812,6 +817,93 @@ export async function listUsersAdmin(params: {
   return { items, total: items.length }
 }
 
+const META_PWD_RESET_HASH = 'mdl_pwd_reset_hash'
+const META_PWD_RESET_EXP = 'mdl_pwd_reset_exp'
+const PASSWORD_RESET_TTL_SEC = 60 * 60
+
+export async function issuePasswordReset(
+  email: string
+): Promise<{ userId: number; email: string; firstName: string | null; token: string } | null> {
+  await ensureAuthTables()
+  const normalized = email.trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    throw new Error('Adresse email invalide')
+  }
+  const pool = getPool()
+  const users = table('users')
+  const meta = table('usermeta')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT u.ID AS id, u.user_email AS email,
+            (SELECT meta_value FROM ${meta} WHERE user_id = u.ID AND meta_key = ? LIMIT 1) AS first_name
+     FROM ${users} u
+     WHERE LOWER(u.user_email) = ?
+     LIMIT 1`,
+    [META_FIRST_NAME, normalized]
+  )
+  const user = rows[0]
+  if (!user) return null
+
+  const userId = Number(user.id)
+  const token = randomBytes(32).toString('hex')
+  const tokenHash = createHash('sha256').update(token).digest('hex')
+  const exp = String(Math.floor(Date.now() / 1000) + PASSWORD_RESET_TTL_SEC)
+  await upsertUsermeta(userId, META_PWD_RESET_HASH, tokenHash)
+  await upsertUsermeta(userId, META_PWD_RESET_EXP, exp)
+  const firstName = String(user.first_name ?? '').trim()
+  return {
+    userId,
+    email: String(user.email || normalized),
+    firstName: firstName || null,
+    token,
+  }
+}
+
+export async function clearPasswordReset(userId: number): Promise<void> {
+  await deleteUsermeta(userId, META_PWD_RESET_HASH)
+  await deleteUsermeta(userId, META_PWD_RESET_EXP)
+}
+
+export async function resetPasswordWithToken(token: string, newPassword: string): Promise<UserRecord> {
+  const raw = String(token ?? '').trim().toLowerCase()
+  if (!/^[a-f0-9]{64}$/.test(raw)) {
+    throw new Error('Ce lien est invalide ou a expiré. Demandez un nouveau lien.')
+  }
+  const pwd = String(newPassword ?? '')
+  if (pwd.length < 6) {
+    throw new Error('Le mot de passe doit contenir au moins 6 caractères')
+  }
+  if (pwd.length > 128) {
+    throw new Error('Mot de passe trop long')
+  }
+
+  await ensureAuthTables()
+  const pool = getPool()
+  const meta = table('usermeta')
+  const tokenHash = createHash('sha256').update(raw).digest('hex')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${meta} WHERE meta_key = ? AND meta_value = ? LIMIT 1`,
+    [META_PWD_RESET_HASH, tokenHash]
+  )
+  const userId = Number(rows[0]?.user_id ?? 0)
+  if (!userId) {
+    throw new Error('Ce lien est invalide ou a expiré. Demandez un nouveau lien.')
+  }
+
+  const [expRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${meta} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [userId, META_PWD_RESET_EXP]
+  )
+  const exp = parseInt(String(expRows[0]?.meta_value ?? '0'), 10)
+  if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) {
+    await clearPasswordReset(userId)
+    throw new Error('Ce lien est invalide ou a expiré. Demandez un nouveau lien.')
+  }
+
+  await setUserPassword(userId, pwd)
+  await clearPasswordReset(userId)
+  return authMe(userId)
+}
+
 export async function setUserPassword(userId: number, newPassword: string): Promise<void> {
   if (!isDbConfigured()) throw new Error('DB non configurée')
   await ensureAuthTables()
@@ -876,6 +968,11 @@ export async function deleteUserAccount(userId: number): Promise<void> {
   for (const c of communities) {
     await removeUserFromCommunity(c.id, userId)
   }
+
+  const { deleteSkillDataForUser } = await import('./db-skills')
+  await deleteSkillDataForUser(userId)
+  const { deleteResourcesForUser } = await import('./db-resources')
+  await deleteResourcesForUser(userId)
 
   const pool = getPool()
   const metaTbl = table('usermeta')

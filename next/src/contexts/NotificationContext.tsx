@@ -35,6 +35,22 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 const POLL_INTERVAL_MS = 30_000
 
+function sortUnreadFirst(items: NotificationItem[]): NotificationItem[] {
+  return [...items].sort((a, b) => {
+    const aRead = a.read_at ? 1 : 0
+    const bRead = b.read_at ? 1 : 0
+    if (aRead !== bRead) return aRead - bRead
+    if (aRead && bRead) {
+      const ar = Date.parse(a.read_at ?? '')
+      const br = Date.parse(b.read_at ?? '')
+      if (ar !== br) return br - ar
+    }
+    const at = a.created_at ? Date.parse(a.created_at) : 0
+    const bt = b.created_at ? Date.parse(b.created_at) : 0
+    return bt - at
+  })
+}
+
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [unreadCount, setUnreadCount] = useState(0)
@@ -67,7 +83,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           items?: NotificationItem[]
           unread?: number
         }
-        setItems(data.items ?? [])
+        setItems(sortUnreadFirst(data.items ?? []))
         setUnreadCount(data.unread ?? 0)
         listLoadedRef.current = true
         return data
@@ -86,7 +102,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       try {
         await notificationsApi.markRead(ids)
         setItems((prev) =>
-          prev.map((n) => (ids.includes(n.id) ? { ...n, read_at: new Date().toISOString() } : n))
+          sortUnreadFirst(
+            prev.map((n) => (ids.includes(n.id) ? { ...n, read_at: new Date().toISOString() } : n))
+          )
         )
         await fetchUnread()
       } catch {
@@ -99,7 +117,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const markAllRead = useCallback(async () => {
     try {
       await notificationsApi.markAllRead()
-      setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })))
+      setItems((prev) =>
+        sortUnreadFirst(prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })))
+      )
       await fetchUnread()
     } catch {
       /* non bloquant */
@@ -118,7 +138,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const refreshFromPush = useCallback(() => {
     void fetchUnread()
-    if (listLoadedRef.current) void fetchList({ per_page: 15 })
+    if (listLoadedRef.current) void fetchList({ per_page: 30 })
   }, [fetchUnread, fetchList])
 
   useEffect(() => {

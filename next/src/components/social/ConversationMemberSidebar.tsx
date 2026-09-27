@@ -11,9 +11,16 @@ import { ApiError } from '@/lib/api-client'
 export function ConversationMemberSidebar({
   onChannelOpened,
   highlightUserId,
+  onBack,
+  embedded = false,
+  className = '',
 }: {
   onChannelOpened: (channelId: number) => void
   highlightUserId?: string | null
+  onBack?: () => void
+  /** Dans l’onglet Membres : pas de second titre. */
+  embedded?: boolean
+  className?: string
 }) {
   const { user } = useAuth()
   const { active } = useCommunity()
@@ -112,12 +119,28 @@ export function ConversationMemberSidebar({
   }
 
   return (
-    <aside className="m-user-form flex flex-col h-full min-h-0 border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden">
+    <aside className={`m-user-form flex flex-col h-full min-h-0 border border-slate-800 rounded-xl bg-slate-900/40 overflow-hidden ${className}`}>
       <div className="shrink-0 p-3 border-b border-slate-800 space-y-2">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-100">Membres du lieu</h2>
-          <p className="text-[11px] text-slate-500 truncate">{active?.name ?? '—'}</p>
-        </div>
+        {!embedded && (
+          <div className="flex items-center gap-2">
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="inline-flex items-center justify-center min-w-[40px] min-h-[40px] -ml-1 rounded-full text-violet-400 hover:bg-slate-800/80"
+                aria-label="Retour aux messages"
+              >
+                <ChevronLeftIcon />
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-slate-100">
+                {onBack ? 'Nouveau dialogue' : 'Membres du lieu'}
+              </h2>
+              <p className="text-[11px] text-slate-500 truncate">{active?.name ?? '—'}</p>
+            </div>
+          </div>
+        )}
         <input
           type="search"
           value={search}
@@ -190,5 +213,13 @@ export function ConversationMemberSidebar({
         </ul>
       </div>
     </aside>
+  )
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M15 5.5 8.5 12l6.5 6.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

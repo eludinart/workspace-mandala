@@ -3,7 +3,7 @@
  * Courses = 1 personne max ; Logistique = plusieurs personnes peuvent s'engager.
  */
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
-import { getPool, isDbConfigured, table } from './db'
+import { ensureOnce, getPool, table } from './db'
 
 export type PlaceListKind = 'courses' | 'logistics'
 
@@ -39,7 +39,6 @@ export type PlaceListItem = {
   allows_multi_claim: boolean
 }
 
-let _ensured = false
 
 function assertKind(kind: string): PlaceListKind {
   if (kind === 'courses' || kind === 'logistics') return kind
@@ -98,7 +97,7 @@ function mapItem(r: RowDataPacket, claims: PlaceListClaim[], photos: PlaceListPh
 }
 
 export async function ensurePlaceListTables(): Promise<void> {
-  if (_ensured || !isDbConfigured()) return
+  return ensureOnce('place-lists', async () => {
   const pool = getPool()
   const t = table('place_list_items')
   const tC = table('place_list_claims')
@@ -157,8 +156,7 @@ export async function ensurePlaceListTables(): Promise<void> {
   } catch {
     /* ignore */
   }
-
-  _ensured = true
+  })
 }
 
 async function loadPhotosForItems(itemIds: number[]): Promise<Map<number, PlaceListPhoto[]>> {

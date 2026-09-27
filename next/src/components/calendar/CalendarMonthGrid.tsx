@@ -55,7 +55,7 @@ export function CalendarMonthGrid({
           <div
             key={w}
             className={`py-2.5 text-center text-[10px] sm:text-[11px] font-medium uppercase tracking-wide ${
-              i === 6 ? 'text-rose-400/80' : 'text-slate-500'
+              i === 6 ? 'text-red-400/80' : 'text-slate-500'
             }`}
           >
             <span className="hidden sm:inline">{w}</span>
@@ -197,18 +197,23 @@ function WeekRowInner({
           const inMonth = cell.inMonth
           const selected = selectedDay === cell.day
           const disabled = cell.info?.is_disabled ?? false
+          const statusBg = !inMonth
+            ? 'bg-slate-950/60'
+            : disabled
+              ? 'bg-red-600/60 hover:bg-red-600/70'
+              : 'bg-emerald-600/50 hover:bg-emerald-600/60'
           return (
             <button
               key={`bg-${cell.day}`}
               type="button"
               disabled={!inMonth}
               onClick={() => inMonth && onSelectDay(cell.day)}
-              className={`border-r border-slate-800/40 last:border-r-0 text-left transition-colors ${
-                inMonth ? 'hover:bg-slate-900/40' : 'bg-slate-950/30'
-              } ${selected ? 'bg-violet-950/25 ring-1 ring-inset ring-violet-500/40' : ''} ${
-                disabled && inMonth ? 'bg-slate-950/50' : ''
+              className={`border-r border-slate-800/40 last:border-r-0 text-left transition-colors ${statusBg} ${
+                selected ? 'ring-2 ring-inset ring-violet-300' : ''
               }`}
-              aria-label={cell.day}
+              aria-label={
+                inMonth ? `${cell.day}, ${disabled ? 'fermé' : 'ouvert'}` : cell.day
+              }
               aria-pressed={selected}
             />
           )
@@ -287,7 +292,6 @@ function WeekRowInner({
         {week.days.map((cell) => {
           const d = new Date(cell.day + 'T12:00:00')
           const isToday = isSameDay(d, today)
-          const selected = selectedDay === cell.day
           const inMonth = cell.inMonth
           const disabled = cell.info?.is_disabled ?? false
           const iAmPresent = cell.info?.i_am_present ?? false
@@ -296,29 +300,39 @@ function WeekRowInner({
           return (
             <div
               key={`hdr-${cell.day}`}
-              className={`flex items-start justify-between gap-0.5 px-2 pt-1.5 border-r border-transparent last:border-r-0 ${
-                selected ? 'bg-violet-950/25' : inMonth ? 'bg-slate-950/90' : 'bg-slate-950/70'
-              }`}
+              className="flex items-start justify-between gap-0.5 px-1.5 sm:px-2 pt-1.5 border-r border-transparent last:border-r-0"
             >
               <span
-                className={`inline-flex items-center justify-center min-w-[28px] h-[28px] rounded-full text-sm font-semibold shrink-0 ${
-                  isToday
-                    ? 'bg-violet-600 text-white shadow-sm shadow-violet-900/40'
-                    : inMonth
-                      ? 'text-slate-100'
-                      : 'text-slate-600'
-                } ${iAmPresent && showPresence && inMonth && !isToday ? 'ring-2 ring-emerald-500/60' : ''}`}
+                className={`inline-flex items-center justify-center min-w-[26px] h-[26px] sm:min-w-[28px] sm:h-[28px] rounded-full text-sm font-semibold shrink-0 ${
+                  !inMonth
+                    ? 'text-slate-600'
+                    : isToday
+                      ? `bg-violet-600 text-white shadow-sm shadow-violet-900/50 ring-2 ${
+                          disabled ? 'ring-red-300' : 'ring-emerald-300'
+                        }`
+                      : disabled
+                        ? 'bg-red-600 text-white shadow-sm shadow-red-950/40'
+                        : 'bg-emerald-600 text-white shadow-sm shadow-emerald-950/40'
+                } ${iAmPresent && showPresence && inMonth && !isToday ? 'ring-2 ring-white' : ''}`}
+                title={inMonth ? (disabled ? 'Jour fermé' : 'Jour ouvert') : undefined}
               >
                 {d.getDate()}
               </span>
               {showPresence && inMonth && presentCount > 0 && !iAmPresent && (
-                <span className="text-[9px] text-slate-500 mt-1.5 shrink-0 tabular-nums">
+                <span
+                  className={`text-[9px] mt-1.5 shrink-0 tabular-nums font-medium ${
+                    disabled ? 'text-red-100' : 'text-emerald-50'
+                  }`}
+                >
                   {presentCount}/{cell.info?.max_participants ?? 20}
                 </span>
               )}
-              {disabled && inMonth && (
-                <span className="text-[9px] text-slate-600 mt-1 shrink-0" title="Fermé">
-                  ⊘
+              {disabled && inMonth && !(showPresence && presentCount > 0 && !iAmPresent) && (
+                <span
+                  className="hidden sm:inline text-[9px] font-bold uppercase tracking-wide text-white bg-red-700 rounded px-1 py-0.5 mt-1 shrink-0"
+                  title="Fermé"
+                >
+                  Fermé
                 </span>
               )}
             </div>

@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
-import { getChannelMessages } from '@/lib/db-social'
+import { getChannelMessages, getChannelUnreadMarker } from '@/lib/db-social'
 import { getStubMessages } from '@/lib/social-stub-store'
 
 export const dynamic = 'force-dynamic'
@@ -32,24 +32,32 @@ export async function GET(req: NextRequest) {
         temperature: m.temperature,
         createdAt: m.createdAt,
       }))
-      return NextResponse.json({ messages: formatted })
+      return NextResponse.json({ messages: formatted, unreadFromMessageId: null, unreadCount: 0 })
     }
 
-    const messages = await getChannelMessages(cid, userId)
+    const [messages, unread] = await Promise.all([
+      getChannelMessages(cid, userId),
+      getChannelUnreadMarker(cid, userId),
+    ])
     const formatted = messages.map((m) => ({
       id: m.id,
       messageId: m.id,
       senderId: m.senderId,
       body: m.body,
       cardSlug: m.cardSlug,
-      temperature: m.temperature,
-      createdAt: m.createdAt,
-      senderPseudo: m.senderPseudo,
+        temperature: m.temperature,
+        createdAt: m.createdAt,
+        attachment: m.attachment ?? null,
+        senderPseudo: m.senderPseudo,
       senderAvatar: m.senderAvatar,
       senderAvatarEmoji: m.senderAvatarEmoji,
       reactions: m.reactions ?? [],
     }))
-    return NextResponse.json({ messages: formatted })
+    return NextResponse.json({
+      messages: formatted,
+      unreadFromMessageId: unread.unreadFromMessageId,
+      unreadCount: unread.unreadCount,
+    })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
     return NextResponse.json({ error: e.message }, { status: e.status || 401 })

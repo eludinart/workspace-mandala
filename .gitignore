@@ -10,3 +10,5 @@ nogit/
 tsconfig.tsbuildinfo
 next/tsconfig.tsbuildinfo
 next/certificates/
+data/uploads/
+next/data/uploads/

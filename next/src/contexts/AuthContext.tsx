@@ -16,7 +16,16 @@ type AuthContextValue = {
   user: User
   loading: boolean
   login: (loginId: string, password: string) => Promise<User>
-  register: (email: string, password: string, firstName: string, lastName: string, inviteToken?: string) => Promise<User>
+  register: (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+    inviteToken?: string,
+    communitySlug?: string
+  ) => Promise<User>
+  requestPasswordReset: (email: string) => Promise<string>
+  completePasswordReset: (token: string, password: string) => Promise<User>
   logout: () => void
   refreshUser: () => Promise<void>
   /** Administrateur réel (droits serveur complets). */
@@ -161,8 +170,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return u
   }
 
-  const register = async (email: string, password: string, firstName: string, lastName: string, inviteToken?: string) => {
-    const { token, user: u } = (await authApi.register(email, password, firstName, lastName, inviteToken)) as {
+  const register = async (
+    email: string,
+    password: string,
+    firstName: string,
+    lastName: string,
+    inviteToken?: string,
+    communitySlug?: string
+  ) => {
+    const { token, user: u } = (await authApi.register(
+      email,
+      password,
+      firstName,
+      lastName,
+      inviteToken,
+      communitySlug
+    )) as {
       token: string
       user: Record<string, unknown>
     }
@@ -175,6 +198,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         /* ignore */
       }
+    }
+    setUser(u)
+    scheduleRefresh(forceLogout)
+    return u
+  }
+
+  const requestPasswordReset = async (email: string) => {
+    const res = await authApi.forgotPassword(email.trim())
+    return res.message
+  }
+
+  const completePasswordReset = async (token: string, password: string) => {
+    const { token: jwt, user: u } = await authApi.resetPassword(token, password)
+    if (typeof window !== 'undefined') {
+      if (isCapacitor()) localStorage.setItem('auth_token', jwt)
+      localStorage.setItem('auth_user', JSON.stringify(u))
+      if (u?.id) sessionStorage.setItem(`push_just_logged_in_${u.id}`, '1')
+    }
+    if (computeIsRealAdmin(u)) {
+      ;(u as Record<string, unknown>).app_role = 'admin'
+      setActingRole('admin')
     }
     setUser(u)
     scheduleRefresh(forceLogout)
@@ -218,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const email = String((user as { email?: string })?.email ?? '')
     const real = `Compte admin réel (${email})`
     if (actingRole === 'admin') {
-      return `${real} — tous les droits (utilisateurs, annonces, télémétrie, communautés).`
+      return `${real} — tous les droits (utilisateurs, infos, télémétrie, communautés).`
     }
     if (actingRole === 'site_manager') {
       return `${real} — vue gestionnaire : paramètres du lieu, calendrier, sans panneau admin global.`
@@ -233,6 +277,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         login,
         register,
+        requestPasswordReset,
+        completePasswordReset,
         logout,
         refreshUser,
         isRealAdmin,

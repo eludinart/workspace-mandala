@@ -3,7 +3,7 @@
  * Accès V1 : développeurs + gestionnaires (API).
  */
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
-import { getPool, isDbConfigured, table } from './db'
+import { ensureOnce, getPool, table } from './db'
 
 export type CircleSlot = 'morning' | 'evening'
 
@@ -20,8 +20,6 @@ export type CircleSession = {
   created_at: string | null
   updated_at: string | null
 }
-
-let _ensured = false
 
 function assertSlot(slot: string): CircleSlot {
   if (slot === 'morning' || slot === 'evening') return slot
@@ -53,7 +51,7 @@ function mapRow(r: RowDataPacket): CircleSession {
 }
 
 export async function ensureCircleJournalTables(): Promise<void> {
-  if (_ensured || !isDbConfigured()) return
+  return ensureOnce('circle-journal', async () => {
   const pool = getPool()
   const t = table('circle_sessions')
   await pool.execute(`
@@ -72,7 +70,7 @@ export async function ensureCircleJournalTables(): Promise<void> {
       KEY idx_comm_day (community_id, day)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
-  _ensured = true
+  })
 }
 
 export async function listCircleSessionsMonth(params: {

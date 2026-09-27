@@ -2,7 +2,7 @@
  * La Clairière (social / canaux chat) — MariaDB.
  */
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, table } from './db'
+import { ensureOnce, exec, getPool, table } from './db'
 import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
 import { isAvatarImageUrl } from './user-avatar'
 
@@ -99,9 +99,9 @@ export type MyChannelRecord = {
   unreadCount: number
   memberCount?: number
   memberIds?: number[]
+  lastMessage?: string | null
+  lastMessageAt?: string | null
 }
-
-let _ensureGroupChannelPromise: Promise<void> | null = null
 
 async function dropChatChannelsCheckConstraints(
   pool: Awaited<ReturnType<typeof getPool>>,
@@ -132,8 +132,7 @@ async function dropChatChannelsCheckConstraints(
 }
 
 async function ensureGroupChannelSupport(pool: Awaited<ReturnType<typeof getPool>>): Promise<void> {
-  if (!_ensureGroupChannelPromise) {
-    _ensureGroupChannelPromise = (async () => {
+  await ensureOnce('social-group-channels', async () => {
       const tChannels = table('chat_channels')
       const tMembers = table('chat_channel_members')
       try {
@@ -197,12 +196,9 @@ async function ensureGroupChannelSupport(pool: Awaited<ReturnType<typeof getPool
       } catch {
         /* exists */
       }
-    })().catch(() => {
-      _ensureGroupChannelPromise = null
-    })
-  }
-  await _ensureGroupChannelPromise
-  await dropChatChannelsCheckConstraints(pool, table('chat_channels'))
+  }).catch(() => {
+    /* DDL déjà appliqué ou indisponible — réessayé au prochain appel si l'erreur remonte */
+  })
 }
 
 async function verifyUsersInCommunity(
@@ -657,7 +653,64 @@ export async function getMyChannels(
     })
   }
 
+  await attachLastMessages(pool, list)
   return { channels: list }
+}
+
+function sqlDateToSortable(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return value.toISOString().slice(0, 19).replace('T', ' ')
+  }
+  const s = String(value).trim()
+  if (!s || s.startsWith('0000-00-00')) return null
+  return s.slice(0, 19)
+}
+
+async function attachLastMessages(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  list: MyChannelRecord[],
+): Promise<void> {
+  if (!list.length) return
+  const tMsg = table(P2P_MESSAGES_TABLE)
+  const ids = list.map((c) => c.channelId)
+  const placeholders = ids.map(() => '?').join(',')
+  try {
+    const [lastRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT m.channel_id, m.body, m.card_slug, m.created_at
+       FROM ${tMsg} m
+       INNER JOIN (
+         SELECT channel_id, MAX(id) AS mid
+         FROM ${tMsg}
+         WHERE channel_id IN (${placeholders})
+         GROUP BY channel_id
+       ) latest ON latest.mid = m.id`,
+      ids,
+    )
+    const byId = new Map<number, { body: string; at: string | null }>()
+    for (const row of lastRows ?? []) {
+      const rawBody = String(row.body ?? '').replace(/\s+/g, ' ').trim()
+      const body = (rawBody || (row.card_slug ? 'Carte' : '')).slice(0, 160)
+      byId.set(Number(row.channel_id), {
+        body,
+        at: sqlDateToSortable(row.created_at),
+      })
+    }
+    for (const ch of list) {
+      const last = byId.get(ch.channelId)
+      ch.lastMessage = last?.body || null
+      ch.lastMessageAt = last?.at ?? null
+    }
+  } catch {
+    /* table absente ou pas encore migrée */
+  }
+  list.sort((a, b) => {
+    const ta = a.lastMessageAt ?? ''
+    const tb = b.lastMessageAt ?? ''
+    if (ta !== tb) return ta < tb ? 1 : -1
+    return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
+  })
 }
 
 export async function renameGroupChannel(params: {
@@ -733,13 +786,10 @@ export async function updateGroupChannelIcon(params: {
 
 /** Table dédiée P2P (évite conflit avec mdl_chat_messages du chat coach qui utilise conversation_id) */
 
-// Singleton DDL : CREATE TABLE ne s'exécute qu'une fois par process (évite les metadata locks)
-let _ensureMessagesTablePromise: Promise<void> | null = null
-
 function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise<void> {
-  if (!_ensureMessagesTablePromise) {
-    const t = table(P2P_MESSAGES_TABLE)
-    _ensureMessagesTablePromise = pool.execute(`
+  const t = table(P2P_MESSAGES_TABLE)
+  return ensureOnce('social-messages', async () => {
+      await pool.execute(`
       CREATE TABLE IF NOT EXISTS ${t} (
         id INT AUTO_INCREMENT PRIMARY KEY,
         channel_id INT NOT NULL,
@@ -747,12 +797,27 @@ function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise
         body TEXT,
         card_slug VARCHAR(100) DEFAULT NULL,
         temperature VARCHAR(20) DEFAULT NULL,
+        attachment_path VARCHAR(255) DEFAULT NULL,
+        attachment_mime VARCHAR(127) DEFAULT NULL,
+        attachment_name VARCHAR(255) DEFAULT NULL,
+        attachment_size INT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_channel (channel_id, created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `).then(() => undefined).catch(() => { _ensureMessagesTablePromise = null })
-  }
-  return _ensureMessagesTablePromise
+    `)
+      for (const [col, def] of [
+        ['attachment_path', 'VARCHAR(255) NULL'],
+        ['attachment_mime', 'VARCHAR(127) NULL'],
+        ['attachment_name', 'VARCHAR(255) NULL'],
+        ['attachment_size', 'INT NULL'],
+      ] as const) {
+        try {
+          await pool.execute(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`)
+        } catch {
+          /* colonne déjà présente */
+        }
+      }
+  })
 }
 
 let _ensureReactionsTablePromise: Promise<void> | null = null
@@ -869,10 +934,24 @@ export type ChannelMessage = {
   cardSlug: string | null
   temperature: string | null
   createdAt: string
+  attachment?: { mime: string; name: string; size: number } | null
   senderPseudo?: string | null
   senderAvatar?: string | null
   senderAvatarEmoji?: string | null
   reactions?: MessageReactionSummary[]
+}
+
+const MESSAGE_COLUMNS = `id, sender_id, body, card_slug, temperature, created_at,
+  attachment_path, attachment_mime, attachment_name, attachment_size`
+
+function attachmentFromRow(r: RowDataPacket): ChannelMessage['attachment'] {
+  const path = r.attachment_path ? String(r.attachment_path) : ''
+  if (!path) return null
+  return {
+    mime: r.attachment_mime ? String(r.attachment_mime) : 'application/octet-stream',
+    name: r.attachment_name ? String(r.attachment_name) : 'fichier',
+    size: Number(r.attachment_size ?? 0),
+  }
 }
 
 /** Récupère les messages d'un canal (La Clairière) */
@@ -899,6 +978,7 @@ export async function getChannelMessages(
 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT m.id, m.sender_id, m.body, m.card_slug, m.temperature, m.created_at,
+            m.attachment_path, m.attachment_mime, m.attachment_name, m.attachment_size,
             COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.sender_id)) AS sender_pseudo,
             av.meta_value AS sender_avatar,
             COALESCE(em.meta_value, '🌸') AS sender_avatar_emoji
@@ -919,6 +999,7 @@ export async function getChannelMessages(
     cardSlug: r.card_slug ? String(r.card_slug) : null,
     temperature: r.temperature ? String(r.temperature) : null,
     createdAt: String(r.created_at ?? ''),
+    attachment: attachmentFromRow(r),
     senderPseudo: r.sender_pseudo ? String(r.sender_pseudo) : null,
     senderAvatar: r.sender_avatar ? String(r.sender_avatar) : null,
     senderAvatarEmoji: r.sender_avatar_emoji ? String(r.sender_avatar_emoji) : null,
@@ -980,7 +1061,7 @@ export async function getChannelMessagesSince(
   await ensureMessagesTable(pool)
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, sender_id, body, card_slug, temperature, created_at
+    `SELECT ${MESSAGE_COLUMNS}
      FROM ${t}
      WHERE channel_id = ? AND created_at > ?
      ORDER BY created_at ASC`,
@@ -994,6 +1075,7 @@ export async function getChannelMessagesSince(
     cardSlug: r.card_slug ? String(r.card_slug) : null,
     temperature: r.temperature ? String(r.temperature) : null,
     createdAt: String(r.created_at ?? ''),
+    attachment: attachmentFromRow(r),
   }))
 }
 
@@ -1001,12 +1083,17 @@ export async function getChannelMessagesSince(
 export async function sendChannelMessage(
   channelId: number,
   senderId: number,
-  payload: { body?: string | null; cardSlug?: string | null }
+  payload: {
+    body?: string | null
+    cardSlug?: string | null
+    attachment?: { path: string; mime: string; name: string; size: number } | null
+  }
 ): Promise<ChannelMessage> {
   const pool = getPool()
   const text = payload.body ? String(payload.body).trim() : null
   const cardSlug = payload.cardSlug ? String(payload.cardSlug).trim() || null : null
-  if (!text && !cardSlug) throw new Error('body ou cardSlug requis')
+  const attachment = payload.attachment?.path ? payload.attachment : null
+  if (!text && !cardSlug && !attachment) throw new Error('body ou cardSlug requis')
 
   await touchSocialPresence(pool, senderId)
 
@@ -1017,12 +1104,22 @@ export async function sendChannelMessage(
   await ensureMessagesTable(pool)
 
   await pool.execute(
-    `INSERT INTO ${t} (channel_id, sender_id, body, card_slug, temperature, created_at) VALUES (?, ?, ?, ?, 'calm', NOW())`,
-    [channelId, senderId, text ?? null, cardSlug]
+    `INSERT INTO ${t} (channel_id, sender_id, body, card_slug, temperature, created_at, attachment_path, attachment_mime, attachment_name, attachment_size)
+     VALUES (?, ?, ?, ?, 'calm', NOW(), ?, ?, ?, ?)`,
+    [
+      channelId,
+      senderId,
+      text ?? null,
+      cardSlug,
+      attachment?.path ?? null,
+      attachment?.mime ?? null,
+      attachment?.name ?? null,
+      attachment?.size ?? null,
+    ]
   )
 
   const [inserted] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, sender_id, body, card_slug, temperature, created_at FROM ${t} WHERE channel_id = ? ORDER BY id DESC LIMIT 1`,
+    `SELECT ${MESSAGE_COLUMNS} FROM ${t} WHERE channel_id = ? ORDER BY id DESC LIMIT 1`,
     [channelId]
   )
   const r = inserted?.[0]
@@ -1035,6 +1132,28 @@ export async function sendChannelMessage(
     cardSlug: r.card_slug ? String(r.card_slug) : null,
     temperature: r.temperature ? String(r.temperature) : null,
     createdAt: String(r.created_at ?? new Date().toISOString()),
+    attachment: attachmentFromRow(r),
+  }
+}
+
+export async function getMessageMedia(
+  messageId: number,
+  userId: number
+): Promise<{ path: string; mime: string; name: string } | null> {
+  const pool = getPool()
+  await ensureMessagesTable(pool)
+  const t = table(P2P_MESSAGES_TABLE)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT channel_id, attachment_path, attachment_mime, attachment_name FROM ${t} WHERE id = ? LIMIT 1`,
+    [messageId]
+  )
+  const row = rows?.[0]
+  if (!row?.attachment_path) return null
+  await assertChannelAccess(pool, Number(row.channel_id), userId)
+  return {
+    path: String(row.attachment_path),
+    mime: row.attachment_mime ? String(row.attachment_mime) : 'application/octet-stream',
+    name: row.attachment_name ? String(row.attachment_name) : 'fichier',
   }
 }
 
@@ -1176,7 +1295,10 @@ async function getSharedCommunitySlug(
   return rows?.[0]?.slug ? String(rows[0].slug) : null
 }
 
-/** Crée une notification in-app pour un nouveau message Clairière (appelé après sendChannelMessage) */
+/**
+ * Nouveau message : push appareil uniquement.
+ * Le badge Messages couvre la liste in-app ; pas d'entrée dans la cloche.
+ */
 export async function createClairiereMessageNotification(
   channelId: number,
   senderId: number,
@@ -1185,8 +1307,6 @@ export async function createClairiereMessageNotification(
   cardSlug: string | null
 ): Promise<void> {
   const pool = getPool()
-  const tNotif = table('notifications')
-  const tDeliv = table('notification_deliveries')
   const tUsers = table('users')
   const tMeta = table('usermeta')
 
@@ -1221,66 +1341,80 @@ export async function createClairiereMessageNotification(
   const title = 'Nouveau message'
 
   try {
-    let notifId: number | undefined
-    for (const [sql, vals] of [
-      [
-        `INSERT INTO ${tNotif} (type, title, body, action_url, recipient_type, recipient_id, priority, source_type, source_id, channel_id) VALUES (?, ?, ?, ?, 'user', ?, 'normal', 'clairiere_channel', ?, ?)`,
-        ['chat_new_message', title, bodyText, actionUrl, recipientId, channelId, channelId] as unknown[],
-      ],
-      [
-        `INSERT INTO ${tNotif} (type, title, body, action_url, recipient_type, recipient_id, priority, source_type, source_id) VALUES (?, ?, ?, ?, 'user', ?, 'normal', 'clairiere_channel', ?)`,
-        ['chat_new_message', title, bodyText, actionUrl, recipientId, channelId] as unknown[],
-      ],
-    ]) {
-      try {
-        const insertRes = await exec(pool, String(sql), vals as unknown[])
-        const insert = insertRes[0] as { insertId?: number } | null
-        notifId = insert?.insertId
-        break
-      } catch {
-        /* essayer la variante suivante */
-      }
-    }
-    let recipientEmail: string | null = null
-    if (notifId) {
-      const [userRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT user_email FROM ${tUsers} WHERE ID = ? LIMIT 1`,
-        [recipientId]
-      )
-      recipientEmail = userRows?.[0]?.user_email ?? null
-      try {
-        await pool.execute(
-          `INSERT INTO ${tDeliv} (notification_id, user_id, user_email, channel_id) VALUES (?, ?, ?, ?)`,
-          [notifId, recipientId, recipientEmail, channelId]
-        )
-      } catch (delivErr: unknown) {
-        const dm = String((delivErr as Error)?.message ?? '')
-        if (dm.includes('Unknown column') && dm.includes('channel_id')) {
-          try {
-            await pool.execute(
-              `INSERT INTO ${tDeliv} (notification_id, user_id, user_email) VALUES (?, ?, ?)`,
-              [notifId, recipientId, recipientEmail]
-            )
-          } catch {
-            /* schéma incompatible */
-          }
-        }
-      }
-    }
-    try {
-      const { invalidateNotifUnreadCache } = await import('./db-notifications')
-      invalidateNotifUnreadCache(recipientId)
-    } catch {
-      /* cache optionnel */
-    }
-    try {
-      const { sendFcmPush } = await import('./fcm')
-      await sendFcmPush(recipientId, recipientEmail, title, bodyText, actionUrl)
-    } catch {
-      /* push optionnel */
-    }
+    const { sendFcmPush } = await import('./fcm')
+    await sendFcmPush(recipientId, null, title, bodyText, actionUrl)
   } catch {
-    /* notification optionnelle, ne pas faire échouer l'envoi */
+    /* push optionnel, ne pas faire échouer l'envoi */
+  }
+}
+
+/**
+ * Premier message des autres encore non lu, d'après le curseur enregistré
+ * avant que l'ouverture du fil ne le fasse avancer.
+ */
+export async function getChannelUnreadMarker(
+  channelId: number,
+  userId: string
+): Promise<{ unreadFromMessageId: number | null; unreadCount: number }> {
+  const empty = { unreadFromMessageId: null, unreadCount: 0 }
+  const pool = getPool()
+  const uid = parseInt(userId, 10)
+  if (!uid || !channelId) return empty
+
+  const t = table(P2P_MESSAGES_TABLE)
+  const tMeta = table('usermeta')
+  await ensureMessagesTable(pool)
+  const metaKey = `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`
+  const [readMetaRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [uid, metaKey]
+  )
+  const lastReadAt = readMetaRows?.[0]?.meta_value ? String(readMetaRows[0].meta_value).trim() : ''
+  if (!lastReadAt) return empty
+
+  const [countRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS c FROM ${t} WHERE channel_id = ? AND sender_id != ? AND created_at > ?`,
+    [channelId, uid, lastReadAt]
+  )
+  const unreadCount = Number(countRows?.[0]?.c ?? 0)
+  if (!unreadCount) return empty
+
+  const [firstRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${t}
+     WHERE channel_id = ? AND sender_id != ? AND created_at > ?
+     ORDER BY created_at ASC, id ASC
+     LIMIT 1`,
+    [channelId, uid, lastReadAt]
+  )
+  const unreadFromMessageId = firstRows?.[0]?.id ? Number(firstRows[0].id) : null
+  return { unreadFromMessageId, unreadCount }
+}
+
+/** Ouvrir le fil retire les alertes de chat correspondantes des non lues. */
+async function markChatNotificationsReadForChannel(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number,
+  userId: number
+): Promise<void> {
+  const tN = table('notifications')
+  const tD = table('notification_deliveries')
+  try {
+    await pool.execute(
+      `UPDATE ${tD} d
+       JOIN ${tN} n ON n.id = d.notification_id
+       SET d.read_at = COALESCE(d.read_at, NOW())
+       WHERE d.user_id = ?
+         AND d.read_at IS NULL
+         AND (
+           n.channel_id = ?
+           OR (n.source_type = 'clairiere_channel' AND n.source_id = ?)
+         )`,
+      [userId, channelId, channelId]
+    )
+    const { invalidateNotifUnreadCache } = await import('./db-notifications')
+    invalidateNotifUnreadCache(userId)
+  } catch {
+    /* les messages restent suivis par le badge Messages */
   }
 }
 
@@ -1295,6 +1429,7 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
   await assertChannelAccess(pool, channelId, uid)
+  await markChatNotificationsReadForChannel(pool, channelId, uid)
 
   const [existing] = await pool.execute<RowDataPacket[]>(
     `SELECT umeta_id FROM ${tMeta} WHERE user_id = ? AND meta_key = ?`,

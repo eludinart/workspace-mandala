@@ -54,6 +54,8 @@ export function PublicSiteChrome({
         <div className="max-w-6xl mx-auto px-2 sm:px-6 flex items-center justify-center gap-1 sm:gap-4 overflow-x-auto">
           <a href="/#top">Accueil</a>
           <a href="/#mur">Mur &amp; carte</a>
+          <a href="/#competences">Compétences</a>
+          <a href="/#ressources">Ressources</a>
           <a href="/#projet">Le projet</a>
           <a href="/#lieux">Lieux</a>
           {!user && (

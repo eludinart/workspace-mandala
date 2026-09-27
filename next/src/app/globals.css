@@ -61,6 +61,15 @@ body {
   margin-bottom: max(env(safe-area-inset-bottom, 0px), var(--vv-bottom-inset, 0px));
 }
 
+/* Fil de discussion : fond sombre Mandala, sans le motif doodle de messagerie générique. */
+.m-chat-wallpaper {
+  background-color: rgb(var(--slate-950));
+  background-image:
+    radial-gradient(circle at 12% 16%, rgb(var(--accent-600) / 0.16), transparent 34%),
+    radial-gradient(circle at 86% 78%, rgb(16 185 129 / 0.08), transparent 30%),
+    radial-gradient(circle at 72% 8%, rgb(var(--accent-400) / 0.1), transparent 26%);
+}
+
 .m-sheet-max {
   max-height: min(100%, calc(var(--vvh, 100svh) - 1.5rem));
 }
@@ -270,6 +279,11 @@ html.light [class*='text-violet-300'] {
     filter 0.15s ease,
     transform 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.m-chat-composer {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .m-user-form button[type='submit']:hover:not(:disabled),

@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   enablePushNotifications,
   getPushDeviceStatus,
+  IOS_PUSH_HOME_SCREEN_HINT,
+  needsIosHomeScreenForPush,
   syncPushSubscriptionIfGranted,
   type PushDeviceStatus,
 } from '@/lib/push-client'
@@ -70,17 +72,27 @@ export function PushNotificationPriming() {
   const [bannerVisible, setBannerVisible] = useState(false)
   const [busy, setBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
+  const [iosInstall, setIosInstall] = useState(false)
 
   const refreshStatus = useCallback(async () => {
     if (!userId || typeof window === 'undefined') {
       setStatus(null)
       setModalOpen(false)
       setBannerVisible(false)
+      setIosInstall(false)
       return
     }
     // Ne pas attendre le sync API ici (évite « Queue limit reached » au montage / Strict Mode).
     const next = await getPushDeviceStatus()
     setStatus(next)
+
+    if (needsIosHomeScreenForPush()) {
+      setIosInstall(true)
+      setModalOpen(!isSnoozed())
+      setBannerVisible(!isBannerHiddenThisSession())
+      return
+    }
+    setIosInstall(false)
 
     if (!next.supported || next.active) {
       setModalOpen(false)
@@ -142,7 +154,9 @@ export function PushNotificationPriming() {
         setHint('Configuration push incomplète côté serveur. Réessayez après le déploiement.')
       } else if (result.reason === 'unsupported') {
         setHint(
-          'Cet appareil ne prend pas en charge les push web. Sur iPhone : ajoutez Mandala à l’écran d’accueil.'
+          needsIosHomeScreenForPush()
+            ? IOS_PUSH_HOME_SCREEN_HINT
+            : 'Cet appareil ne prend pas en charge les notifications push web.'
         )
       } else {
         setHint('Impossible d’activer les notifications pour le moment.')
@@ -165,11 +179,11 @@ export function PushNotificationPriming() {
     setBannerVisible(false)
   }
 
-  if (!userId || !status || status.active || !status.supported) {
+  if (!userId || !status || status.active || (!status.supported && !iosInstall)) {
     return null
   }
 
-  const canRequest = status.permission !== 'denied'
+  const canRequest = status.permission !== 'denied' && !iosInstall
 
   return (
     <>
@@ -181,14 +195,23 @@ export function PushNotificationPriming() {
         >
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <p className="flex-1 min-w-0 text-sm text-violet-100">
-              <span className="font-medium">Notifications désactivées</span>
-              <span className="text-violet-200/90">
-                {' '}
-                — activez-les sur cet appareil pour être prévenu des nouveaux messages.
-              </span>
+              {iosInstall ? (
+                <>
+                  <span className="font-medium">Notifications sur iPhone</span>
+                  <span className="text-violet-200/90"> — {IOS_PUSH_HOME_SCREEN_HINT}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">Notifications désactivées</span>
+                  <span className="text-violet-200/90">
+                    {' '}
+                    — activez-les sur cet appareil pour être prévenu des nouveaux messages.
+                  </span>
+                </>
+              )}
             </p>
             <div className="flex items-center gap-2 shrink-0">
-              {canRequest ? (
+              {iosInstall ? null : canRequest ? (
                 <button
                   type="button"
                   disabled={busy}
@@ -231,27 +254,26 @@ export function PushNotificationPriming() {
                 </span>
                 <div className="min-w-0">
                   <h2 id="push-priming-title" className="text-lg font-semibold text-slate-100">
-                    Activer les notifications
+                    {iosInstall ? 'Ajouter Mandala à l’écran d’accueil' : 'Activer les notifications'}
                   </h2>
                   <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-                    Elles ne sont pas encore actives sur cet appareil. Activez-les pour recevoir les
-                    messages et alertes même lorsque Mandala est en arrière-plan.
+                    {iosInstall
+                      ? `Sur iPhone, Safari n’envoie pas de notifications. ${IOS_PUSH_HOME_SCREEN_HINT} Vous pourrez ensuite les activer.`
+                      : 'Elles ne sont pas encore actives sur cet appareil. Activez-les pour recevoir les messages et alertes même lorsque Mandala est en arrière-plan.'}
                   </p>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">
-                Sur iPhone : ajoutez d&apos;abord Mandala à l&apos;écran d&apos;accueil, puis activez
-                les notifications.
-              </p>
               <div className="flex flex-col sm:flex-row gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onActivate()}
-                  className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
-                >
-                  {busy ? 'Activation…' : 'Activer sur cet appareil'}
-                </button>
+                {iosInstall ? null : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void onActivate()}
+                    className="flex-1 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
+                  >
+                    {busy ? 'Activation…' : 'Activer sur cet appareil'}
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={busy}

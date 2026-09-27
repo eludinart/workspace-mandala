@@ -1,20 +1,49 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { communitiesApi } from '@/api/communities'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ThemePicker } from '@/components/theme/ThemePicker'
 import { PlaceSelectionScreen } from '@/components/onboarding/PlaceSelectionScreen'
 import { CharterAcceptanceScreen } from '@/components/onboarding/CharterAcceptanceScreen'
+import {
+  capturePlaceInviteFromUrl,
+  clearPendingPlaceInvite,
+  readPendingPlaceInvite,
+} from '@/lib/place-invite'
 
 type GatePhase = 'loading' | 'place' | 'charter' | 'ready'
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { communities, loading: communitiesLoading, joinCommunity, setActiveSlug, active } =
+  const { communities, loading: communitiesLoading, joinCommunity, setActiveSlug, active, refresh } =
     useCommunity()
   const [phase, setPhase] = useState<GatePhase>('loading')
   const [pendingCharterSlugs, setPendingCharterSlugs] = useState<string[]>([])
   const [charterSlug, setCharterSlug] = useState<string | null>(null)
+  const inviteJoinTried = useRef(false)
+
+  const afterJoin = useCallback(
+    async (slug: string) => {
+      clearPendingPlaceInvite()
+      setActiveSlug(slug)
+      try {
+        sessionStorage.removeItem('mdl_post_register_onboarding')
+      } catch {
+        /* ignore */
+      }
+      await refresh()
+      const status = await communitiesApi.onboardingStatus()
+      const pending = status.pending_charter_slugs ?? []
+      setPendingCharterSlugs(pending)
+      if (pending.length > 0) {
+        setCharterSlug(pending.includes(slug) ? slug : pending[0])
+        setPhase('charter')
+      } else {
+        setPhase('ready')
+      }
+    },
+    [refresh, setActiveSlug]
+  )
 
   const refreshStatus = useCallback(async () => {
     if (communitiesLoading) return
@@ -40,33 +69,46 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   }, [active?.slug, communities.length, communitiesLoading])
 
   useEffect(() => {
+    capturePlaceInviteFromUrl()
+  }, [])
+
+  /** Lien d’invitation : rejoindre même si l’utilisateur a déjà d’autres lieux. */
+  useEffect(() => {
+    if (communitiesLoading || inviteJoinTried.current) return
+    const invite = readPendingPlaceInvite()
+    if (!invite) return
+    if (communities.some((c) => c.slug === invite.slug)) {
+      clearPendingPlaceInvite()
+      setActiveSlug(invite.slug)
+      return
+    }
+    inviteJoinTried.current = true
+    void (async () => {
+      try {
+        await joinCommunity(invite.slug, invite.code)
+        await afterJoin(invite.slug)
+      } catch {
+        inviteJoinTried.current = false
+        if (communities.length === 0) setPhase('place')
+      }
+    })()
+  }, [afterJoin, communities, communitiesLoading, joinCommunity, setActiveSlug])
+
+  useEffect(() => {
     if (communitiesLoading) {
       setPhase('loading')
       return
     }
+    if (readPendingPlaceInvite() && !inviteJoinTried.current) return
     void refreshStatus()
-  }, [communitiesLoading, refreshStatus, active?.slug])
+  }, [communitiesLoading, refreshStatus, active?.slug, communities.length])
 
   const handlePlaceJoined = useCallback(
     async (slug: string, inviteCode?: string | null) => {
       await joinCommunity(slug, inviteCode)
-      setActiveSlug(slug)
-      try {
-        sessionStorage.removeItem('mdl_post_register_onboarding')
-      } catch {
-        /* ignore */
-      }
-      const status = await communitiesApi.onboardingStatus()
-      const pending = status.pending_charter_slugs ?? []
-      setPendingCharterSlugs(pending)
-      if (pending.length > 0) {
-        setCharterSlug(pending.includes(slug) ? slug : pending[0])
-        setPhase('charter')
-      } else {
-        setPhase('ready')
-      }
+      await afterJoin(slug)
     },
-    [joinCommunity, setActiveSlug]
+    [afterJoin, joinCommunity]
   )
 
   const handleCharterAccepted = useCallback(() => {
@@ -84,6 +126,8 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>
   }
 
+  const pendingInvite = readPendingPlaceInvite()
+
   return (
     <div className="relative flex-1 h-full min-h-0 overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950">
       <div className="absolute top-3 right-3 z-10">
@@ -100,9 +144,15 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="min-h-full flex flex-col items-center justify-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
             <PlaceSelectionScreen
-              title="Rejoignez un lieu"
-              subtitle="Choisissez le lieu sur lequel vous souhaitez vous inscrire. Vous pourrez en rejoindre d'autres plus tard."
+              title={pendingInvite ? 'Invitation reçue' : 'Rejoignez un lieu'}
+              subtitle={
+                pendingInvite
+                  ? `Entrez le code reçu pour rejoindre « ${pendingInvite.slug} », ou choisissez un autre lieu public.`
+                  : 'Choisissez le lieu sur lequel vous souhaitez vous inscrire. Vous pourrez en rejoindre d’autres plus tard.'
+              }
               onComplete={handlePlaceJoined}
+              initialSlug={pendingInvite?.slug ?? null}
+              initialInviteCode={pendingInvite?.code ?? null}
             />
           </div>
         </div>

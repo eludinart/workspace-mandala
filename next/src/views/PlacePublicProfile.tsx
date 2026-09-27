@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic'
 import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
+import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
+import { ResourceLibrary } from '@/components/resources/ResourceLibrary'
 import { useAuth } from '@/contexts/AuthContext'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 
@@ -150,6 +152,24 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                 </div>
               </section>
             )}
+
+            <section id="competences" className="space-y-4 scroll-mt-20">
+              <SkillsDirectory
+                variant="public"
+                lockToPlace
+                communitySlug={place.slug}
+                communityName={place.name}
+              />
+            </section>
+
+            <section id="ressources" className="space-y-4 scroll-mt-20">
+              <ResourceLibrary
+                variant="public"
+                lockToPlace
+                communitySlug={place.slug}
+                communityName={place.name}
+              />
+            </section>
 
             {/* Appel à rejoindre */}
             <section className="rounded-3xl border border-slate-800 bg-gradient-to-b from-violet-950/25 to-slate-950 p-8 text-center space-y-4">

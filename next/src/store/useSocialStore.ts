@@ -3,6 +3,7 @@
 import { create } from 'zustand'
 import { socialApi } from '@/api/social'
 import type { MessageReactionSummary } from '@/lib/message-reactions'
+import type { ChatAttachmentMeta } from '@/lib/chat-attachments'
 
 export type ChannelMessage = {
   id?: number
@@ -12,6 +13,9 @@ export type ChannelMessage = {
   cardSlug?: string
   temperature?: string
   createdAt?: string
+  attachment?: ChatAttachmentMeta | null
+  /** Aperçu local avant la réponse du serveur. */
+  localPreviewUrl?: string | null
   senderPseudo?: string | null
   senderAvatar?: string | null
   senderAvatarEmoji?: string | null
@@ -39,8 +43,15 @@ export interface SocialStoreState {
   clearLisiere: () => void
   loadLisiere: (viewedUserId: string | number) => Promise<LisiereData>
   acceptConnection: (seedId: number) => Promise<{ channelId: number }>
-  loadChannelMessages: (channelId: number | string) => Promise<unknown[]>
-  sendMessage: (channelId: number | string, payload: { body?: string; cardSlug?: string }) => Promise<unknown>
+  loadChannelMessages: (channelId: number | string) => Promise<{
+    messages: ChannelMessage[]
+    unreadFromMessageId: number | null
+    unreadCount: number
+  }>
+  sendMessage: (
+    channelId: number | string,
+    payload: { body?: string; cardSlug?: string; file?: File },
+  ) => Promise<unknown>
   toggleMessageReaction: (
     channelId: number | string,
     messageId: number,
@@ -100,7 +111,11 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
   },
 
   loadChannelMessages: async (channelId) => {
-    const data = (await socialApi.getChannelMessages(String(channelId))) as { messages?: ChannelMessage[] }
+    const data = (await socialApi.getChannelMessages(String(channelId))) as {
+      messages?: ChannelMessage[]
+      unreadFromMessageId?: number | null
+      unreadCount?: number
+    }
     const serverMessages = data.messages || []
     set((s) => {
       const key = String(channelId)
@@ -129,11 +144,22 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
         messagesByChannel: { ...s.messagesByChannel, [key]: merged },
       }
     })
-    return data.messages || []
+    return {
+      messages: data.messages || [],
+      unreadFromMessageId: data.unreadFromMessageId ?? null,
+      unreadCount: data.unreadCount ?? 0,
+    }
   },
 
   sendMessage: async (channelId, payload) => {
-    const msg = (await socialApi.sendMessage(String(channelId), payload)) as ChannelMessage & { temperature?: string }
+    const msg = (
+      payload.file
+        ? await socialApi.sendMessageWithFile(String(channelId), payload.body?.trim() ?? '', payload.file)
+        : await socialApi.sendMessage(String(channelId), {
+            body: payload.body,
+            cardSlug: payload.cardSlug,
+          })
+    ) as ChannelMessage & { temperature?: string }
     set((s) => {
       const list = s.messagesByChannel[String(channelId)] || []
       return {

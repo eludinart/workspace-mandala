@@ -31,6 +31,52 @@ export function formatMandalaDateTime(value: string | null | undefined): string 
   return d.toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function daysBeforeToday(d: Date): number {
+  const today = startOfLocalDay(new Date()).getTime()
+  const day = startOfLocalDay(d).getTime()
+  return Math.round((today - day) / 86_400_000)
+}
+
+/** Heure dans une bulle de discussion (HH:mm). */
+export function formatChatBubbleTime(value: string | null | undefined): string {
+  const d = parseMandalaDateTime(value)
+  if (!d) return ''
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+/** Horodatage court d’une ligne de conversation. */
+export function formatChatListTime(value: string | null | undefined): string {
+  const d = parseMandalaDateTime(value)
+  if (!d) return ''
+  const diff = daysBeforeToday(d)
+  if (diff <= 0) return formatChatBubbleTime(value)
+  if (diff === 1) return 'Hier'
+  if (diff < 7) {
+    return d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace(/\.$/, '')
+  }
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })
+}
+
+/** Séparateur de jour dans un fil de messages. */
+export function formatChatDayLabel(value: string | null | undefined): string {
+  const d = parseMandalaDateTime(value)
+  if (!d) return ''
+  const diff = daysBeforeToday(d)
+  if (diff <= 0) return "Aujourd'hui"
+  if (diff === 1) return 'Hier'
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+}
+
+export function chatDayKey(value: string | null | undefined): string {
+  const d = parseMandalaDateTime(value)
+  if (!d) return ''
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+
 /** Normalise une valeur DB en `YYYY-MM-DD HH:mm:ss` (UTC). */
 export function normalizeDbDateTime(value: unknown): string | null {
   if (value == null || value === '') return null

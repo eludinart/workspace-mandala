@@ -2,7 +2,7 @@
  * Événements Mandala — par communauté (phases, équipe, tâches).
  */
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, table } from './db'
 import {
   canOrganizeCommunityEvents,
   getCommunityBySlug,
@@ -61,10 +61,8 @@ export type EventTaskRow = {
   sort_order: number
 }
 
-let _ensured = false
-
 export async function ensureEventsTables(): Promise<void> {
-  if (_ensured || !isDbConfigured()) return
+  return ensureOnce('events', async () => {
   const pool = getPool()
   const tE = table('events')
   const tS = table('event_staff')
@@ -135,7 +133,7 @@ export async function ensureEventsTables(): Promise<void> {
       KEY idx_event_phase (event_id, phase, sort_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
-  _ensured = true
+  })
 }
 
 function canManageEvents(role: CommunityRole, isAppAdmin: boolean): boolean {

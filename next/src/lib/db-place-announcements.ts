@@ -2,11 +2,9 @@
  * Annonces importantes du lieu (accueil — messages des organisateurs, hors événements).
  */
 import type { RowDataPacket } from 'mysql2'
-import { exec, getPool, isDbConfigured, table } from './db'
+import { ensureOnce, exec, getPool, table } from './db'
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
-
-let _tablesEnsured = false
 
 export type PlaceAnnouncementRow = {
   id: number
@@ -36,7 +34,7 @@ function normalizeImageData(img: unknown): string | null | undefined {
 }
 
 export async function ensurePlaceAnnouncementTables(): Promise<void> {
-  if (_tablesEnsured || !isDbConfigured()) return
+  return ensureOnce('place-announcements', async () => {
   await ensureCommunitiesTables()
   const pool = getPool()
   const t = table('mandala_place_announcements')
@@ -56,7 +54,7 @@ export async function ensurePlaceAnnouncementTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureWallPublicColumn(pool, t)
-  _tablesEnsured = true
+  })
 }
 
 export function canManagePlaceAnnouncements(role: CommunityRole, isAppSiteManager = false): boolean {

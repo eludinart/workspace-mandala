@@ -1,6 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { notificationsApi } from '@/api/notifications'
+import { ACCOUNT_SKILLS_ANCHOR, SkillsProfileSection } from '@/components/skills/SkillsProfileSection'
+import { MyResourcesSection } from '@/components/resources/MyResourcesSection'
 import { accountApi } from '@/api/account'
 import { authApi } from '@/api/auth'
 import { communitiesApi } from '@/api/communities'
@@ -14,13 +17,19 @@ import { formatCommunityRoleLabel, isCommunityManagerRole } from '@/lib/communit
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
-import { notificationsApi } from '@/api/notifications'
-import { enablePushNotifications, isPushClientSupported } from '@/lib/push-client'
+import {
+  enablePushNotifications,
+  IOS_PUSH_HOME_SCREEN_HINT,
+  isPushClientSupported,
+  needsIosHomeScreenForPush,
+} from '@/lib/push-client'
 
 const EMOJI_PRESETS = ['🌸', '🕉️', '🌿', '✨', '🌻', '🦋', '🔥', '💜']
 
 const SECTIONS = [
   { id: 'profil', label: 'Profil' },
+  { id: 'competences', label: 'Compétences' },
+  { id: 'ressources', label: 'Ressources' },
   { id: 'communautes', label: 'Mes communautés' },
   { id: 'alertes', label: 'Préférences alertes' },
   { id: 'danger', label: 'Zone sensible' },
@@ -58,6 +67,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [pushMsg, setPushMsg] = useState<string | null>(null)
   const [pushBusy, setPushBusy] = useState(false)
+  const [iosHomeScreen, setIosHomeScreen] = useState(false)
+  const [pushUiReady, setPushUiReady] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -89,6 +100,20 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setIosHomeScreen(needsIosHomeScreenForPush())
+    setPushUiReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (sessionStorage.getItem(ACCOUNT_SKILLS_ANCHOR) !== 'competences') return
+    sessionStorage.removeItem(ACCOUNT_SKILLS_ANCHOR)
+    window.setTimeout(() => {
+      document.getElementById('competences')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 50)
+  }, [])
 
   const onPhoto = async (file: File | null) => {
     if (!file || !file.type.startsWith('image/')) return
@@ -185,7 +210,11 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       else if (result.reason === 'no_vapid_key')
         setPushMsg('Clés VAPID manquantes côté serveur — contactez l’admin.')
       else if (result.reason === 'unsupported')
-        setPushMsg('Cet appareil / navigateur ne prend pas en charge les push web.')
+        setPushMsg(
+          needsIosHomeScreenForPush()
+            ? IOS_PUSH_HOME_SCREEN_HINT
+            : 'Cet appareil / navigateur ne prend pas en charge les push web.'
+        )
       else setPushMsg('Impossible d’activer les notifications.')
     } catch (e: unknown) {
       setPushMsg(e instanceof ApiError ? e.detail : 'Erreur lors de l’activation')
@@ -369,6 +398,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </div>
       </section>
 
+      <section id="competences" className="scroll-mt-20 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-200">Compétences</h2>
+        <SkillsProfileSection />
+      </section>
+
+      <section id="ressources" className="scroll-mt-20 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-200">Mes ressources</h2>
+        <MyResourcesSection />
+      </section>
+
       <section id="communautes" className="scroll-mt-20 space-y-3">
         <h2 className="text-lg font-semibold text-slate-200">Mes communautés</h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
@@ -419,9 +458,14 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           <p className="text-sm text-slate-400 leading-relaxed">
             Activez les notifications push pour recevoir les messages même lorsque Mandala est en
-            arrière-plan. Sur iPhone, ajoutez d&apos;abord le site à l&apos;écran d&apos;accueil.
+            arrière-plan.
           </p>
-          {isPushClientSupported() ? (
+          {iosHomeScreen ? (
+            <p className="text-sm text-amber-200/90 leading-relaxed">
+              Sur iPhone, les notifications passent seulement depuis l’icône d’accueil.{' '}
+              {IOS_PUSH_HOME_SCREEN_HINT}
+            </p>
+          ) : !pushUiReady ? null : isPushClientSupported() ? (
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 type="button"

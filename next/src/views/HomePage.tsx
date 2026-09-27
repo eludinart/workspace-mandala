@@ -79,6 +79,8 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const shortcuts = [
     { icon: '🗓️', title: 'Calendrier', text: 'Présences et rythme du lieu', go: () => onNavigate('calendar') },
     { icon: '👥', title: 'Membres', text: 'Annuaire de la communauté', go: () => onNavigate('members') },
+    { icon: '✨', title: 'Compétences', text: 'Savoir-faire des membres', go: () => onNavigate('skills') },
+    { icon: '📚', title: 'Ressources', text: 'Recettes, textes, médias', go: () => onNavigate('resources') },
     { icon: '💬', title: 'Messages', text: 'Conversations entre membres', go: () => onNavigate('messages') },
     {
       icon: '☀️',
@@ -131,7 +133,7 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
       </section>
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-16 pt-10">
-        <section className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <section className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
           {shortcuts.map((s) => (
             <button key={s.title} type="button" onClick={s.go} className="m-landing-icon-card hover:opacity-90 transition-opacity">
               <div className="m-landing-icon-mark" aria-hidden>

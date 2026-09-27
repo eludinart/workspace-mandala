@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { wallApi } from '@/api/wall'
+import { skillsApi, type SkillNote } from '@/api/skills'
 import { WallFeedItemCard } from '@/components/wall/WallFeedItemCard'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
+import { UserAvatar } from '@/components/UserAvatar'
 import { placeAccentSurface } from '@/lib/place-accent'
+import { formatMandalaDate } from '@/lib/format-datetime'
+import { OPEN_SKILL_USER_KEY } from '@/components/skills/SkillsDirectory'
 import type { WallFeedItem, WallFeedSort } from '@/lib/wall-feed-types'
 
 function groupByPlace(items: WallFeedItem[]): Array<{ place: WallFeedItem['place']; items: WallFeedItem[] }> {
@@ -31,18 +35,22 @@ export function WallFeed({
   initialSort = 'date',
   limit = 30,
   onEventClick,
+  onOpenProfile,
   showConnectBanner = true,
   className = '',
 }: {
   initialSort?: WallFeedSort
   limit?: number
   onEventClick?: (eventId: number) => void
+  onOpenProfile?: (userId: number) => void
   showConnectBanner?: boolean
   className?: string
 }) {
+  const [channel, setChannel] = useState<'places' | 'people'>('places')
   const [sort, setSort] = useState<WallFeedSort>(initialSort)
   const [showPastEvents, setShowPastEvents] = useState(false)
   const [items, setItems] = useState<WallFeedItem[]>([])
+  const [notes, setNotes] = useState<SkillNote[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -52,17 +60,24 @@ export function WallFeed({
     setLoading(true)
     setError(null)
     try {
-      const res = await wallApi.feed({ sort, limit })
-      setItems(res.items ?? [])
-      setIsAuthenticated(!!res.is_authenticated)
-      setMemberPlaceCount(res.member_place_count ?? 0)
+      if (channel === 'people') {
+        const res = await skillsApi.notes(limit)
+        setNotes(res.notes ?? [])
+        setIsAuthenticated(true)
+      } else {
+        const res = await wallApi.feed({ sort, limit })
+        setItems(res.items ?? [])
+        setIsAuthenticated(!!res.is_authenticated)
+        setMemberPlaceCount(res.member_place_count ?? 0)
+      }
     } catch (e: unknown) {
       setError((e as { detail?: string; message?: string })?.detail ?? 'Impossible de charger le fil')
       setItems([])
+      setNotes([])
     } finally {
       setLoading(false)
     }
-  }, [sort, limit])
+  }, [sort, limit, channel])
 
   useEffect(() => {
     void load()
@@ -94,7 +109,9 @@ export function WallFeed({
         <div>
           <h2 className="text-2xl text-slate-100">Fil d&apos;actualité</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            {isAuthenticated
+            {channel === 'people'
+              ? 'Brèves des personnes qui montrent leurs compétences'
+              : isAuthenticated
               ? memberPlaceCount > 0
                 ? `Messages et événements de vos ${memberPlaceCount} lieu(x)`
                 : 'Rejoignez un lieu pour voir plus de contenu'
@@ -102,6 +119,35 @@ export function WallFeed({
           </p>
         </div>
         <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+          {isAuthenticated && (
+            <div
+              className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
+              role="tablist"
+              aria-label="Source du fil"
+            >
+              {(
+                [
+                  { id: 'places' as const, label: 'Lieux' },
+                  { id: 'people' as const, label: 'Personnes' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={channel === opt.id}
+                  onClick={() => setChannel(opt.id)}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    channel === opt.id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {channel === 'places' && (
+          <>
           <div
             className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
             role="tablist"
@@ -141,6 +187,8 @@ export function WallFeed({
               <span className="text-slate-500">({hiddenPastCount} masqué{hiddenPastCount > 1 ? 's' : ''})</span>
             )}
           </label>
+          </>
+          )}
         </div>
       </div>
 
@@ -169,7 +217,65 @@ export function WallFeed({
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {!loading && !error && visibleItems.length === 0 && (
+      {!loading && !error && channel === 'people' && notes.length === 0 && (
+        <p className="text-sm text-slate-500 italic rounded-xl border border-slate-800 p-6 text-center">
+          Aucune brève pour le moment. Publiez-en une depuis Compétences, dans Mon compte.
+        </p>
+      )}
+
+      {!loading && !error && channel === 'people' && notes.length > 0 && (
+        <ul className="space-y-3">
+          {notes.map((note) => (
+            <li key={note.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <UserAvatar
+                  avatar={note.author_avatar}
+                  avatarEmoji={note.author_avatar_emoji}
+                  size="sm"
+                  alt={note.author_pseudo}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-slate-400">
+                    {note.author_pseudo} · {formatMandalaDate(note.created_at)}
+                    <span className="ml-1 opacity-70">
+                      · {note.scope === 'mandala' ? 'Mandala' : note.places.map((p) => p.name).join(', ') || 'Lieux'}
+                    </span>
+                  </p>
+                  <p className="mt-1.5 text-sm text-slate-100 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onOpenProfile) onOpenProfile(note.author_id)
+                    else if (typeof window !== 'undefined') {
+                      sessionStorage.setItem(OPEN_SKILL_USER_KEY, String(note.author_id))
+                      window.location.href = '/app?page=skills'
+                    }
+                  }}
+                  className="text-xs px-2.5 py-1 rounded-lg border border-violet-700/50 text-violet-200"
+                >
+                  Voir la fiche
+                </button>
+                {note.is_mine && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void skillsApi.deleteNote(note.id).then(() => void load())
+                    }}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-slate-700 text-slate-400"
+                  >
+                    Supprimer
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!loading && !error && channel === 'places' && visibleItems.length === 0 && (
         <p className="text-sm text-slate-500 italic rounded-xl border border-slate-800 p-6 text-center">
           {items.length > 0 && hiddenPastCount > 0 && !showPastEvents
             ? 'Aucune actualité récente. Cochez « Afficher les événements passés » pour voir l\u2019historique.'
@@ -177,7 +283,7 @@ export function WallFeed({
         </p>
       )}
 
-      {!loading && !error && sort === 'date' && visibleItems.length > 0 && (
+      {!loading && !error && channel === 'places' && sort === 'date' && visibleItems.length > 0 && (
         <ul className="space-y-3">
           {visibleItems.map((item) => (
             <li key={item.id}>
@@ -187,7 +293,7 @@ export function WallFeed({
         </ul>
       )}
 
-      {!loading && !error && sort === 'place' && grouped && grouped.length > 0 && (
+      {!loading && !error && channel === 'places' && sort === 'place' && grouped && grouped.length > 0 && (
         <div className="space-y-6">
           {grouped.map(({ place, items: placeItems }) => {
             const surface = placeAccentSurface(place.accent_color)
