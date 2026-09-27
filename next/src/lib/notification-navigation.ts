@@ -104,7 +104,6 @@ export function parseNotificationTarget(notif: NotificationItem): NotificationNa
     }
   }
   if (type.includes('event')) return { page: 'events' }
-  if (type.includes('announcement')) return { page: 'home' }
   return null
 }
 

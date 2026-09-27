@@ -60,7 +60,7 @@ function AlertRow({ n, onClick }: { n: NotificationItem; onClick: () => void }) 
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">
           <p
-            className={`text-sm leading-tight truncate ${
+            className={`text-sm leading-snug break-words ${
               unread ? 'font-semibold text-slate-50' : 'font-normal text-slate-500'
             }`}
           >
@@ -69,7 +69,11 @@ function AlertRow({ n, onClick }: { n: NotificationItem; onClick: () => void }) 
           {unread && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1.5" />}
         </div>
         {n.body && (
-          <p className={`text-xs mt-0.5 line-clamp-2 ${unread ? 'text-slate-300' : 'text-slate-600'}`}>
+          <p
+            className={`text-xs mt-0.5 leading-relaxed whitespace-pre-wrap break-words ${
+              unread ? 'text-slate-300' : 'text-slate-600'
+            }`}
+          >
             {n.body}
           </p>
         )}

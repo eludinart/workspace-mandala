@@ -143,7 +143,13 @@ function NotificationList({
                     {n.title}
                   </p>
                   {n.body && (
-                    <p className={`text-xs mt-1 ${isUnread ? 'text-slate-300' : 'text-slate-500'}`}>{n.body}</p>
+                    <p
+                      className={`text-sm mt-1 leading-relaxed whitespace-pre-wrap break-words ${
+                        isUnread ? 'text-slate-300' : 'text-slate-500'
+                      }`}
+                    >
+                      {n.body}
+                    </p>
                   )}
                   {n.created_at && (
                     <p className="text-[10px] text-slate-600 mt-1">
