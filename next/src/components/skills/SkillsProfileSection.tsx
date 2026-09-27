@@ -315,20 +315,26 @@ export function SkillsProfileSection() {
         <textarea
           value={profile.offer_text}
           maxLength={MAX_SKILL_TEXT}
-          rows={2}
+          rows={8}
           onChange={(e) => setProfile((p) => ({ ...p, offer_text: e.target.value }))}
-          className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+          className="mt-1 w-full min-h-40 resize-y rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 leading-relaxed"
         />
+        <span className="mt-1 block text-xs text-slate-500">
+          {profile.offer_text.length}/{MAX_SKILL_TEXT}
+        </span>
       </label>
       <label className="block text-sm">
         <span className="text-slate-300">Ce que je cherche</span>
         <textarea
           value={profile.seek_text}
           maxLength={MAX_SKILL_TEXT}
-          rows={2}
+          rows={6}
           onChange={(e) => setProfile((p) => ({ ...p, seek_text: e.target.value }))}
-          className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+          className="mt-1 w-full min-h-32 resize-y rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 leading-relaxed"
         />
+        <span className="mt-1 block text-xs text-slate-500">
+          {profile.seek_text.length}/{MAX_SKILL_TEXT}
+        </span>
       </label>
 
       {msg && <p className="text-emerald-400 text-sm">{msg}</p>}

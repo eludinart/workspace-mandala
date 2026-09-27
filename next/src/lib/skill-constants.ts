@@ -25,7 +25,7 @@ export type SkillTraitCode = (typeof SKILL_TRAITS)[number]['code']
 
 export const MAX_SKILL_TAGS = 20
 export const MAX_SKILL_TRAITS = 5
-export const MAX_SKILL_TEXT = 280
+export const MAX_SKILL_TEXT = 2000
 export const MAX_SKILL_NOTE = 500
 
 const TRAIT_CODES = new Set<string>(SKILL_TRAITS.map((t) => t.code))

@@ -86,8 +86,8 @@ async function ensureSkillTables(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS ${tP} (
       user_id INT NOT NULL PRIMARY KEY,
       scope VARCHAR(16) NOT NULL DEFAULT 'hidden',
-      offer_text VARCHAR(280) NOT NULL DEFAULT '',
-      seek_text VARCHAR(280) NOT NULL DEFAULT '',
+      offer_text VARCHAR(2000) NOT NULL DEFAULT '',
+      seek_text VARCHAR(2000) NOT NULL DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
@@ -139,6 +139,14 @@ async function ensureSkillTables(): Promise<void> {
       PRIMARY KEY (note_id, community_id),
       KEY idx_community (community_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  )
+  await exec(
+    pool,
+    `ALTER TABLE ${tP} MODIFY offer_text VARCHAR(2000) NOT NULL DEFAULT ''`
+  )
+  await exec(
+    pool,
+    `ALTER TABLE ${tP} MODIFY seek_text VARCHAR(2000) NOT NULL DEFAULT ''`
   )
   _ensured = true
 }

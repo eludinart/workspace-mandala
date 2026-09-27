@@ -420,13 +420,13 @@ export function SkillsDirectory({
                 <p className="text-sm text-slate-300">{selected.traits.map(skillTraitLabel).join(' · ')}</p>
               )}
               {selected.offer_text && (
-                <p className="text-sm text-slate-200">
+                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">
                   <span className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1">Peut apporter</span>
                   {selected.offer_text}
                 </p>
               )}
               {selected.seek_text && (
-                <p className="text-sm text-slate-200">
+                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">
                   <span className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1">Cherche</span>
                   {selected.seek_text}
                 </p>
