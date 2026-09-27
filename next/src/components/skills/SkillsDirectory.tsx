@@ -15,6 +15,46 @@ import {
 
 export const OPEN_SKILL_USER_KEY = 'mandala_skill_user'
 
+type ProseBlock = { title: string | null; body: string }
+
+/** Découpe une description en paragraphes, et isole « Titre : suite ». */
+function skillProseBlocks(text: string): ProseBlock[] {
+  const pieces = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((piece) =>
+      piece
+        .split(/(?<=\.)\)?\s+(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜŸÇŒÆ][^:\n]{2,80} : )/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+    )
+
+  return pieces.map((piece) => {
+    const match = piece.match(/^([^:\n]{3,80})\s*:\s+([\s\S]+)$/)
+    if (!match || match[1].includes('.')) return { title: null, body: piece }
+    return { title: match[1].trim(), body: match[2].trim() }
+  })
+}
+
+function SkillProse({ text }: { text: string }) {
+  const blocks = skillProseBlocks(text)
+  if (blocks.length === 0) return null
+  return (
+    <div className="space-y-4">
+      {blocks.map((block, index) => (
+        <div key={index} className="space-y-1">
+          {block.title && (
+            <p className="text-sm font-semibold text-slate-100">{block.title}</p>
+          )}
+          <p className="text-[15px] leading-7 text-slate-300 max-w-[68ch]">{block.body}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function matchesTag(tags: SkillTag[], tag: string): boolean {
   const key = tag.trim().toLocaleLowerCase('fr')
   if (!key) return true
@@ -334,8 +374,8 @@ export function SkillsDirectory({
       </p>
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="grid lg:grid-cols-[1fr_20rem] gap-4 items-start">
-        <ul className="grid sm:grid-cols-2 gap-3">
+      <div className="grid gap-5 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] items-start">
+        <ul className={`grid gap-3 ${selected ? 'order-2 lg:order-1' : ''}`}>
           {!loading && !refreshing && visible.length === 0 && (
             <li className="sm:col-span-2 rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">
               Aucune fiche ne correspond. Les personnes choisissent elles-mêmes d’apparaître ici.
@@ -366,10 +406,12 @@ export function SkillsDirectory({
                     </div>
                   </div>
                   {card.offer_text && (
-                    <p className="text-sm text-slate-300 line-clamp-2">{card.offer_text}</p>
+                    <p className="text-sm leading-relaxed text-slate-400 line-clamp-3">
+                      {card.offer_text.replace(/\s+/g, ' ').trim()}
+                    </p>
                   )}
                   <div className="flex flex-wrap gap-1.5">
-                    {card.tags.slice(0, 3).map((t) => (
+                    {card.tags.slice(0, 4).map((t) => (
                       <span
                         key={`${t.label}-${t.register}`}
                         className="text-[11px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-300"
@@ -384,61 +426,94 @@ export function SkillsDirectory({
           })}
         </ul>
 
-        <aside className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 lg:sticky lg:top-4 min-h-[12rem]">
+        <article
+          className={`rounded-3xl border border-slate-800 bg-slate-900/50 p-5 sm:p-7 min-h-[16rem] ${
+            selected ? 'order-1 lg:order-2' : 'order-2'
+          }`}
+        >
           {!selected && (
             <p className="text-sm text-slate-500">Sélectionnez une personne pour lire sa fiche.</p>
           )}
           {selected && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
+            <div className="space-y-7">
+              <header className="flex items-start gap-4">
                 <UserAvatar
                   avatar={selected.avatar}
                   avatarEmoji={selected.avatar_emoji}
-                  size="lg"
+                  size="xl"
                   alt={selected.pseudo}
                 />
-                <div>
-                  <p className="font-semibold text-lg">{selected.display_name || selected.pseudo}</p>
+                <div className="min-w-0 pt-1">
+                  <h3 className="text-2xl font-semibold text-slate-50 leading-tight">
+                    {selected.display_name || selected.pseudo}
+                  </h3>
                   {selected.scope === 'mandala' && (
-                    <p className="text-[11px] uppercase tracking-wide text-violet-300">Visible sur Mandala</p>
+                    <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
+                  )}
+                  {selected.places.length > 0 && variant === 'app' && (
+                    <p className="mt-1 text-sm text-slate-500">
+                      {selected.places.map((p) => p.name).join(' · ')}
+                    </p>
                   )}
                 </div>
-              </div>
+              </header>
+
               {selected.tags.length > 0 && (
-                <ul className="space-y-1.5">
-                  {selected.tags.map((t) => (
-                    <li key={`${t.label}-${t.register}`} className="flex justify-between gap-3 text-sm">
-                      <span>{t.label}</span>
-                      <span className="text-[10px] uppercase text-slate-500 text-right">
-                        {SKILL_REGISTER_LABELS[t.register]}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-faire</h4>
+                  <ul className="flex flex-wrap gap-2">
+                    {selected.tags.map((t) => (
+                      <li
+                        key={`${t.label}-${t.register}`}
+                        className="rounded-2xl border border-slate-700 bg-slate-950/40 px-3 py-2"
+                      >
+                        <p className="text-sm text-slate-100">{t.label}</p>
+                        <p className="text-[11px] text-slate-500">{SKILL_REGISTER_LABELS[t.register]}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
+
               {selected.traits.length > 0 && (
-                <p className="text-sm text-slate-300">{selected.traits.map(skillTraitLabel).join(' · ')}</p>
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-être</h4>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {selected.traits.map((code) => (
+                      <li
+                        key={code}
+                        className="text-sm px-2.5 py-1 rounded-full border border-violet-700/40 text-violet-100"
+                      >
+                        {skillTraitLabel(code)}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               )}
+
               {selected.offer_text && (
-                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">
-                  <span className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1">Peut apporter</span>
-                  {selected.offer_text}
-                </p>
+                <section className="space-y-3 border-t border-slate-800 pt-6">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Ce que je peux apporter
+                  </h4>
+                  <SkillProse text={selected.offer_text} />
+                </section>
               )}
+
               {selected.seek_text && (
-                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words">
-                  <span className="block text-[10px] uppercase tracking-wide text-slate-500 mb-1">Cherche</span>
-                  {selected.seek_text}
-                </p>
+                <section className="space-y-3 border-t border-slate-800 pt-6">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Ce que je cherche
+                  </h4>
+                  <SkillProse text={selected.seek_text} />
+                </section>
               )}
-              {selected.places.length > 0 && variant === 'app' && (
-                <p className="text-xs text-slate-500">Lieux en commun : {selected.places.map((p) => p.name).join(', ')}</p>
-              )}
+
               {variant === 'app' && !selected.is_me && onOpenMessages && (
                 <button
                   type="button"
                   onClick={() => onOpenMessages(String(selected.user_id))}
-                  className="w-full text-sm py-2 rounded-lg border border-violet-700/50 text-violet-200"
+                  className="text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
                 >
                   Envoyer un message
                 </button>
@@ -446,14 +521,14 @@ export function SkillsDirectory({
               {variant === 'public' && (
                 <a
                   href="/app"
-                  className="block text-center text-sm py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500"
+                  className="inline-block text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
                 >
                   Se connecter pour écrire
                 </a>
               )}
             </div>
           )}
-        </aside>
+        </article>
       </div>
     </div>
   )
