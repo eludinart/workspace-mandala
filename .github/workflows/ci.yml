@@ -18,9 +18,11 @@ jobs:
           cache: npm
           cache-dependency-path: next/package-lock.json
 
+      # npm install (pas npm ci) : même raison que Docker — le lockfile
+      # généré sous Windows peut diverger des deps optionnelles Linux (@emnapi).
       - name: Install dependencies
         working-directory: next
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Production build (typecheck + Next.js)
         working-directory: next
