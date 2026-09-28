@@ -9,6 +9,7 @@ import {
 } from '@/lib/db-communities'
 import {
   buildPlaceInviteEmailBody,
+  isTransactionalEmailConfigured,
   resolvePublicAppOrigin,
   sendTransactionalEmail,
 } from '@/lib/mandala-mail'
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({
       candidates,
       invite: invitePayload(invite, origin),
-      email_configured: !!process.env.RESEND_API_KEY?.trim(),
+      email_configured: isTransactionalEmailConfigured(),
     })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({
       ok: true,
       email_sent: emailSent,
-      email_configured: !!process.env.RESEND_API_KEY?.trim(),
+      email_configured: isTransactionalEmailConfigured(),
       invite: payload,
     })
   } catch (err: unknown) {

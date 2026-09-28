@@ -200,7 +200,7 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
           <p className="text-sm text-slate-300">Envoyer par e-mail</p>
           {!emailConfigured && (
             <p className="text-xs text-amber-200/80">
-              L’envoi automatique n’est pas actif (clé Resend absente). Vous pouvez quand même copier le
+              L’envoi automatique n’est pas actif (SMTP non configuré). Vous pouvez quand même copier le
               lien.
             </p>
           )}

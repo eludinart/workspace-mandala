@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ApiError, requireUserManagementAccess } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
 import { authMe, setUserPassword } from '@/lib/db-auth'
-import { buildPasswordResetEmailBody, sendTransactionalEmail } from '@/lib/mandala-mail'
+import {
+  buildPasswordResetEmailBody,
+  isTransactionalEmailConfigured,
+  sendTransactionalEmail,
+} from '@/lib/mandala-mail'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       ok: true,
       temporary_password: password,
       email_sent: emailSent,
-      email_configured: !!process.env.RESEND_API_KEY?.trim(),
+      email_configured: isTransactionalEmailConfigured(),
     })
   } catch (err: unknown) {
     const e = err as ApiError

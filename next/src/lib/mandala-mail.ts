@@ -1,9 +1,92 @@
 /**
- * Envoi d'e-mails optionnel (Resend API ou SMTP via fetch).
- * Si non configuré, retourne false — l'app affiche le mot de passe à copier.
+ * Envoi d'e-mails transactionnels.
+ * SMTP (même boîte Hostinger que Fleur d'Amour) en priorité, Resend en secours.
+ * Si rien n'est configuré, retourne false — l'app propose de transmettre le mot de passe à la main.
  */
+import nodemailer from 'nodemailer'
+
+function envBool(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback
+  const s = value.trim().toLowerCase()
+  if (s === 'true' || s === '1' || s === 'yes') return true
+  if (s === 'false' || s === '0' || s === 'no') return false
+  return fallback
+}
+
+function smtpSettings() {
+  const host = process.env.SMTP_HOST?.trim() || ''
+  const port = parseInt(process.env.SMTP_PORT ?? '587', 10)
+  const user = process.env.SMTP_USER?.trim() || ''
+  const pass = process.env.SMTP_PASS ?? ''
+  const secure = envBool(process.env.SMTP_SECURE, port === 465)
+  const from =
+    process.env.SMTP_FROM?.trim() ||
+    process.env.MANDALA_MAIL_FROM?.trim() ||
+    (user ? `Mandala <${user}>` : '')
+  const replyTo = process.env.SMTP_REPLY_TO?.trim() || undefined
+  return { host, port, user, pass, secure, from, replyTo }
+}
+
+function isSmtpConfigured(): boolean {
+  const smtp = smtpSettings()
+  return !!(smtp.host && smtp.user && smtp.pass && smtp.from)
+}
+
 export function isTransactionalEmailConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY?.trim()
+  return isSmtpConfigured() || !!process.env.RESEND_API_KEY?.trim()
+}
+
+async function sendViaSmtp(params: {
+  to: string
+  subject: string
+  text: string
+  html?: string
+}): Promise<boolean> {
+  const smtp = smtpSettings()
+  const transport = nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: { user: smtp.user, pass: smtp.pass },
+  })
+  await transport.sendMail({
+    from: smtp.from,
+    to: params.to,
+    subject: params.subject,
+    text: params.text,
+    html: params.html ?? params.text.replace(/\n/g, '<br>'),
+    replyTo: smtp.replyTo,
+  })
+  return true
+}
+
+async function sendViaResend(params: {
+  to: string
+  subject: string
+  text: string
+  html?: string
+}): Promise<boolean> {
+  const resendKey = process.env.RESEND_API_KEY?.trim()
+  if (!resendKey) return false
+  const from =
+    process.env.MANDALA_MAIL_FROM?.trim() ||
+    process.env.SMTP_FROM?.trim() ||
+    'Mandala <noreply@mandala.local>'
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${resendKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to: [params.to],
+      subject: params.subject,
+      text: params.text,
+      html: params.html ?? params.text.replace(/\n/g, '<br>'),
+    }),
+  })
+  return res.ok
 }
 
 export async function sendTransactionalEmail(params: {
@@ -14,32 +97,21 @@ export async function sendTransactionalEmail(params: {
 }): Promise<boolean> {
   const to = params.to.trim()
   if (!to) return false
+  const message = { ...params, to }
 
-  const resendKey = process.env.RESEND_API_KEY?.trim()
-  if (resendKey) {
-    const from = process.env.MANDALA_MAIL_FROM?.trim() || 'Mandala <noreply@mandala.local>'
+  if (isSmtpConfigured()) {
     try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to: [to],
-          subject: params.subject,
-          text: params.text,
-          html: params.html ?? params.text.replace(/\n/g, '<br>'),
-        }),
-      })
-      return res.ok
+      return await sendViaSmtp(message)
     } catch {
       return false
     }
   }
 
-  return false
+  try {
+    return await sendViaResend(message)
+  } catch {
+    return false
+  }
 }
 
 export function buildPasswordResetEmailBody(params: {

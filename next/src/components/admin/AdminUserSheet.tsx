@@ -569,8 +569,8 @@ export function AdminUserSheet({
                     </div>
                     {!lastReset.emailConfigured && (
                       <p className="text-[10px] text-slate-500">
-                        E-mail automatique non configuré (variable RESEND_API_KEY). Transmettez le
-                        mot de passe manuellement.
+                        E-mail automatique non configuré (SMTP). Transmettez le mot de passe
+                        manuellement.
                       </p>
                     )}
                   </div>
