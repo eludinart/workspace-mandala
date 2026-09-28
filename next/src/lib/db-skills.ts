@@ -8,16 +8,12 @@ import { ensureCommunitiesTables, listCommunitiesForUser } from './db-communitie
 import {
   isSkillRegister,
   isSkillScope,
-  isSkillTraitCode,
   MAX_SKILL_NOTE,
   MAX_SKILL_TAGS,
   MAX_SKILL_TEXT,
-  MAX_SKILL_TRAITS,
   skillLabelKey,
-  skillTraitLabel,
   type SkillRegister,
   type SkillScope,
-  type SkillTraitCode,
 } from './skill-constants'
 
 let _ensured = false
@@ -35,11 +31,11 @@ export type SkillProfile = {
   scope: SkillScope
   offer_text: string
   seek_text: string
+  frame_text: string
   updated_at: string | null
   place_ids: number[]
   places: SkillPlaceRef[]
   tags: SkillTag[]
-  traits: SkillTraitCode[]
 }
 
 export type SkillCard = {
@@ -51,8 +47,8 @@ export type SkillCard = {
   scope: SkillScope
   offer_text: string
   seek_text: string
+  frame_text: string
   tags: SkillTag[]
-  traits: SkillTraitCode[]
   places: SkillPlaceRef[]
   is_me: boolean
 }
@@ -88,6 +84,7 @@ async function ensureSkillTables(): Promise<void> {
       scope VARCHAR(16) NOT NULL DEFAULT 'hidden',
       offer_text VARCHAR(2000) NOT NULL DEFAULT '',
       seek_text VARCHAR(2000) NOT NULL DEFAULT '',
+      frame_text VARCHAR(2000) NOT NULL DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
@@ -148,6 +145,11 @@ async function ensureSkillTables(): Promise<void> {
     pool,
     `ALTER TABLE ${tP} MODIFY seek_text VARCHAR(2000) NOT NULL DEFAULT ''`
   )
+  const [cols] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tP}`)
+  const existing = new Set((cols ?? []).map((c) => String(c.Field)))
+  if (!existing.has('frame_text')) {
+    await exec(pool, `ALTER TABLE ${tP} ADD COLUMN frame_text VARCHAR(2000) NOT NULL DEFAULT ''`)
+  }
   _ensured = true
 }
 
@@ -157,11 +159,11 @@ function emptyProfile(userId: number): SkillProfile {
     scope: 'hidden',
     offer_text: '',
     seek_text: '',
+    frame_text: '',
     updated_at: null,
     place_ids: [],
     places: [],
     tags: [],
-    traits: [],
   }
 }
 
@@ -170,7 +172,7 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
   const pool = getPool()
   const tP = table('mandala_skill_profiles')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_id, scope, offer_text, seek_text, updated_at FROM ${tP} WHERE user_id = ? LIMIT 1`,
+    `SELECT user_id, scope, offer_text, seek_text, frame_text, updated_at FROM ${tP} WHERE user_id = ? LIMIT 1`,
     [userId]
   )
   const r = rows[0]
@@ -180,6 +182,7 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
         scope: isSkillScope(r.scope) ? r.scope : 'hidden',
         offer_text: String(r.offer_text ?? ''),
         seek_text: String(r.seek_text ?? ''),
+        frame_text: String(r.frame_text ?? ''),
         updated_at: r.updated_at ? new Date(r.updated_at as string).toISOString() : null,
       }
     : emptyProfile(userId)
@@ -209,15 +212,6 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
     }))
     .filter((t) => t.label)
 
-  const tTraits = table('mandala_skill_traits')
-  const [traitRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT code FROM ${tTraits} WHERE user_id = ?`,
-    [userId]
-  )
-  profile.traits = (traitRows ?? [])
-    .map((t) => String(t.code))
-    .filter(isSkillTraitCode)
-
   return profile
 }
 
@@ -238,9 +232,9 @@ export type SkillProfileInput = {
   scope: SkillScope
   offer_text: string
   seek_text: string
+  frame_text: string
   place_ids: number[]
   tags: SkillTag[]
-  traits: SkillTraitCode[]
 }
 
 export async function saveMySkillProfile(userId: number, input: SkillProfileInput): Promise<SkillProfile> {
@@ -264,22 +258,16 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
     if (tags.length >= MAX_SKILL_TAGS) break
   }
 
-  const traits: SkillTraitCode[] = []
-  for (const code of input.traits) {
-    if (!isSkillTraitCode(code) || traits.includes(code)) continue
-    traits.push(code)
-    if (traits.length >= MAX_SKILL_TRAITS) break
-  }
-
   const offer = input.offer_text.trim().slice(0, MAX_SKILL_TEXT)
   const seek = input.seek_text.trim().slice(0, MAX_SKILL_TEXT)
+  const frame = input.frame_text.trim().slice(0, MAX_SKILL_TEXT)
   const pool = getPool()
   const tP = table('mandala_skill_profiles')
   await pool.execute(
-    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text)
-     VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE scope = VALUES(scope), offer_text = VALUES(offer_text), seek_text = VALUES(seek_text)`,
-    [userId, input.scope, offer, seek]
+    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text, frame_text)
+     VALUES (?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE scope = VALUES(scope), offer_text = VALUES(offer_text), seek_text = VALUES(seek_text), frame_text = VALUES(frame_text)`,
+    [userId, input.scope, offer, seek, frame]
   )
 
   const tPlaces = table('mandala_skill_profile_places')
@@ -295,12 +283,6 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
       `INSERT INTO ${tTags} (user_id, label, label_key, register) VALUES (?, ?, ?, ?)`,
       [userId, tag.label, skillLabelKey(tag.label), tag.register]
     )
-  }
-
-  const tTraits = table('mandala_skill_traits')
-  await pool.execute(`DELETE FROM ${tTraits} WHERE user_id = ?`, [userId])
-  for (const code of traits) {
-    await pool.execute(`INSERT INTO ${tTraits} (user_id, code) VALUES (?, ?)`, [userId, code])
   }
 
   return loadProfile(userId)
@@ -365,8 +347,8 @@ function cardFromProfile(
     scope: profile.scope,
     offer_text: profile.offer_text,
     seek_text: profile.seek_text,
+    frame_text: profile.frame_text,
     tags: profile.tags,
-    traits: profile.traits,
     places: visiblePlaces,
     is_me: profile.user_id === viewerId,
   }
@@ -447,14 +429,13 @@ export async function listSkillDirectory(params: {
     const identity = identities.get(userId)
     if (!identity) continue
     if (q) {
-      const traitLabels = profile.traits.map((code) => skillTraitLabel(code))
       const hay = [
         identity.pseudo,
         identity.display_name,
         profile.offer_text,
         profile.seek_text,
+        profile.frame_text,
         ...profile.tags.map((t) => t.label),
-        ...traitLabels,
       ]
         .join(' ')
         .toLocaleLowerCase('fr')

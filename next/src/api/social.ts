@@ -61,11 +61,12 @@ export const socialApi = {
     api.get(`/api/social/channel_messages?channel_id=${encodeURIComponent(channelId)}`),
   sendMessage: (channelId: string, payload: Record<string, unknown>) =>
     api.post('/api/social/send_message', { channelId, ...payload }),
-  sendMessageWithFile: (channelId: string, body: string, file: File) => {
+  sendMessageWithFile: (channelId: string, body: string, file: File, replyToId?: number) => {
     const form = new FormData()
     form.set('channelId', channelId)
     if (body) form.set('body', body)
     form.set('file', file)
+    if (replyToId && replyToId > 0) form.set('replyToId', String(replyToId))
     return api.postForm('/api/social/send_message', form)
   },
   presenceHeartbeat: () => api.get('/api/social/presence_heartbeat'),

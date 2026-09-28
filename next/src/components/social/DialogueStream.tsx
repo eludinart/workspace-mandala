@@ -15,7 +15,9 @@ import {
   chatFileError,
   formatFileSize,
   isChatImagePreview,
+  messageReplyExcerpt,
   resolveChatFileMime,
+  type MessageReplyQuote,
 } from '@/lib/chat-attachments'
 import { ApiError } from '@/lib/api-client'
 
@@ -91,6 +93,8 @@ export function DialogueStream({
   const [infoOpen, setInfoOpen] = useState(false)
   const [unreadFromId, setUnreadFromId] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [replyDraft, setReplyDraft] = useState<MessageReplyQuote | null>(null)
+  const [highlightId, setHighlightId] = useState<number | null>(null)
   const [readCursorReady, setReadCursorReady] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const unreadBoundaryRef = useRef<HTMLDivElement>(null)
@@ -136,6 +140,8 @@ export function DialogueStream({
     setIconEditing(false)
     setUnreadFromId(null)
     setUnreadCount(0)
+    setReplyDraft(null)
+    setHighlightId(null)
     setReadCursorReady(false)
     readCursorCaptured.current = false
     initialScrollDone.current = false
@@ -274,10 +280,47 @@ export function DialogueStream({
     if (isChatImagePreview(mime)) setFilePreview(URL.createObjectURL(next))
   }
 
+  const quoteFromMessage = (msg: ChannelMessage): MessageReplyQuote => {
+    const id = Number(msg.id ?? msg.messageId)
+    const mine = meId != null && msg.senderId === meId
+    const rawName = String(msg.senderPseudo || '')
+      .replace(/\s*\(vous\)\s*$/i, '')
+      .trim()
+    return {
+      id,
+      senderId: msg.senderId,
+      senderName: mine ? 'Vous' : rawName || 'Membre',
+      excerpt: messageReplyExcerpt({
+        body: msg.body,
+        cardSlug: msg.cardSlug,
+        attachmentMime: msg.attachment?.mime,
+        attachmentName: msg.attachment?.name,
+      }),
+    }
+  }
+
+  const startReply = (msg: ChannelMessage) => {
+    const id = Number(msg.id ?? msg.messageId)
+    if (!Number.isFinite(id) || id <= 0) return
+    setReplyDraft(quoteFromMessage(msg))
+    requestAnimationFrame(() => messageInputRef.current?.focus())
+  }
+
+  const jumpToMessage = (id: number) => {
+    const el = document.getElementById(`chat-msg-${id}`)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightId(id)
+    window.setTimeout(() => {
+      setHighlightId((current) => (current === id ? null : current))
+    }, 1400)
+  }
+
   const handleSendText = async () => {
     const text = input.trim()
     const attachment = file
     if ((!text && !attachment) || sending) return
+    const quoted = replyDraft
     const tempId = `tmp-${Date.now()}`
     const mime = attachment ? resolveChatFileMime(attachment) : ''
     const preview = attachment && isChatImagePreview(mime) ? URL.createObjectURL(attachment) : null
@@ -292,6 +335,7 @@ export function DialogueStream({
         senderAvatar: meAvatar,
         senderAvatarEmoji: meAvatarEmoji,
         reactions: [],
+        replyTo: quoted,
         localPreviewUrl: preview,
         attachment: attachment
           ? { mime, name: attachment.name, size: attachment.size }
@@ -303,7 +347,12 @@ export function DialogueStream({
     setSending(true)
     setSendError(null)
     try {
-      await sendMessage(channelId, { body: text, file: attachment ?? undefined })
+      await sendMessage(channelId, {
+        body: text,
+        file: attachment ?? undefined,
+        replyToId: quoted?.id,
+      })
+      setReplyDraft(null)
       requestAnimationFrame(() => {
         const el = listRef.current
         if (el) el.scrollTop = el.scrollHeight
@@ -407,7 +456,7 @@ export function DialogueStream({
             )}
           </span>
           <div className="min-w-0 flex-1 px-1">
-            <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Dialogue'}</p>
+            <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Conversation'}</p>
             <p className={`text-xs truncate ${!isGroup && otherIsOnline ? 'text-emerald-400' : 'text-slate-400'}`}>
               {statusLabel}
             </p>
@@ -629,7 +678,10 @@ export function DialogueStream({
                 meId={meId}
                 showAvatar={isGroup && !isMe}
                 showName={isGroup && !isMe}
+                highlighted={highlightId != null && Number(msg.id ?? msg.messageId) === highlightId}
                 onReact={handleReact}
+                onReply={startReply}
+                onJumpTo={jumpToMessage}
               />
             </div>
           )
@@ -637,6 +689,23 @@ export function DialogueStream({
       </div>
 
       <div className="m-chat-composer min-w-0 border-t border-slate-800 bg-slate-950/95 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] space-y-2">
+        {replyDraft && (
+          <div className="flex items-start gap-2 min-w-0 rounded-xl border-l-4 border-violet-500 bg-slate-900 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold text-violet-300 leading-tight">{replyDraft.senderName}</p>
+              <p className="truncate text-xs text-slate-400">{replyDraft.excerpt || 'Message'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyDraft(null)}
+              className="shrink-0 h-7 w-7 rounded-full text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+              aria-label="Annuler la réponse"
+              title="Annuler la réponse"
+            >
+              ×
+            </button>
+          </div>
+        )}
         {file && (
           <div className="flex items-center gap-2 min-w-0 rounded-xl border border-slate-700 bg-slate-950/70 px-2 py-1.5">
             {filePreview ? (

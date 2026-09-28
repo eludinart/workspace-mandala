@@ -15,13 +15,10 @@ import { ApiError } from '@/lib/api-client'
 import {
   MAX_SKILL_TAGS,
   MAX_SKILL_TEXT,
-  MAX_SKILL_TRAITS,
   SKILL_REGISTER_LABELS,
   SKILL_REGISTERS,
-  SKILL_TRAITS,
   type SkillRegister,
   type SkillScope,
-  type SkillTraitCode,
 } from '@/lib/skill-constants'
 
 const EMPTY: SkillProfile = {
@@ -29,11 +26,11 @@ const EMPTY: SkillProfile = {
   scope: 'hidden',
   offer_text: '',
   seek_text: '',
+  frame_text: '',
   updated_at: null,
   place_ids: [],
   places: [],
   tags: [],
-  traits: [],
 }
 
 export function SkillsProfileSection() {
@@ -100,9 +97,9 @@ export function SkillsProfileSection() {
         scope: profile.scope,
         offer_text: profile.offer_text,
         seek_text: profile.seek_text,
+        frame_text: profile.frame_text,
         place_ids: profile.place_ids,
         tags: profile.tags,
-        traits: profile.traits,
       })
       setProfile(res.profile)
       savedRef.current = JSON.stringify(res.profile)
@@ -126,14 +123,6 @@ export function SkillsProfileSection() {
     const tag: SkillTag = { label: label.slice(0, 40), register: 'share' }
     setProfile((p) => ({ ...p, tags: [...p.tags, tag] }))
     setDraftLabel('')
-  }
-
-  const toggleTrait = (code: SkillTraitCode) => {
-    setProfile((p) => {
-      if (p.traits.includes(code)) return { ...p, traits: p.traits.filter((c) => c !== code) }
-      if (p.traits.length >= MAX_SKILL_TRAITS) return p
-      return { ...p, traits: [...p.traits, code] }
-    })
   }
 
   const setTagRegister = (label: string, register: SkillRegister) => {
@@ -182,7 +171,7 @@ export function SkillsProfileSection() {
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-5">
       <p className="text-sm text-slate-400">
-        Décrivez ce que vous pouvez apporter. La fiche reste cachée tant que vous ne choisissez pas qui peut la voir.
+        Dites ce que vous savez faire, ce que vous proposez au collectif, et ce que vous cherchez. La fiche reste cachée tant que vous ne choisissez pas qui peut la voir.
       </p>
 
       <fieldset className="space-y-2">
@@ -235,6 +224,9 @@ export function SkillsProfileSection() {
 
       <div className="space-y-2">
         <p className="text-sm text-slate-300">Savoir-faire</p>
+        <p className="text-xs text-slate-500">
+          Outils et tâches concrètes : rédaction, logistique, artisanat, montage. Pas de posture ici.
+        </p>
         <div className="flex flex-wrap gap-2">
           {profile.tags.map((tag) => (
             <span
@@ -287,35 +279,16 @@ export function SkillsProfileSection() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm text-slate-300">Savoir-être · {profile.traits.length}/{MAX_SKILL_TRAITS}</p>
-        <div className="flex flex-wrap gap-2">
-          {SKILL_TRAITS.map((trait) => {
-            const on = profile.traits.includes(trait.code)
-            return (
-              <button
-                key={trait.code}
-                type="button"
-                onClick={() => toggleTrait(trait.code)}
-                className={`text-xs px-2.5 py-1 rounded-full border ${
-                  on
-                    ? 'border-violet-500 bg-violet-600/30 text-violet-100'
-                    : 'border-slate-700 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {trait.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
       <label className="block text-sm">
         <span className="text-slate-300">Ce que je peux apporter</span>
+        <span className="mt-1 block text-xs text-slate-500">
+          Missions et rôles dans la vie du collectif, pas une liste de qualités.
+        </span>
         <textarea
           value={profile.offer_text}
           maxLength={MAX_SKILL_TEXT}
           rows={8}
+          placeholder="Faciliter une réunion de cadrage, relire un document d’accords, un coup de main logistique ponctuel…"
           onChange={(e) => setProfile((p) => ({ ...p, offer_text: e.target.value }))}
           className="mt-1 w-full min-h-40 resize-y rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 leading-relaxed"
         />
@@ -325,6 +298,9 @@ export function SkillsProfileSection() {
       </label>
       <label className="block text-sm">
         <span className="text-slate-300">Ce que je cherche</span>
+        <span className="mt-1 block text-xs text-slate-500">
+          Besoins matériels et relationnels : cadre, rythme, ce que vous aimeriez partager ou recevoir.
+        </span>
         <textarea
           value={profile.seek_text}
           maxLength={MAX_SKILL_TEXT}
@@ -334,6 +310,22 @@ export function SkillsProfileSection() {
         />
         <span className="mt-1 block text-xs text-slate-500">
           {profile.seek_text.length}/{MAX_SKILL_TEXT}
+        </span>
+      </label>
+      <label className="block text-sm">
+        <span className="text-slate-300">Mon cadre</span>
+        <span className="mt-1 block text-xs text-slate-500">
+          Optionnel. Disponibilité, rythme, et ce que vous ne faites pas.
+        </span>
+        <textarea
+          value={profile.frame_text}
+          maxLength={MAX_SKILL_TEXT}
+          rows={4}
+          onChange={(e) => setProfile((p) => ({ ...p, frame_text: e.target.value }))}
+          className="mt-1 w-full min-h-24 resize-y rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 leading-relaxed"
+        />
+        <span className="mt-1 block text-xs text-slate-500">
+          {profile.frame_text.length}/{MAX_SKILL_TEXT}
         </span>
       </label>
 

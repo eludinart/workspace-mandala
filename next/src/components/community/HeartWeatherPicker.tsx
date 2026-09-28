@@ -38,7 +38,7 @@ export function HeartWeatherPicker() {
     void load()
   }, [load])
 
-  const pick = async (next: WeatherStatus) => {
+  const pick = async (next: WeatherStatus | null) => {
     if (!active?.id) return
     setSaving(true)
     setMsg(null)
@@ -47,11 +47,11 @@ export function HeartWeatherPicker() {
       const res = await weatherApi.update({
         community_id: active.id,
         weather_status: next,
-        weather_note: note.trim() || undefined,
+        weather_note: next ? note.trim() || undefined : undefined,
       })
-      setStatus(res.weather.status)
-      setNote(res.weather.note)
-      setMsg('Météo mise à jour')
+      setStatus(res.weather?.status ?? null)
+      setNote(res.weather?.note ?? '')
+      setMsg(next ? 'Météo mise à jour' : 'Météo retirée')
       setTimeout(() => setMsg(null), 2000)
     } catch (e: unknown) {
       setErr(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
@@ -78,7 +78,8 @@ export function HeartWeatherPicker() {
       <div>
         <p className="text-sm font-medium text-slate-200">La Météo des Cœurs</p>
         <p className="text-xs text-slate-500 mt-0.5">
-          Votre état du jour dans <span className="text-violet-300">{active.name}</span>
+          Votre état du jour dans <span className="text-violet-300">{active.name}</span>. Si rien ne
+          correspond, laissez « Aucune ». Sans nouveau choix, l’état disparaît le lendemain.
         </p>
       </div>
       {loading ? (
@@ -86,13 +87,30 @@ export function HeartWeatherPicker() {
       ) : (
         <>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={saving || status === null}
+              onClick={() => void pick(null)}
+              title="Aucune"
+              aria-pressed={status === null}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                status === null
+                  ? 'border-violet-500/60 bg-violet-950/50 text-violet-100'
+                  : 'border-slate-700 text-slate-400 hover:border-slate-600'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-600" aria-hidden />
+              <span aria-hidden>—</span>
+              <span className="text-xs">Aucune</span>
+            </button>
             {WEATHER_OPTIONS.map((o) => (
               <button
                 key={o.id}
                 type="button"
                 disabled={saving}
-                onClick={() => void pick(o.id)}
-                title={o.label}
+                onClick={() => void pick(status === o.id ? null : o.id)}
+                title={status === o.id ? `Retirer ${o.label}` : o.label}
+                aria-pressed={status === o.id}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-colors ${
                   status === o.id
                     ? 'border-violet-500/60 bg-violet-950/50 text-violet-100'
@@ -105,10 +123,12 @@ export function HeartWeatherPicker() {
               </button>
             ))}
           </div>
-          {current && (
+          {current ? (
             <p className="text-xs text-slate-400">
-              Actuel : {current.emoji} {current.label}
+              Aujourd’hui : {current.emoji} {current.label}. Un second clic retire ce choix.
             </p>
+          ) : (
+            <p className="text-xs text-slate-500">Aucune météo pour aujourd’hui.</p>
           )}
           <label className="block text-xs text-slate-500">
             <span>Note courte (optionnel, 100 car.)</span>

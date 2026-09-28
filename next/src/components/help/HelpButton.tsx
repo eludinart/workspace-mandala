@@ -1,12 +1,49 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { MandalaPage } from '@/components/MandalaApp'
 import { supportApi, type SupportKind } from '@/api/support'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { helpForPage } from '@/lib/help-topics'
 import { PAGE_LABELS } from '@/lib/nav'
+
+const POS_KEY = 'mdl_help_button_pos'
+const DRAG_THRESHOLD_PX = 8
+const VIEW_MARGIN_PX = 8
+const FAB_SIZE_PX = 44
+
+type FabPos = { x: number; y: number }
+
+function clampFab(x: number, y: number, width = FAB_SIZE_PX, height = FAB_SIZE_PX): FabPos {
+  const maxX = Math.max(VIEW_MARGIN_PX, window.innerWidth - width - VIEW_MARGIN_PX)
+  const maxY = Math.max(VIEW_MARGIN_PX, window.innerHeight - height - VIEW_MARGIN_PX)
+  return {
+    x: Math.min(Math.max(VIEW_MARGIN_PX, x), maxX),
+    y: Math.min(Math.max(VIEW_MARGIN_PX, y), maxY),
+  }
+}
+
+function readSavedPos(): FabPos | null {
+  try {
+    const raw = localStorage.getItem(POS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown }
+    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null
+    if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null
+    return clampFab(parsed.x, parsed.y)
+  } catch {
+    return null
+  }
+}
+
+function savePos(pos: FabPos) {
+  try {
+    localStorage.setItem(POS_KEY, JSON.stringify(pos))
+  } catch {
+    /* navigation privée ou quota */
+  }
+}
 
 export function HelpButton({ page }: { page: MandalaPage }) {
   const { active } = useCommunity()
@@ -18,9 +55,48 @@ export function HelpButton({ page }: { page: MandalaPage }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
+  const [pos, setPos] = useState<FabPos | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    originX: number
+    originY: number
+    width: number
+    height: number
+    moved: boolean
+    last: FabPos
+  } | null>(null)
+  const ignoreClickUntil = useRef(0)
+  const openedFromClick = useRef(false)
+  const customPos = useRef(false)
 
   const help = helpForPage(page)
   const aboveNav = page !== 'messages'
+
+  useEffect(() => {
+    const saved = readSavedPos()
+    if (saved) {
+      customPos.current = true
+      setPos(saved)
+    }
+  }, [])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (!customPos.current) return
+      setPos((current) => {
+        if (!current) return current
+        const next = clampFab(current.x, current.y)
+        if (next.x === current.x && next.y === current.y) return current
+        savePos(next)
+        return next
+      })
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -30,6 +106,90 @@ export function HelpButton({ page }: { page: MandalaPage }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
+
+  const openHelp = () => {
+    setTab('help')
+    setSent(false)
+    setError(null)
+    setOpen(true)
+  }
+  const openHelpRef = useRef(openHelp)
+  openHelpRef.current = openHelp
+  const stopDragListeners = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => stopDragListeners.current?.(), [])
+
+  const onFabPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    stopDragListeners.current?.()
+    const rect = event.currentTarget.getBoundingClientRect()
+    const origin = clampFab(rect.left, rect.top, rect.width, rect.height)
+    const drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: origin.x,
+      originY: origin.y,
+      width: rect.width,
+      height: rect.height,
+      moved: false,
+      last: origin,
+    }
+    dragRef.current = drag
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      /* le suivi fenêtre suffit si la capture est refusée */
+    }
+
+    const onMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== drag.pointerId) return
+      const dx = moveEvent.clientX - drag.startX
+      const dy = moveEvent.clientY - drag.startY
+      if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return
+      drag.moved = true
+      setDragging(true)
+      moveEvent.preventDefault()
+      const next = clampFab(drag.originX + dx, drag.originY + dy, drag.width, drag.height)
+      drag.last = next
+      setPos(next)
+    }
+    const onUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== drag.pointerId) return
+      stop()
+      const dx = upEvent.clientX - drag.startX
+      const dy = upEvent.clientY - drag.startY
+      if (!drag.moved && Math.hypot(dx, dy) >= DRAG_THRESHOLD_PX) {
+        drag.moved = true
+        drag.last = clampFab(drag.originX + dx, drag.originY + dy, drag.width, drag.height)
+      }
+      dragRef.current = null
+      setDragging(false)
+      if (!drag.moved) {
+        if (upEvent.type === 'pointercancel') return
+        openedFromClick.current = false
+        window.setTimeout(() => {
+          if (openedFromClick.current) return
+          openHelpRef.current()
+        }, 40)
+        return
+      }
+      ignoreClickUntil.current = performance.now() + 400
+      customPos.current = true
+      savePos(drag.last)
+      setPos(drag.last)
+    }
+    const stop = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+      stopDragListeners.current = null
+    }
+    stopDragListeners.current = stop
+    window.addEventListener('pointermove', onMove, { passive: false })
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+  }
 
   const openReport = (nextKind: SupportKind) => {
     setKind(nextKind)
@@ -68,18 +228,24 @@ export function HelpButton({ page }: { page: MandalaPage }) {
       {!open && (
         <button
           type="button"
+          onPointerDown={onFabPointerDown}
           onClick={() => {
-            setTab('help')
-            setSent(false)
-            setError(null)
-            setOpen(true)
+            if (performance.now() < ignoreClickUntil.current) return
+            openedFromClick.current = true
+            openHelp()
           }}
-          className={`fixed z-[60] right-4 flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-full bg-violet-600 text-white text-lg font-semibold shadow-lg shadow-violet-950/40 hover:bg-violet-500 ${
-            aboveNav
-              ? 'bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6'
-              : 'bottom-24 md:bottom-6'
+          className={`fixed z-[60] touch-none select-none flex items-center justify-center min-w-[44px] min-h-[44px] w-11 h-11 rounded-full bg-violet-600 text-white text-lg font-semibold shadow-lg shadow-violet-950/40 hover:bg-violet-500 ${
+            dragging ? 'cursor-grabbing scale-105' : 'cursor-grab'
+          } ${
+            pos
+              ? ''
+              : aboveNav
+                ? 'right-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] md:bottom-6'
+                : 'right-4 bottom-24 md:bottom-6'
           }`}
-          aria-label="Aide"
+          style={pos ? { left: pos.x, top: pos.y } : undefined}
+          aria-label="Aide. Glisser pour déplacer le bouton."
+          title="Glisser pour déplacer"
           aria-haspopup="dialog"
         >
           ?

@@ -4,6 +4,7 @@
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
 import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
+import { messageReplyExcerpt, type MessageReplyQuote } from './chat-attachments'
 import { isAvatarImageUrl } from './user-avatar'
 
 const PRESENCE_ONLINE_SECONDS = 300
@@ -325,7 +326,7 @@ export async function openDirectChannel(
     [ua, ub]
   )
   const channelId = chanRows?.[0] ? Number(chanRows[0].id) : 0
-  if (!channelId) throw new Error('Impossible de créer le dialogue')
+  if (!channelId) throw new Error('Impossible de créer la conversation')
   return { channelId }
 }
 
@@ -801,6 +802,7 @@ function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise
         attachment_mime VARCHAR(127) DEFAULT NULL,
         attachment_name VARCHAR(255) DEFAULT NULL,
         attachment_size INT DEFAULT NULL,
+        reply_to_id INT DEFAULT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_channel (channel_id, created_at)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -810,6 +812,7 @@ function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise
         ['attachment_mime', 'VARCHAR(127) NULL'],
         ['attachment_name', 'VARCHAR(255) NULL'],
         ['attachment_size', 'INT NULL'],
+        ['reply_to_id', 'INT NULL'],
       ] as const) {
         try {
           await pool.execute(`ALTER TABLE ${t} ADD COLUMN ${col} ${def}`)
@@ -817,7 +820,15 @@ function ensureMessagesTable(pool: Awaited<ReturnType<typeof getPool>>): Promise
           /* colonne déjà présente */
         }
       }
-  })
+  }).then(() =>
+    ensureOnce('social-messages-reply-to', async () => {
+      try {
+        await pool.execute(`ALTER TABLE ${t} ADD COLUMN reply_to_id INT NULL`)
+      } catch {
+        /* colonne déjà présente */
+      }
+    }),
+  )
 }
 
 let _ensureReactionsTablePromise: Promise<void> | null = null
@@ -939,10 +950,11 @@ export type ChannelMessage = {
   senderAvatar?: string | null
   senderAvatarEmoji?: string | null
   reactions?: MessageReactionSummary[]
+  replyTo?: MessageReplyQuote | null
 }
 
 const MESSAGE_COLUMNS = `id, sender_id, body, card_slug, temperature, created_at,
-  attachment_path, attachment_mime, attachment_name, attachment_size`
+  attachment_path, attachment_mime, attachment_name, attachment_size, reply_to_id`
 
 function attachmentFromRow(r: RowDataPacket): ChannelMessage['attachment'] {
   const path = r.attachment_path ? String(r.attachment_path) : ''
@@ -978,7 +990,7 @@ export async function getChannelMessages(
 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT m.id, m.sender_id, m.body, m.card_slug, m.temperature, m.created_at,
-            m.attachment_path, m.attachment_mime, m.attachment_name, m.attachment_size,
+            m.attachment_path, m.attachment_mime, m.attachment_name, m.attachment_size, m.reply_to_id,
             COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.sender_id)) AS sender_pseudo,
             av.meta_value AS sender_avatar,
             COALESCE(em.meta_value, '🌸') AS sender_avatar_emoji
@@ -1003,14 +1015,35 @@ export async function getChannelMessages(
     senderPseudo: r.sender_pseudo ? String(r.sender_pseudo) : null,
     senderAvatar: r.sender_avatar ? String(r.sender_avatar) : null,
     senderAvatarEmoji: r.sender_avatar_emoji ? String(r.sender_avatar_emoji) : null,
+    replyToId: r.reply_to_id ? Number(r.reply_to_id) : null,
   }))
 
+  const byId = new Map(messages.map((m) => [m.id, m]))
   const ids = messages.map((m) => m.id)
   const reactionsMap = await getReactionsForMessageIds(ids)
-  return messages.map((m) => ({
-    ...m,
-    reactions: reactionsMap[m.id] ?? [],
-  }))
+  return messages.map((m) => {
+    const parent = m.replyToId ? byId.get(m.replyToId) : undefined
+    const replyTo: MessageReplyQuote | null = m.replyToId
+      ? parent
+        ? {
+            id: parent.id,
+            senderId: parent.senderId,
+            senderName: parent.senderPseudo || 'Membre',
+            excerpt: messageReplyExcerpt({
+              body: parent.body,
+              cardSlug: parent.cardSlug,
+              attachmentMime: parent.attachment?.mime,
+              attachmentName: parent.attachment?.name,
+            }),
+          }
+        : { id: m.replyToId, senderName: '', excerpt: '', missing: true }
+      : null
+    return {
+      ...m,
+      reactions: reactionsMap[m.id] ?? [],
+      replyTo,
+    }
+  })
 }
 
 /** Récupère le timestamp de la dernière activité (created_at) du canal. */
@@ -1087,6 +1120,7 @@ export async function sendChannelMessage(
     body?: string | null
     cardSlug?: string | null
     attachment?: { path: string; mime: string; name: string; size: number } | null
+    replyToId?: number | null
   }
 ): Promise<ChannelMessage> {
   const pool = getPool()
@@ -1103,9 +1137,22 @@ export async function sendChannelMessage(
 
   await ensureMessagesTable(pool)
 
+  const requestedReply = payload.replyToId ? Number(payload.replyToId) : 0
+  let replyToId: number | null = null
+  if (requestedReply > 0) {
+    const [parentRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT id FROM ${t} WHERE id = ? AND channel_id = ? LIMIT 1`,
+      [requestedReply, channelId]
+    )
+    if (!parentRows?.[0]) {
+      throw Object.assign(new Error('Message d’origine introuvable'), { status: 400 })
+    }
+    replyToId = requestedReply
+  }
+
   await pool.execute(
-    `INSERT INTO ${t} (channel_id, sender_id, body, card_slug, temperature, created_at, attachment_path, attachment_mime, attachment_name, attachment_size)
-     VALUES (?, ?, ?, ?, 'calm', NOW(), ?, ?, ?, ?)`,
+    `INSERT INTO ${t} (channel_id, sender_id, body, card_slug, temperature, created_at, attachment_path, attachment_mime, attachment_name, attachment_size, reply_to_id)
+     VALUES (?, ?, ?, ?, 'calm', NOW(), ?, ?, ?, ?, ?)`,
     [
       channelId,
       senderId,
@@ -1115,6 +1162,7 @@ export async function sendChannelMessage(
       attachment?.mime ?? null,
       attachment?.name ?? null,
       attachment?.size ?? null,
+      replyToId,
     ]
   )
 
@@ -1133,6 +1181,40 @@ export async function sendChannelMessage(
     temperature: r.temperature ? String(r.temperature) : null,
     createdAt: String(r.created_at ?? new Date().toISOString()),
     attachment: attachmentFromRow(r),
+    replyTo: replyToId ? await loadReplyQuote(pool, channelId, replyToId) : null,
+  }
+}
+
+async function loadReplyQuote(
+  pool: ReturnType<typeof getPool>,
+  channelId: number,
+  replyToId: number,
+): Promise<MessageReplyQuote | null> {
+  const t = table(P2P_MESSAGES_TABLE)
+  const tUsers = table('users')
+  const tMeta = table('usermeta')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT m.id, m.sender_id, m.body, m.card_slug, m.attachment_mime, m.attachment_name,
+            COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.sender_id)) AS sender_pseudo
+     FROM ${t} m
+     JOIN ${tUsers} u ON u.ID = m.sender_id
+     LEFT JOIN ${tMeta} p ON p.user_id = m.sender_id AND p.meta_key = 'mdl_pseudo'
+     WHERE m.id = ? AND m.channel_id = ?
+     LIMIT 1`,
+    [replyToId, channelId]
+  )
+  const parent = rows?.[0]
+  if (!parent) return { id: replyToId, senderName: '', excerpt: '', missing: true }
+  return {
+    id: Number(parent.id),
+    senderId: Number(parent.sender_id),
+    senderName: parent.sender_pseudo ? String(parent.sender_pseudo) : 'Membre',
+    excerpt: messageReplyExcerpt({
+      body: parent.body ? String(parent.body) : null,
+      cardSlug: parent.card_slug ? String(parent.card_slug) : null,
+      attachmentMime: parent.attachment_mime ? String(parent.attachment_mime) : null,
+      attachmentName: parent.attachment_name ? String(parent.attachment_name) : null,
+    }),
   }
 }
 

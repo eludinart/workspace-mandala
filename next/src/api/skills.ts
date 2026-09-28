@@ -1,5 +1,5 @@
 import { api } from '@/lib/api-client'
-import type { SkillRegister, SkillScope, SkillTraitCode } from '@/lib/skill-constants'
+import type { SkillRegister, SkillScope } from '@/lib/skill-constants'
 
 export type SkillTag = { label: string; register: SkillRegister }
 
@@ -15,11 +15,11 @@ export type SkillProfile = {
   scope: SkillScope
   offer_text: string
   seek_text: string
+  frame_text: string
   updated_at: string | null
   place_ids: number[]
   places: SkillPlaceRef[]
   tags: SkillTag[]
-  traits: SkillTraitCode[]
 }
 
 export type SkillCard = {
@@ -31,8 +31,8 @@ export type SkillCard = {
   scope: SkillScope
   offer_text: string
   seek_text: string
+  frame_text: string
   tags: SkillTag[]
-  traits: SkillTraitCode[]
   places: SkillPlaceRef[]
   is_me: boolean
 }
@@ -56,9 +56,9 @@ export const skillsApi = {
     scope: SkillScope
     offer_text: string
     seek_text: string
+    frame_text: string
     place_ids: number[]
     tags: SkillTag[]
-    traits: SkillTraitCode[]
   }) => api.put('/api/skills/profile', body) as Promise<{ profile: SkillProfile }>,
   directory: (params: { view: 'place' | 'mandala'; communitySlug?: string; q?: string; tag?: string }) => {
     const q = new URLSearchParams()

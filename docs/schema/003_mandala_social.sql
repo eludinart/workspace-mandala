@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS mdl_chat_channel_messages (
   attachment_mime VARCHAR(127) DEFAULT NULL,
   attachment_name VARCHAR(255) DEFAULT NULL,
   attachment_size INT DEFAULT NULL,
+  reply_to_id INT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_channel (channel_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

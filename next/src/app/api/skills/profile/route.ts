@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
 import { getMySkillProfile, saveMySkillProfile } from '@/lib/db-skills'
-import { isSkillRegister, isSkillScope, isSkillTraitCode, type SkillTraitCode } from '@/lib/skill-constants'
+import { isSkillRegister, isSkillScope } from '@/lib/skill-constants'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,16 +21,13 @@ function parseBody(body: Record<string, unknown>) {
         return [{ label: String(row.label ?? ''), register: row.register }]
       })
     : []
-  const traits = Array.isArray(body.traits)
-    ? body.traits.map(String).filter(isSkillTraitCode)
-    : []
   return {
     scope: body.scope,
     offer_text: String(body.offer_text ?? ''),
     seek_text: String(body.seek_text ?? ''),
+    frame_text: String(body.frame_text ?? ''),
     place_ids: placeIds,
     tags,
-    traits: traits as SkillTraitCode[],
   }
 }
 

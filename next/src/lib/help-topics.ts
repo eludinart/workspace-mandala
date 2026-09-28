@@ -24,8 +24,8 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
     '« Mandala » en haut à gauche ramène à la page précédente.',
   ],
   skills: [
-    'Indiquez ce que vous savez faire, puis enregistrez.',
-    'L’annuaire du lieu montre les compétences visibles des autres membres.',
+    'Les savoir-faire servent à vous retrouver. Le texte décrit des rôles, pas une liste de qualités.',
+    'L’annuaire montre les fiches que les membres ont choisi de rendre visibles.',
   ],
   resources: [
     'Textes, recettes, vidéos et documents partagés dans le lieu.',

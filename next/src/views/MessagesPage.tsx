@@ -127,7 +127,7 @@ export function MessagesPage({
         onOpenChannel?.(res.channelId)
         await loadChannels()
       } catch (e: unknown) {
-        setError(e instanceof ApiError ? e.detail : 'Impossible d\'ouvrir le dialogue')
+        setError(e instanceof ApiError ? e.detail : 'Impossible d\'ouvrir la conversation')
       }
     }
     void openForUser()
@@ -314,7 +314,7 @@ export function MessagesPage({
                 listTab === 'dialogues' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Dialogues
+              Conversations
               {channels.some((c) => c.unreadCount > 0) && (
                 <span className="ml-1.5 text-[10px]" aria-hidden>●</span>
               )}

@@ -52,6 +52,7 @@ export async function GET(req: NextRequest) {
       senderAvatar: m.senderAvatar,
       senderAvatarEmoji: m.senderAvatarEmoji,
       reactions: m.reactions ?? [],
+      replyTo: m.replyTo ?? null,
     }))
     return NextResponse.json({
       messages: formatted,

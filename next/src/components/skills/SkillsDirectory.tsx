@@ -8,8 +8,6 @@ import { ApiError } from '@/lib/api-client'
 import {
   SKILL_REGISTER_LABELS,
   SKILL_REGISTERS,
-  SKILL_TRAITS,
-  skillTraitLabel,
   type SkillRegister,
 } from '@/lib/skill-constants'
 
@@ -84,7 +82,6 @@ export function SkillsDirectory({
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
-  const [trait, setTrait] = useState('')
   const [cards, setCards] = useState<SkillCard[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(initialUserId ?? null)
   const [loading, setLoading] = useState(true)
@@ -147,7 +144,6 @@ export function SkillsDirectory({
     const q = query.trim().toLocaleLowerCase('fr')
     return cards.filter((card) => {
       if (register && !card.tags.some((t) => t.register === register)) return false
-      if (trait && !card.traits.includes(trait as SkillCard['traits'][number])) return false
       if (!matchesTag(card.tags, tag)) return false
       if (!q) return true
       const hay = [
@@ -155,15 +151,15 @@ export function SkillsDirectory({
         card.display_name,
         card.offer_text,
         card.seek_text,
+        card.frame_text,
         ...card.tags.map((t) => `${t.label} ${SKILL_REGISTER_LABELS[t.register]}`),
-        ...card.traits.map(skillTraitLabel),
         ...card.places.map((p) => p.name),
       ]
         .join(' ')
         .toLocaleLowerCase('fr')
       return hay.includes(q)
     })
-  }, [cards, register, trait, tag, query])
+  }, [cards, register, tag, query])
 
   const skillCloud = useMemo(() => {
     const counts = new Map<string, number>()
@@ -308,34 +304,6 @@ export function SkillsDirectory({
             ))}
           </div>
         )}
-        <div className="space-y-1.5">
-          <p className="text-[10px] uppercase tracking-widest text-slate-500">Savoir-être</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => setTrait('')}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                trait === '' ? 'border-violet-500 bg-violet-600/30 text-violet-100' : 'border-slate-700 text-slate-400'
-              }`}
-            >
-              Tous les savoir-être
-            </button>
-          {SKILL_TRAITS.map((item) => (
-            <button
-              key={item.code}
-              type="button"
-              onClick={() => setTrait((cur) => (cur === item.code ? '' : item.code))}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                trait === item.code
-                  ? 'border-violet-500 bg-violet-600/30 text-violet-100'
-                  : 'border-slate-700 text-slate-300 hover:text-white'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-          </div>
-        </div>
         <button
           type="button"
           onClick={() => setFiltersOpen((v) => !v)}
@@ -475,22 +443,6 @@ export function SkillsDirectory({
                 </section>
               )}
 
-              {selected.traits.length > 0 && (
-                <section className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-être</h4>
-                  <ul className="flex flex-wrap gap-1.5">
-                    {selected.traits.map((code) => (
-                      <li
-                        key={code}
-                        className="text-sm px-2.5 py-1 rounded-full border border-violet-700/40 text-violet-100"
-                      >
-                        {skillTraitLabel(code)}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
               {selected.offer_text && (
                 <section className="space-y-3 border-t border-slate-800 pt-6">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -506,6 +458,13 @@ export function SkillsDirectory({
                     Ce que je cherche
                   </h4>
                   <SkillProse text={selected.seek_text} />
+                </section>
+              )}
+
+              {selected.frame_text && (
+                <section className="space-y-3 border-t border-slate-800 pt-6">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Mon cadre</h4>
+                  <SkillProse text={selected.frame_text} />
                 </section>
               )}
 

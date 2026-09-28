@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import { socialApi } from '@/api/social'
 import type { MessageReactionSummary } from '@/lib/message-reactions'
-import type { ChatAttachmentMeta } from '@/lib/chat-attachments'
+import type { ChatAttachmentMeta, MessageReplyQuote } from '@/lib/chat-attachments'
 
 export type ChannelMessage = {
   id?: number
@@ -20,6 +20,7 @@ export type ChannelMessage = {
   senderAvatar?: string | null
   senderAvatarEmoji?: string | null
   reactions?: MessageReactionSummary[]
+  replyTo?: MessageReplyQuote | null
 }
 
 export interface LisiereData {
@@ -50,7 +51,7 @@ export interface SocialStoreState {
   }>
   sendMessage: (
     channelId: number | string,
-    payload: { body?: string; cardSlug?: string; file?: File },
+    payload: { body?: string; cardSlug?: string; file?: File; replyToId?: number },
   ) => Promise<unknown>
   toggleMessageReaction: (
     channelId: number | string,
@@ -154,10 +155,16 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
   sendMessage: async (channelId, payload) => {
     const msg = (
       payload.file
-        ? await socialApi.sendMessageWithFile(String(channelId), payload.body?.trim() ?? '', payload.file)
+        ? await socialApi.sendMessageWithFile(
+            String(channelId),
+            payload.body?.trim() ?? '',
+            payload.file,
+            payload.replyToId,
+          )
         : await socialApi.sendMessage(String(channelId), {
             body: payload.body,
             cardSlug: payload.cardSlug,
+            replyToId: payload.replyToId,
           })
     ) as ChannelMessage & { temperature?: string }
     set((s) => {

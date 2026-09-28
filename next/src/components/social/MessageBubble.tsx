@@ -21,7 +21,10 @@ export function MessageBubble({
   meId,
   showAvatar = false,
   showName = false,
+  highlighted = false,
   onReact,
+  onReply,
+  onJumpTo,
 }: {
   msg: ChannelMessage
   isMe: boolean
@@ -31,11 +34,15 @@ export function MessageBubble({
   meId: number | null
   showAvatar?: boolean
   showName?: boolean
+  highlighted?: boolean
   onReact: (messageId: number, emoji: string) => void
+  onReply?: (msg: ChannelMessage) => void
+  onJumpTo?: (messageId: number) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const holdRef = useRef<number | null>(null)
   const messageId = Number(msg.id ?? msg.messageId)
+  const canReply = Number.isFinite(messageId) && messageId > 0
   const body = msg.body || (msg.cardSlug ? `🃏 ${msg.cardSlug}` : '')
   const reactions = msg.reactions ?? []
   const myReaction = reactions.find((r) => meId != null && r.userIds.includes(meId))?.emoji
@@ -70,7 +77,10 @@ export function MessageBubble({
 
   return (
     <div
-      className={`group flex items-end gap-2 max-w-full min-w-0 ${isMe ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
+      id={canReply ? `chat-msg-${messageId}` : undefined}
+      className={`group flex items-end gap-2 max-w-full min-w-0 rounded-2xl transition-shadow ${
+        highlighted ? 'ring-2 ring-violet-400/80' : ''
+      } ${isMe ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}
       onPointerDown={armHold}
       onPointerUp={clearHold}
       onPointerLeave={clearHold}
@@ -96,6 +106,30 @@ export function MessageBubble({
         >
           {showName && (
             <p className="text-[12px] font-semibold text-violet-400 leading-tight mb-0.5 break-words">{displayName}</p>
+          )}
+          {msg.replyTo && (
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                const quoted = msg.replyTo
+                if (quoted && !quoted.missing) onJumpTo?.(quoted.id)
+              }}
+              className={`mb-1 block w-full min-w-0 text-left rounded-lg border-l-4 px-2 py-1 ${
+                isMe ? 'border-white/80 bg-white/15' : 'border-violet-400 bg-slate-950/40'
+              }`}
+            >
+              {msg.replyTo.missing ? (
+                <span className="text-xs italic opacity-80">Message d’origine indisponible</span>
+              ) : (
+                <>
+                  <span className={`block text-[11px] font-semibold leading-tight ${isMe ? 'text-white' : 'text-violet-300'}`}>
+                    {meId != null && msg.replyTo.senderId === meId ? 'Vous' : msg.replyTo.senderName || 'Membre'}
+                  </span>
+                  <span className="block truncate text-xs opacity-80">{msg.replyTo.excerpt || 'Message'}</span>
+                </>
+              )}
+            </button>
           )}
           {previewUrl && (
             <a href={fileUrl || previewUrl} target="_blank" rel="noreferrer" className="block mb-1">
@@ -157,8 +191,24 @@ export function MessageBubble({
             pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
           } ${isMe ? 'justify-end' : ''}`}
         >
+          {canReply && onReply && (
+            <button
+              type="button"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                setPickerOpen(false)
+                onReply(msg)
+              }}
+              className="h-7 px-2 rounded-full text-[12px] text-slate-400 hover:text-slate-100 hover:bg-slate-800/80"
+              title="Répondre"
+              aria-label="Répondre au message"
+            >
+              Répondre
+            </button>
+          )}
           <button
             type="button"
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setPickerOpen((v) => !v)}
             className="text-sm w-7 h-7 rounded-full text-slate-500 hover:text-slate-200 hover:bg-slate-800/80"
             title="Réagir"

@@ -4,7 +4,11 @@ import {
   getCommunityBySlug,
   requireCommunityMembership,
 } from '@/lib/db-communities'
-import { getUserWeatherForCommunity, setUserWeatherForCommunity } from '@/lib/db-weather'
+import {
+  clearUserWeatherForCommunity,
+  getUserWeatherForCommunity,
+  setUserWeatherForCommunity,
+} from '@/lib/db-weather'
 import { isWeatherStatus } from '@/lib/weather-status'
 import { isDbConfigured } from '@/lib/db'
 
@@ -60,11 +64,16 @@ export async function POST(req: NextRequest) {
     if (!communityId || communityId < 1) {
       return NextResponse.json({ error: 'community_id requis' }, { status: 400 })
     }
-    const status = String(body.weather_status ?? body.status ?? '').trim()
+    const rawStatus = body.weather_status ?? body.status
+    const status = rawStatus == null ? '' : String(rawStatus).trim()
+    await requireCommunityMembership(uid, communityId)
+    if (!status || status === 'none') {
+      await clearUserWeatherForCommunity(uid, communityId)
+      return NextResponse.json({ community_id: communityId, weather: null })
+    }
     if (!isWeatherStatus(status)) {
       return NextResponse.json({ error: 'weather_status invalide' }, { status: 400 })
     }
-    await requireCommunityMembership(uid, communityId)
     const weather = await setUserWeatherForCommunity(
       uid,
       communityId,

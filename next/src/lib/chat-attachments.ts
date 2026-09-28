@@ -101,3 +101,26 @@ export function messageMediaUrl(messageId: number, download = false): string {
   const base = `/api/social/messages/${messageId}/media`
   return download ? `${base}?download=1` : base
 }
+
+/** Citation affichée au-dessus d’une réponse, comme dans une conversation. */
+export type MessageReplyQuote = {
+  id: number
+  senderId?: number
+  senderName: string
+  excerpt: string
+  missing?: boolean
+}
+
+export function messageReplyExcerpt(input: {
+  body?: string | null
+  cardSlug?: string | null
+  attachmentMime?: string | null
+  attachmentName?: string | null
+}): string {
+  const text = String(input.body ?? '').replace(/\s+/g, ' ').trim()
+  if (text) return text.length > 90 ? `${text.slice(0, 87)}…` : text
+  if (input.attachmentMime && isChatImagePreview(input.attachmentMime)) return 'Photo'
+  if (input.attachmentName) return input.attachmentName
+  if (input.cardSlug) return 'Carte'
+  return 'Message'
+}

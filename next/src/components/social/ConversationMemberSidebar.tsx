@@ -135,7 +135,7 @@ export function ConversationMemberSidebar({
             )}
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-slate-100">
-                {onBack ? 'Nouveau dialogue' : 'Membres du lieu'}
+                {onBack ? 'Nouvelle conversation' : 'Membres du lieu'}
               </h2>
               <p className="text-[11px] text-slate-500 truncate">{active?.name ?? '—'}</p>
             </div>

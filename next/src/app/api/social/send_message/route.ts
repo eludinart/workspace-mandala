@@ -26,6 +26,12 @@ type Incoming = {
   text: string
   cardSlug: string | null
   file: File | null
+  replyToId: number | null
+}
+
+function parseReplyToId(raw: unknown): number | null {
+  const n = parseInt(String(raw ?? ''), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 async function readIncoming(req: NextRequest): Promise<Incoming> {
@@ -38,7 +44,13 @@ async function readIncoming(req: NextRequest): Promise<Incoming> {
     const cardSlug = cardRaw ? String(cardRaw) : null
     const fileValue = form.get('file')
     const file = fileValue instanceof File && fileValue.size > 0 ? fileValue : null
-    return { channelId: Number.isFinite(channelId) ? channelId : 0, text, cardSlug, file }
+    return {
+      channelId: Number.isFinite(channelId) ? channelId : 0,
+      text,
+      cardSlug,
+      file,
+      replyToId: parseReplyToId(form.get('replyToId') ?? form.get('reply_to_id')),
+    }
   }
   const body = (await req.json()) as {
     channelId?: number
@@ -46,12 +58,15 @@ async function readIncoming(req: NextRequest): Promise<Incoming> {
     body?: string
     cardSlug?: string
     card_slug?: string
+    replyToId?: number
+    reply_to_id?: number
   }
   return {
     channelId: body.channelId ?? body.channel_id ?? 0,
     text: body.body ?? '',
     cardSlug: body.cardSlug ?? body.card_slug ?? null,
     file: null,
+    replyToId: parseReplyToId(body.replyToId ?? body.reply_to_id),
   }
 }
 
@@ -59,7 +74,7 @@ export async function POST(req: NextRequest) {
   let storedPath: string | null = null
   try {
     const { userId } = await requireAuth(req)
-    const { channelId, text, cardSlug, file } = await readIncoming(req)
+    const { channelId, text, cardSlug, file, replyToId } = await readIncoming(req)
 
     if (!channelId) {
       return NextResponse.json({ error: 'channelId requis' }, { status: 400 })
@@ -112,6 +127,7 @@ export async function POST(req: NextRequest) {
       body: text?.trim() || null,
       cardSlug: cardSlug?.trim() || null,
       attachment,
+      replyToId,
     })
     storedPath = null
     const recipientIds = await getChannelRecipientIds(channelId, senderId)
@@ -141,6 +157,7 @@ export async function POST(req: NextRequest) {
         attachment: msg.attachment ?? null,
         temperature: msg.temperature,
         createdAt: msg.createdAt,
+        replyTo: msg.replyTo ?? null,
       },
       { status: 201 }
     )

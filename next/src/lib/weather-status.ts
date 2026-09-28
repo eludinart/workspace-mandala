@@ -11,6 +11,9 @@ export type WeatherState = {
   updated_at: string
 }
 
+/** Jour civil de la météo : l’état du jour ne survit pas au lendemain. */
+export const WEATHER_DAY_TZ = 'Europe/Paris'
+
 export type WeatherByCommunityMap = Record<string, WeatherState>
 
 export const WEATHER_OPTIONS: {
@@ -45,8 +48,7 @@ export function parseWeatherByCommunityJson(raw: string | null | undefined): Wea
       const status = o.status
       if (!isWeatherStatus(status)) continue
       const note = String(o.note ?? '').slice(0, 100)
-      const updated_at =
-        typeof o.updated_at === 'string' && o.updated_at ? o.updated_at : new Date().toISOString()
+      const updated_at = typeof o.updated_at === 'string' ? o.updated_at : ''
       out[key] = { status, note, updated_at }
     }
     return out
@@ -55,9 +57,32 @@ export function parseWeatherByCommunityJson(raw: string | null | undefined): Wea
   }
 }
 
+/** Clé `YYYY-MM-DD` dans le fuseau de la météo. Chaîne vide si la date est illisible. */
+export function weatherCalendarDay(isoOrDate: string | Date, timeZone = WEATHER_DAY_TZ): string {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
+/** Vrai seulement si le choix a été fait le même jour civil que `now`. */
+export function isWeatherCurrent(state: WeatherState | null | undefined, now = new Date()): boolean {
+  if (!state?.updated_at) return false
+  const day = weatherCalendarDay(state.updated_at)
+  if (!day) return false
+  return day === weatherCalendarDay(now)
+}
+
 export function pickWeatherForCommunity(
   map: WeatherByCommunityMap,
-  communityId: number
+  communityId: number,
+  now = new Date()
 ): WeatherState | null {
-  return map[String(communityId)] ?? null
+  const state = map[String(communityId)] ?? null
+  if (!state || !isWeatherCurrent(state, now)) return null
+  return state
 }

@@ -9,11 +9,11 @@ export const weatherApi = {
     }>,
   update: (body: {
     community_id: number
-    weather_status: WeatherStatus
+    weather_status: WeatherStatus | null
     weather_note?: string
   }) =>
     api.post('/api/users/weather', body) as Promise<{
       community_id: number
-      weather: WeatherState
+      weather: WeatherState | null
     }>,
 }
