@@ -39,6 +39,8 @@ export interface SocialStoreState {
   relations: Record<string, string>
   channels: Record<string, { channelId: number; otherUserId?: number; otherPseudo?: string }>
   messagesByChannel: Record<string, ChannelMessage[]>
+  /** Curseur de lecture du pair (1:1) — pour les coches « lu ». */
+  peerLastReadAtByChannel: Record<string, string | null>
   temperatureByChannel: Record<string, string>
   setLisiere: (data: LisiereData | null) => void
   clearLisiere: () => void
@@ -48,6 +50,7 @@ export interface SocialStoreState {
     messages: ChannelMessage[]
     unreadFromMessageId: number | null
     unreadCount: number
+    peerLastReadAt: string | null
   }>
   sendMessage: (
     channelId: number | string,
@@ -76,6 +79,7 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
   relations: {}, // { [targetUserId]: 'none' | 'pending_out' | 'pending_in' | 'accepted' | 'blocked' }
   channels: {}, // { [channelId]: { channelId, otherUserId, otherPseudo } }
   messagesByChannel: {}, // { [channelId]: Array<{ id, senderId, body, cardSlug, temperature, createdAt }> }
+  peerLastReadAtByChannel: {},
   temperatureByChannel: {}, // { [channelId]: 'calm' | 'vibrant' | 'tense' | 'breach' }
 
   setLisiere: (data) => set({ lisiere: data, lisiereError: null }),
@@ -116,8 +120,10 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
       messages?: ChannelMessage[]
       unreadFromMessageId?: number | null
       unreadCount?: number
+      peerLastReadAt?: string | null
     }
     const serverMessages = data.messages || []
+    const peerLastReadAt = data.peerLastReadAt ?? null
     set((s) => {
       const key = String(channelId)
       const current = s.messagesByChannel[key] || []
@@ -143,12 +149,14 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
       )
       return {
         messagesByChannel: { ...s.messagesByChannel, [key]: merged },
+        peerLastReadAtByChannel: { ...s.peerLastReadAtByChannel, [key]: peerLastReadAt },
       }
     })
     return {
       messages: data.messages || [],
       unreadFromMessageId: data.unreadFromMessageId ?? null,
       unreadCount: data.unreadCount ?? 0,
+      peerLastReadAt,
     }
   },
 

@@ -11,6 +11,7 @@ import {
   isChatImagePreview,
   messageMediaUrl,
 } from '@/lib/chat-attachments'
+import type { MessageReceiptStatus } from '@/lib/chat-receipts'
 
 export function MessageBubble({
   msg,
@@ -23,6 +24,7 @@ export function MessageBubble({
   showName = false,
   highlighted = false,
   senderId,
+  receiptStatus,
   onOpenProfile,
   onReact,
   onReply,
@@ -38,6 +40,8 @@ export function MessageBubble({
   showName?: boolean
   highlighted?: boolean
   senderId?: number | null
+  /** Coches envoyé / lu (1:1, bulles sortantes seulement). */
+  receiptStatus?: MessageReceiptStatus | null
   onOpenProfile?: (userId: number) => void
   onReact: (messageId: number, emoji: string) => void
   onReply?: (msg: ChannelMessage) => void
@@ -51,6 +55,7 @@ export function MessageBubble({
   const reactions = msg.reactions ?? []
   const myReaction = reactions.find((r) => meId != null && r.userIds.includes(meId))?.emoji
   const time = formatChatBubbleTime(msg.createdAt)
+  const showReceipt = isMe && receiptStatus != null
 
   const handleReact = (emoji: string) => {
     if (!messageId) return
@@ -189,20 +194,21 @@ export function MessageBubble({
               )}
             </a>
           )}
-          {(body || time) && (
+          {(body || time || showReceipt) && (
             <div className="min-w-0 max-w-full">
               {body ? (
                 <div className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-[15px] leading-snug">
                   {body}
                 </div>
               ) : null}
-              {time && (
+              {(time || showReceipt) && (
                 <p
-                  className={`text-right text-[10px] leading-none mt-1 ${
+                  className={`flex items-center justify-end gap-1 text-right text-[10px] leading-none mt-1 ${
                     isMe ? 'text-white/75' : 'text-slate-400'
                   }`}
                 >
-                  {time}
+                  {time ? <span>{time}</span> : null}
+                  {showReceipt && receiptStatus ? <ReceiptTicks status={receiptStatus} /> : null}
                 </p>
               )}
             </div>
@@ -273,6 +279,45 @@ export function MessageBubble({
         </div>
       </div>
     </div>
+  )
+}
+
+function ReceiptTicks({ status }: { status: MessageReceiptStatus }) {
+  const label =
+    status === 'pending' ? 'Envoi…' : status === 'read' ? 'Lu' : 'Envoyé'
+  if (status === 'pending') {
+    return (
+      <span
+        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full border border-current opacity-80"
+        role="img"
+        aria-label={label}
+        title={label}
+      />
+    )
+  }
+  const color = status === 'read' ? 'text-sky-200' : 'text-white/80'
+  return (
+    <span className={`inline-flex shrink-0 ${color}`} role="img" aria-label={label} title={label}>
+      {status === 'sent' ? (
+        <svg width="12" height="10" viewBox="0 0 12 10" aria-hidden focusable="false">
+          <path
+            fill="currentColor"
+            d="M11.05.9 4.35 8.2 1.05 4.9l.95-.95 2.35 2.35L10.1 0z"
+          />
+        </svg>
+      ) : (
+        <svg width="16" height="10" viewBox="0 0 16 10" aria-hidden focusable="false">
+          <path
+            fill="currentColor"
+            d="M10.55.9 3.85 8.2.55 4.9l.95-.95 2.35 2.35L9.6 0z"
+          />
+          <path
+            fill="currentColor"
+            d="M15.05.9 8.35 8.2l-.9-.9 5.75-6.35z"
+          />
+        </svg>
+      )}
+    </span>
   )
 }
 

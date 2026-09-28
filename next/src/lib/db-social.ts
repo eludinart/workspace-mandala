@@ -1431,6 +1431,36 @@ export async function createClairiereMessageNotification(
 }
 
 /**
+ * Curseur de lecture de l’autre personne (canaux direct uniquement).
+ * Sert aux coches « lu » côté expéditeur. Null en groupe ou si jamais ouvert.
+ */
+export async function getDirectPeerLastReadAt(
+  channelId: number,
+  userId: string
+): Promise<string | null> {
+  const pool = getPool()
+  const uid = parseInt(userId, 10)
+  if (!uid || !channelId) return null
+
+  const ch = await assertChannelAccess(pool, channelId, uid)
+  if (String(ch.channel_type ?? 'direct') === 'group') return null
+
+  const ua = Number(ch.user_a)
+  const ub = Number(ch.user_b)
+  const peerId = uid === ua ? ub : ua
+  if (!peerId) return null
+
+  const tMeta = table('usermeta')
+  const metaKey = `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [peerId, metaKey]
+  )
+  const raw = rows?.[0]?.meta_value ? String(rows[0].meta_value).trim() : ''
+  return raw || null
+}
+
+/**
  * Premier message des autres encore non lu, d'après le curseur enregistré
  * avant que l'ouverture du fil ne le fasse avancer.
  */

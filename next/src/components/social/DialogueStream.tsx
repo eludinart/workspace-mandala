@@ -11,6 +11,10 @@ import { UserAvatar } from '@/components/UserAvatar'
 import type { CommunityMember } from '@/api/members'
 import { chatDayKey, formatChatDayLabel } from '@/lib/format-datetime'
 import {
+  isPendingChatMessageId,
+  messageReceiptStatus,
+} from '@/lib/chat-receipts'
+import {
   CHAT_FILE_ACCEPT,
   chatFileError,
   formatFileSize,
@@ -71,6 +75,7 @@ export function DialogueStream({
 
   const {
     messagesByChannel,
+    peerLastReadAtByChannel,
     loadChannelMessages,
     sendMessage,
     toggleMessageReaction,
@@ -107,6 +112,7 @@ export function DialogueStream({
 
   const messages = messagesByChannel[String(channelId)] || []
   const visibleMessages = [...messages, ...pendingMessages]
+  const peerLastReadAt = isGroup ? null : peerLastReadAtByChannel[String(channelId)] ?? null
   const canRename = isGroup && createdBy != null && meId != null && Number(createdBy) === Number(meId)
 
   useEffect(() => {
@@ -715,6 +721,13 @@ export function DialogueStream({
                 showAvatar={isGroup && !isMe}
                 showName={isGroup && !isMe}
                 highlighted={highlightId != null && Number(msg.id ?? msg.messageId) === highlightId}
+                receiptStatus={
+                  isMe && !isGroup
+                    ? messageReceiptStatus(msg.createdAt, peerLastReadAt, {
+                        pending: isPendingChatMessageId(msg.id ?? msg.messageId),
+                      })
+                    : null
+                }
                 onReact={handleReact}
                 onReply={startReply}
                 onJumpTo={jumpToMessage}

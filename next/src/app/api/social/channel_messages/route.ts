@@ -4,7 +4,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
-import { getChannelMessages, getChannelUnreadMarker } from '@/lib/db-social'
+import {
+  getChannelMessages,
+  getChannelUnreadMarker,
+  getDirectPeerLastReadAt,
+} from '@/lib/db-social'
 import { getStubMessages } from '@/lib/social-stub-store'
 
 export const dynamic = 'force-dynamic'
@@ -32,12 +36,18 @@ export async function GET(req: NextRequest) {
         temperature: m.temperature,
         createdAt: m.createdAt,
       }))
-      return NextResponse.json({ messages: formatted, unreadFromMessageId: null, unreadCount: 0 })
+      return NextResponse.json({
+        messages: formatted,
+        unreadFromMessageId: null,
+        unreadCount: 0,
+        peerLastReadAt: null,
+      })
     }
 
-    const [messages, unread] = await Promise.all([
+    const [messages, unread, peerLastReadAt] = await Promise.all([
       getChannelMessages(cid, userId),
       getChannelUnreadMarker(cid, userId),
+      getDirectPeerLastReadAt(cid, userId),
     ])
     const formatted = messages.map((m) => ({
       id: m.id,
@@ -58,6 +68,7 @@ export async function GET(req: NextRequest) {
       messages: formatted,
       unreadFromMessageId: unread.unreadFromMessageId,
       unreadCount: unread.unreadCount,
+      peerLastReadAt,
     })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
