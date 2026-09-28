@@ -18,11 +18,13 @@ export function GroupParticipantsPreview({
   memberIds,
   participantsById,
   meId,
+  onOpenProfile,
   className = '',
 }: {
   memberIds: number[]
   participantsById: Record<number, { pseudo: string; avatar?: string | null; avatarEmoji?: string }>
   meId?: number | null
+  onOpenProfile?: (userId: number) => void
   className?: string
 }) {
   const [expanded, setExpanded] = useState(false)
@@ -96,24 +98,52 @@ export function GroupParticipantsPreview({
       {expanded && (
         <ul className="rounded-lg border border-slate-800 bg-slate-950/60 divide-y divide-slate-800/80 max-h-40 overflow-y-auto">
           {participants.map((p) => (
-            <li key={p.userId} className="flex items-center gap-2 px-2.5 py-2">
-              <UserAvatar
-                avatar={p.avatar}
-                avatarEmoji={p.avatarEmoji}
-                size="xs"
-                alt={p.pseudo}
-                className="!w-7 !h-7 shrink-0"
-              />
-              <span className="text-xs text-slate-200 truncate">
-                {p.isMe ? (
-                  <>
-                    {p.pseudo}
-                    <span className="text-slate-500 ml-1">(moi)</span>
-                  </>
-                ) : (
-                  p.pseudo
-                )}
-              </span>
+            <li key={p.userId}>
+              {onOpenProfile ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile(p.userId)}
+                  className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-800/50"
+                >
+                  <UserAvatar
+                    avatar={p.avatar}
+                    avatarEmoji={p.avatarEmoji}
+                    size="xs"
+                    alt={p.pseudo}
+                    className="!w-7 !h-7 shrink-0"
+                  />
+                  <span className="text-xs text-violet-200 truncate hover:underline">
+                    {p.isMe ? (
+                      <>
+                        {p.pseudo}
+                        <span className="text-slate-500 ml-1">(moi)</span>
+                      </>
+                    ) : (
+                      p.pseudo
+                    )}
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 px-2.5 py-2">
+                  <UserAvatar
+                    avatar={p.avatar}
+                    avatarEmoji={p.avatarEmoji}
+                    size="xs"
+                    alt={p.pseudo}
+                    className="!w-7 !h-7 shrink-0"
+                  />
+                  <span className="text-xs text-slate-200 truncate">
+                    {p.isMe ? (
+                      <>
+                        {p.pseudo}
+                        <span className="text-slate-500 ml-1">(moi)</span>
+                      </>
+                    ) : (
+                      p.pseudo
+                    )}
+                  </span>
+                </div>
+              )}
             </li>
           ))}
         </ul>

@@ -14,6 +14,7 @@ export function ConversationMemberSidebar({
   onBack,
   embedded = false,
   className = '',
+  onOpenProfile,
 }: {
   onChannelOpened: (channelId: number) => void
   highlightUserId?: string | null
@@ -21,6 +22,7 @@ export function ConversationMemberSidebar({
   /** Dans l’onglet Membres : pas de second titre. */
   embedded?: boolean
   className?: string
+  onOpenProfile?: (userId: number) => void
 }) {
   const { user } = useAuth()
   const { active } = useCommunity()
@@ -206,6 +208,19 @@ export function ConversationMemberSidebar({
                     alt={member.pseudo}
                   />
                   <span className="text-sm truncate flex-1 min-w-0">{member.pseudo}</span>
+                  {onOpenProfile && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onOpenProfile(member.user_id)
+                      }}
+                      className="shrink-0 text-[11px] text-violet-300 hover:underline"
+                    >
+                      Fiche
+                    </button>
+                  )}
                 </label>
               </li>
             )

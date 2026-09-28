@@ -567,6 +567,29 @@ export async function listResourcesForViewer(params: {
   return cardsFromIds(ids, params.viewerId)
 }
 
+/** Ressources qu'un autre membre a choisi de montrer au visiteur (hors fiches cachées). */
+export async function listVisibleResourcesByAuthor(
+  viewerId: number,
+  authorId: number
+): Promise<ResourceCard[]> {
+  await ensureResourceTables()
+  const pool = getPool()
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${table('mandala_resources')} WHERE author_id = ? ORDER BY updated_at DESC`,
+    [authorId]
+  )
+  const mine = viewerId > 0 ? await listCommunitiesForUser(viewerId) : []
+  const viewerPlaceIds = new Set(mine.map((c) => c.id))
+  const ids: number[] = []
+  for (const r of rows ?? []) {
+    const stored = await loadStored(Number(r.id))
+    if (!stored || stored.scope === 'hidden') continue
+    if (!canSee(stored, viewerId, viewerPlaceIds)) continue
+    ids.push(stored.id)
+  }
+  return cardsFromIds(ids, viewerId)
+}
+
 export async function listMyResources(userId: number): Promise<ResourceCard[]> {
   await ensureResourceTables()
   const pool = getPool()

@@ -22,6 +22,8 @@ export function MessageBubble({
   showAvatar = false,
   showName = false,
   highlighted = false,
+  senderId,
+  onOpenProfile,
   onReact,
   onReply,
   onJumpTo,
@@ -35,6 +37,8 @@ export function MessageBubble({
   showAvatar?: boolean
   showName?: boolean
   highlighted?: boolean
+  senderId?: number | null
+  onOpenProfile?: (userId: number) => void
   onReact: (messageId: number, emoji: string) => void
   onReply?: (msg: ChannelMessage) => void
   onJumpTo?: (messageId: number) => void
@@ -75,6 +79,11 @@ export function MessageBubble({
       ? messageMediaUrl(messageId, !isChatImagePreview(attachment.mime))
       : null
 
+  const canOpenProfile = senderId != null && senderId > 0 && !!onOpenProfile
+  const openProfile = () => {
+    if (senderId != null) onOpenProfile?.(senderId)
+  }
+
   return (
     <div
       id={canReply ? `chat-msg-${messageId}` : undefined}
@@ -87,13 +96,30 @@ export function MessageBubble({
       onPointerCancel={clearHold}
     >
       {showAvatar ? (
-        <UserAvatar
-          avatar={avatar}
-          avatarEmoji={avatarEmoji}
-          size="xs"
-          alt={displayName}
-          className="mb-1 shrink-0"
-        />
+        canOpenProfile ? (
+          <button
+            type="button"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={openProfile}
+            className="mb-1 shrink-0 rounded-full hover:ring-2 hover:ring-violet-500/60"
+            aria-label={`Voir la fiche de ${displayName}`}
+          >
+            <UserAvatar
+              avatar={avatar}
+              avatarEmoji={avatarEmoji}
+              size="xs"
+              alt={displayName}
+            />
+          </button>
+        ) : (
+          <UserAvatar
+            avatar={avatar}
+            avatarEmoji={avatarEmoji}
+            size="xs"
+            alt={displayName}
+            className="mb-1 shrink-0"
+          />
+        )
       ) : null}
 
       <div className={`min-w-0 max-w-[min(100%,26rem)] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
@@ -104,9 +130,19 @@ export function MessageBubble({
               : 'rounded-bl-md bg-slate-800 text-slate-100'
           }`}
         >
-          {showName && (
-            <p className="text-[12px] font-semibold text-violet-400 leading-tight mb-0.5 break-words">{displayName}</p>
-          )}
+          {showName &&
+            (canOpenProfile ? (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={openProfile}
+                className="text-[12px] font-semibold text-violet-300 leading-tight mb-0.5 break-words text-left hover:underline"
+              >
+                {displayName}
+              </button>
+            ) : (
+              <p className="text-[12px] font-semibold text-violet-400 leading-tight mb-0.5 break-words">{displayName}</p>
+            ))}
           {msg.replyTo && (
             <button
               type="button"

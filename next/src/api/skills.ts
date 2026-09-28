@@ -35,6 +35,9 @@ export type SkillCard = {
   tags: SkillTag[]
   places: SkillPlaceRef[]
   is_me: boolean
+  bio?: string
+  resources?: Array<{ id: number; kind: string; title: string; summary: string }>
+  skills_visible?: boolean
 }
 
 export type SkillNote = {

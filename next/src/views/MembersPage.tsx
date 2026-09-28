@@ -15,6 +15,7 @@ import { PlaceOrgBackLink } from '@/components/place/PlaceOrgBackLink'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import { ApiError } from '@/lib/api-client'
 import { UserAvatar } from '@/components/UserAvatar'
+import { queueSkillFiche } from '@/components/skills/SkillsDirectory'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { WeatherBadge } from '@/components/community/WeatherBadge'
@@ -58,7 +59,6 @@ export function MembersPage({
   const [directoryLoading, setDirectoryLoading] = useState(false)
   const [directoryError, setDirectoryError] = useState<string | null>(null)
   const [filterCommunitySlug, setFilterCommunitySlug] = useState('')
-  const [panelMember, setPanelMember] = useState<MemberDirectoryEntry | null>(null)
 
   const [manageUserId, setManageUserId] = useState<number | null>(null)
   const [removeTarget, setRemoveTarget] = useState<{ userId: number; label: string } | null>(null)
@@ -144,8 +144,9 @@ export function MembersPage({
     ? filteredDirectoryMembers
     : filteredCommunityMembers
 
-  const openDirectoryPanel = (m: MemberDirectoryEntry) => {
-    if (directoryMode) setPanelMember(m)
+  const openFiche = (userId: number) => {
+    queueSkillFiche(userId)
+    onNavigate?.('skills')
   }
 
   const confirmRemoveMember = async () => {
@@ -207,8 +208,8 @@ export function MembersPage({
               : directoryMode
                 ? 'Annuaire multi-communautés'
                 : active?.name
-                  ? `Communauté active : ${active.name}`
-                  : 'Sélectionnez une communauté'}
+                  ? `Communauté active : ${active.name}. Cliquez sur un nom pour ouvrir sa fiche.`
+                  : 'Sélectionnez une communauté. Cliquez sur un nom pour ouvrir sa fiche.'}
           </p>
         </div>
         <button
@@ -241,7 +242,6 @@ export function MembersPage({
             setAdvancedOpen(open)
             if (!open) {
               setDirectoryMode(false)
-              setPanelMember(null)
             }
           }}
           className="rounded-xl border border-slate-800 bg-slate-900/30 m-user-form"
@@ -256,7 +256,6 @@ export function MembersPage({
                 checked={directoryMode}
                 onChange={(e) => {
                   setDirectoryMode(e.target.checked)
-                  setPanelMember(null)
                   if (e.target.checked) void loadDirectory()
                 }}
                 className="rounded"
@@ -313,7 +312,7 @@ export function MembersPage({
               directoryMode={directoryMode}
               activeSlug={activeSlug}
               onOpenMessages={onOpenMessages}
-              onMemberClick={openDirectoryPanel}
+              onOpenProfile={onNavigate ? openFiche : undefined}
               canManage={canManageActiveCommunity}
               onManage={(id) => setManageUserId(id)}
               onRemove={
@@ -324,70 +323,6 @@ export function MembersPage({
             />
           )}
         </div>
-        {directoryMode && panelMember && (
-          <aside className="w-full max-w-xs shrink-0 rounded-xl border border-violet-800/40 bg-slate-900/60 p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs uppercase tracking-widest text-violet-300">Détail membre</p>
-              <button
-                type="button"
-                onClick={() => setPanelMember(null)}
-                className="text-slate-500 hover:text-slate-300 text-sm"
-                aria-label="Fermer"
-              >
-                ×
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
-              <UserAvatar
-                avatar={panelMember.avatar}
-                avatarEmoji={panelMember.avatar_emoji}
-                size="md"
-                alt={panelMember.pseudo}
-              />
-              <div>
-                <p className="font-medium">{panelMember.display_name || panelMember.pseudo}</p>
-                {panelMember.display_name &&
-                  panelMember.pseudo &&
-                  panelMember.display_name !== panelMember.pseudo && (
-                    <p className="text-xs text-slate-500">Dans les listes : {panelMember.pseudo}</p>
-                  )}
-              </div>
-            </div>
-            <p className="text-[10px] uppercase tracking-widest text-slate-500">Communautés</p>
-            <ul className="space-y-2 max-h-48 overflow-y-auto">
-              {panelMember.communities.map((c) => (
-                <li
-                  key={c.slug}
-                  className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm"
-                >
-                  <span>
-                    {c.logo_emoji ? `${c.logo_emoji} ` : ''}
-                    {c.name}
-                  </span>
-                  <span className="text-[10px] text-slate-500 uppercase">{c.role}</span>
-                </li>
-              ))}
-            </ul>
-            {!panelMember.is_me && onOpenMessages && (
-              <button
-                type="button"
-                onClick={() => onOpenMessages(String(panelMember.user_id))}
-                className="w-full text-xs py-2 rounded-lg border border-violet-700/50 text-violet-200"
-              >
-                💬 Message
-              </button>
-            )}
-            {canManageActiveCommunity && (
-              <button
-                type="button"
-                onClick={() => setManageUserId(panelMember.user_id)}
-                className="w-full text-xs py-2 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800/50"
-              >
-                ⚙️ Gérer la fiche
-              </button>
-            )}
-          </aside>
-        )}
       </div>
 
       {manageUserId != null && (
@@ -404,7 +339,6 @@ export function MembersPage({
           }}
           onRemoved={() => {
             setManageUserId(null)
-            setPanelMember(null)
             void loadCommunity()
             if (directoryMode) void loadDirectory()
             void refreshCommunities()
@@ -430,7 +364,7 @@ function MemberGrid({
   directoryMode,
   activeSlug,
   onOpenMessages,
-  onMemberClick,
+  onOpenProfile,
   canManage,
   onManage,
   onRemove,
@@ -439,7 +373,7 @@ function MemberGrid({
   directoryMode: boolean
   activeSlug?: string
   onOpenMessages?: (userId: string) => void
-  onMemberClick?: (m: MemberDirectoryEntry) => void
+  onOpenProfile?: (userId: number) => void
   canManage?: boolean
   onManage?: (userId: number) => void
   onRemove?: (userId: number, label: string) => void
@@ -457,7 +391,7 @@ function MemberGrid({
             directoryMode={directoryMode}
             activeSlug={activeSlug}
             onOpenMessages={onOpenMessages}
-            onClick={isDirectoryMember(me) ? () => onMemberClick?.(me) : undefined}
+            onOpenProfile={onOpenProfile}
             isMe
             canManage={canManage}
             onManage={onManage}
@@ -480,7 +414,7 @@ function MemberGrid({
               directoryMode={directoryMode}
               activeSlug={activeSlug}
               onOpenMessages={onOpenMessages}
-              onClick={isDirectoryMember(m) ? () => onMemberClick?.(m) : undefined}
+              onOpenProfile={onOpenProfile}
               canManage={canManage}
               onManage={onManage}
               onRemove={onRemove}
@@ -518,7 +452,7 @@ function MemberCard({
   directoryMode,
   activeSlug,
   onOpenMessages,
-  onClick,
+  onOpenProfile,
   isMe,
   canManage,
   onManage,
@@ -528,7 +462,7 @@ function MemberCard({
   directoryMode: boolean
   activeSlug?: string
   onOpenMessages?: (userId: string) => void
-  onClick?: () => void
+  onOpenProfile?: (userId: number) => void
   isMe?: boolean
   canManage?: boolean
   onManage?: (userId: number) => void
@@ -536,40 +470,51 @@ function MemberCard({
 }) {
   const communities = isDirectoryMember(member) ? member.communities : []
   const weather = memberWeather(member, directoryMode, activeSlug)
-
-  const inner = (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col gap-3 h-full">
-      <div className="flex items-center gap-3">
-        <UserAvatar
-          avatar={member.avatar}
-          avatarEmoji={member.avatar_emoji}
-          size="md"
-          alt={member.pseudo}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="font-medium truncate">{member.pseudo}</p>
-            <WeatherBadge status={weather.status} note={weather.note} />
-          </div>
-          {member.display_name && member.display_name !== member.pseudo && (
-            <p className="text-xs text-slate-500 truncate">{member.display_name}</p>
-          )}
-          {directoryMode && communities.length > 0 && (
-            <p className="text-[10px] text-slate-500 mt-1 truncate">
-              {communities.map((c) => c.name).join(' · ')}
-            </p>
-          )}
+  const identity = (
+    <>
+      <UserAvatar
+        avatar={member.avatar}
+        avatarEmoji={member.avatar_emoji}
+        size="md"
+        alt={member.pseudo}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="font-medium truncate">{member.pseudo}</p>
+          <WeatherBadge status={weather.status} note={weather.note} />
         </div>
+        {member.display_name && member.display_name !== member.pseudo && (
+          <p className="text-xs text-slate-500 truncate">{member.display_name}</p>
+        )}
+        {directoryMode && communities.length > 0 && (
+          <p className="text-[10px] text-slate-500 mt-1 truncate">
+            {communities.map((c) => c.name).join(' · ')}
+          </p>
+        )}
       </div>
+    </>
+  )
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col gap-3 h-full">
+      {onOpenProfile ? (
+        <button
+          type="button"
+          onClick={() => onOpenProfile(member.user_id)}
+          className="flex items-center gap-3 text-left rounded-lg hover:bg-slate-800/40 -m-1 p-1"
+          aria-label={`Voir la fiche de ${member.pseudo}`}
+        >
+          {identity}
+        </button>
+      ) : (
+        <div className="flex items-center gap-3">{identity}</div>
+      )}
       {!isMe && (
         <div className="flex flex-col gap-2 mt-auto">
           {onOpenMessages && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpenMessages(String(member.user_id))
-              }}
+              onClick={() => onOpenMessages(String(member.user_id))}
               className="w-full text-xs py-1.5 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-900/20"
             >
               💬 Message
@@ -578,10 +523,7 @@ function MemberCard({
           {canManage && onManage && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onManage(member.user_id)
-              }}
+              onClick={() => onManage(member.user_id)}
               className="w-full text-xs py-1.5 rounded-lg border border-sky-700/50 text-sky-200 hover:bg-sky-900/20 font-medium"
             >
               ⚙️ Gérer la fiche
@@ -590,10 +532,9 @@ function MemberCard({
           {canManage && onRemove && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation()
+              onClick={() =>
                 onRemove(member.user_id, member.pseudo || member.display_name || `Membre #${member.user_id}`)
-              }}
+              }
               className="w-full text-xs py-1.5 rounded-lg border border-red-800/60 text-red-300 hover:bg-red-950/30 font-medium"
             >
               Retirer du lieu…
@@ -603,18 +544,4 @@ function MemberCard({
       )}
     </div>
   )
-
-  if (onClick && directoryMode) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="w-full text-left hover:border-violet-500/30 transition-colors rounded-xl"
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  return inner
 }

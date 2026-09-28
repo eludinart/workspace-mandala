@@ -5,6 +5,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import { ensureCommunitiesTables, listCommunitiesForUser } from './db-communities'
+import { listVisibleResourcesByAuthor } from './db-resources'
 import {
   isSkillRegister,
   isSkillScope,
@@ -38,6 +39,13 @@ export type SkillProfile = {
   tags: SkillTag[]
 }
 
+export type SkillCardResource = {
+  id: number
+  kind: string
+  title: string
+  summary: string
+}
+
 export type SkillCard = {
   user_id: number
   pseudo: string
@@ -51,6 +59,11 @@ export type SkillCard = {
   tags: SkillTag[]
   places: SkillPlaceRef[]
   is_me: boolean
+  /** Présente seulement si la personne a coché « Profil visible dans Membres ». */
+  bio: string
+  resources: SkillCardResource[]
+  /** Faux quand la fiche compétences est cachée : l'identité, la bio et les ressources restent lisibles. */
+  skills_visible: boolean
 }
 
 export type SkillNote = {
@@ -336,8 +349,10 @@ function cardFromProfile(
   profile: SkillProfile,
   identity: { pseudo: string; display_name: string; avatar_emoji: string; avatar: string | null },
   viewerId: number,
-  visiblePlaces: SkillPlaceRef[]
+  visiblePlaces: SkillPlaceRef[],
+  extras?: { bio?: string; resources?: SkillCardResource[]; skillsVisible?: boolean }
 ): SkillCard {
+  const skillsVisible = extras?.skillsVisible !== false
   return {
     user_id: profile.user_id,
     pseudo: identity.pseudo,
@@ -345,20 +360,47 @@ function cardFromProfile(
     avatar_emoji: identity.avatar_emoji,
     avatar: identity.avatar,
     scope: profile.scope,
-    offer_text: profile.offer_text,
-    seek_text: profile.seek_text,
-    frame_text: profile.frame_text,
-    tags: profile.tags,
-    places: visiblePlaces,
+    offer_text: skillsVisible ? profile.offer_text : '',
+    seek_text: skillsVisible ? profile.seek_text : '',
+    frame_text: skillsVisible ? profile.frame_text : '',
+    tags: skillsVisible ? profile.tags : [],
+    places: skillsVisible ? visiblePlaces : [],
     is_me: profile.user_id === viewerId,
+    bio: extras?.bio ?? '',
+    resources: extras?.resources ?? [],
+    skills_visible: skillsVisible,
   }
+}
+
+async function readSharedBio(userId: number, viewerId: number): Promise<string> {
+  const pool = getPool()
+  const tMeta = table('usermeta')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_key, meta_value FROM ${tMeta}
+     WHERE user_id = ? AND meta_key IN ('mdl_bio', 'mdl_profile_public')`,
+    [userId]
+  )
+  let bio = ''
+  let profilePublic = false
+  for (const row of rows ?? []) {
+    if (row.meta_key === 'mdl_bio') bio = String(row.meta_value ?? '').trim()
+    if (row.meta_key === 'mdl_profile_public') profilePublic = String(row.meta_value ?? '') === '1'
+  }
+  if (userId !== viewerId && !profilePublic) return ''
+  return bio
 }
 
 export async function getVisibleSkillCard(viewerId: number, subjectId: number): Promise<SkillCard | null> {
   const profile = await loadProfile(subjectId)
   const mine = await listCommunitiesForUser(viewerId)
   const viewerPlaceIds = new Set(mine.map((c) => c.id))
-  if (!(await viewerCanSeeProfile(viewerId, profile, viewerPlaceIds))) return null
+  const skillsVisible = await viewerCanSeeProfile(viewerId, profile, viewerPlaceIds)
+  let sharesPlace = viewerId === subjectId || skillsVisible
+  if (!sharesPlace) {
+    const theirs = await listCommunitiesForUser(subjectId)
+    sharesPlace = theirs.some((c) => viewerPlaceIds.has(c.id))
+  }
+  if (!skillsVisible && !sharesPlace) return null
   const identities = await displayIdentity([subjectId])
   const identity = identities.get(subjectId) ?? {
     pseudo: `user_${subjectId}`,
@@ -366,11 +408,21 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
     avatar_emoji: '🌸',
     avatar: null,
   }
-  const places =
-    profile.scope === 'mandala'
-      ? profile.places.filter((p) => viewerPlaceIds.has(p.id))
-      : profile.places.filter((p) => viewerPlaceIds.has(p.id))
-  return cardFromProfile(profile, identity, viewerId, places)
+  const places = profile.places.filter((p) => viewerPlaceIds.has(p.id))
+  const [bio, resources] = await Promise.all([
+    readSharedBio(subjectId, viewerId),
+    listVisibleResourcesByAuthor(viewerId, subjectId),
+  ])
+  return cardFromProfile(profile, identity, viewerId, places, {
+    bio,
+    skillsVisible,
+    resources: resources.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      title: r.title,
+      summary: r.summary,
+    })),
+  })
 }
 
 export async function listSkillDirectory(params: {

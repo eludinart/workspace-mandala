@@ -43,12 +43,14 @@ export function MessagesPage({
   openCommunitySlug,
   onLeave,
   onOpenChannel,
+  onOpenProfile,
 }: {
   openWithUserId?: string | null
   openWithChannelId?: string | null
   openCommunitySlug?: string | null
   onLeave?: () => void
   onOpenChannel?: (channelId: number | null) => void
+  onOpenProfile?: (userId: number) => void
 }) {
   const { active, setActiveSlug } = useCommunity()
   const { user } = useAuth()
@@ -339,6 +341,7 @@ export function MessagesPage({
                 className="border-0 rounded-none bg-transparent"
                 onChannelOpened={handleChannelOpened}
                 highlightUserId={openWithUserId}
+                onOpenProfile={onOpenProfile}
               />
             </div>
           ) : (
@@ -500,6 +503,8 @@ export function MessagesPage({
               onGroupRenamed={() => void loadChannels()}
               onGroupMembersChanged={() => void loadChannels()}
               onBack={closeDialogue}
+              otherUserId={selected.otherUserId ?? null}
+              onOpenProfile={onOpenProfile}
             />
           ) : (
             <div className="m-chat-wallpaper flex-1 flex flex-col items-center justify-center text-center px-8">

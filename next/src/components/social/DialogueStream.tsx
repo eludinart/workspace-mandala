@@ -36,6 +36,8 @@ export function DialogueStream({
   communityMembers = [],
   onGroupMembersChanged,
   onBack,
+  otherUserId,
+  onOpenProfile,
 }: {
   channelId: number
   otherPseudo?: string
@@ -51,6 +53,8 @@ export function DialogueStream({
   communityMembers?: CommunityMember[]
   onGroupMembersChanged?: () => void
   onBack?: () => void
+  otherUserId?: number | null
+  onOpenProfile?: (userId: number) => void
 }) {
   const { user } = useAuth()
   const u = user as {
@@ -444,19 +448,48 @@ export function DialogueStream({
           >
             <ChevronLeftIcon />
           </button>
-          <span className="relative shrink-0">
-            <UserAvatar
-              avatar={otherAvatar}
-              avatarEmoji={otherAvatarEmoji ?? (isGroup ? '👥' : undefined)}
-              size="sm"
-              alt={otherPseudo}
-            />
-            {!isGroup && otherIsOnline && (
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
-            )}
-          </span>
+          {!isGroup && otherUserId && onOpenProfile ? (
+            <button
+              type="button"
+              onClick={() => onOpenProfile(otherUserId)}
+              className="relative shrink-0 rounded-full hover:ring-2 hover:ring-violet-500/60"
+              aria-label={otherPseudo ? `Voir la fiche de ${otherPseudo}` : 'Voir la fiche'}
+            >
+              <UserAvatar
+                avatar={otherAvatar}
+                avatarEmoji={otherAvatarEmoji}
+                size="sm"
+                alt={otherPseudo}
+              />
+              {otherIsOnline && (
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
+              )}
+            </button>
+          ) : (
+            <span className="relative shrink-0">
+              <UserAvatar
+                avatar={otherAvatar}
+                avatarEmoji={otherAvatarEmoji ?? (isGroup ? '👥' : undefined)}
+                size="sm"
+                alt={otherPseudo}
+              />
+              {!isGroup && otherIsOnline && (
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-slate-950" />
+              )}
+            </span>
+          )}
           <div className="min-w-0 flex-1 px-1">
-            <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Conversation'}</p>
+            {!isGroup && otherUserId && onOpenProfile ? (
+              <button
+                type="button"
+                onClick={() => onOpenProfile(otherUserId)}
+                className="block max-w-full text-left text-[15px] font-semibold truncate leading-tight hover:underline"
+              >
+                {otherPseudo || 'Conversation'}
+              </button>
+            ) : (
+              <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Conversation'}</p>
+            )}
             <p className={`text-xs truncate ${!isGroup && otherIsOnline ? 'text-emerald-400' : 'text-slate-400'}`}>
               {statusLabel}
             </p>
@@ -619,6 +652,7 @@ export function DialogueStream({
                 memberIds={memberIds}
                 participantsById={participantsById}
                 meId={meId}
+                onOpenProfile={onOpenProfile}
               />
             )}
             <AddGroupMembersPanel
@@ -676,6 +710,8 @@ export function DialogueStream({
                 avatar={sender.avatar}
                 avatarEmoji={sender.avatarEmoji}
                 meId={meId}
+                senderId={msg.senderId}
+                onOpenProfile={onOpenProfile}
                 showAvatar={isGroup && !isMe}
                 showName={isGroup && !isMe}
                 highlighted={highlightId != null && Number(msg.id ?? msg.messageId) === highlightId}

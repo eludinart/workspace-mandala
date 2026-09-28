@@ -7,6 +7,7 @@ import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/views/LoginPage'
 import { HomePage } from '@/views/HomePage'
 import { SkillsPage } from '@/views/SkillsPage'
+import { queueSkillFiche } from '@/components/skills/SkillsDirectory'
 import { ResourcesPage } from '@/views/ResourcesPage'
 import { MembersPage } from '@/views/MembersPage'
 import { MessagesPage } from '@/views/MessagesPage'
@@ -468,7 +469,12 @@ export function MandalaApp() {
           />
         )
       case 'members':
-        return <MembersPage onOpenMessages={(userId) => navigate('messages', { messagesUserId: userId })} />
+        return (
+          <MembersPage
+            onNavigate={navigate}
+            onOpenMessages={(userId) => navigate('messages', { messagesUserId: userId })}
+          />
+        )
       case 'skills':
         return <SkillsPage onNavigate={navigate} />
       case 'resources':
@@ -481,6 +487,10 @@ export function MandalaApp() {
             openCommunitySlug={messagesCommunitySlug}
             onOpenChannel={selectMessageChannel}
             onLeave={leaveMessages}
+            onOpenProfile={(userId) => {
+              queueSkillFiche(userId)
+              navigate('skills')
+            }}
           />
         )
       case 'notifications':

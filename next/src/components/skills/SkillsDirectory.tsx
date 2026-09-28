@@ -5,6 +5,7 @@ import { skillsApi, type SkillCard, type SkillProfile, type SkillTag } from '@/a
 import { UserAvatar } from '@/components/UserAvatar'
 import { ACCOUNT_SKILLS_ANCHOR } from '@/components/skills/SkillsProfileSection'
 import { ApiError } from '@/lib/api-client'
+import { RESOURCE_KINDS } from '@/lib/resource-constants'
 import {
   SKILL_REGISTER_LABELS,
   SKILL_REGISTERS,
@@ -12,6 +13,15 @@ import {
 } from '@/lib/skill-constants'
 
 export const OPEN_SKILL_USER_KEY = 'mandala_skill_user'
+
+export function queueSkillFiche(userId: number) {
+  if (typeof window === 'undefined' || !userId) return
+  sessionStorage.setItem(OPEN_SKILL_USER_KEY, String(userId))
+}
+
+function resourceKindLabel(kind: string): string {
+  return RESOURCE_KINDS.find((item) => item.id === kind)?.label ?? 'Ressource'
+}
 
 type ProseBlock = { title: string | null; body: string }
 
@@ -84,6 +94,7 @@ export function SkillsDirectory({
   const [register, setRegister] = useState<SkillRegister | ''>('')
   const [cards, setCards] = useState<SkillCard[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(initialUserId ?? null)
+  const [opened, setOpened] = useState<SkillCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -123,22 +134,31 @@ export function SkillsDirectory({
   }, [load])
 
   useEffect(() => {
-    if (!initialUserId || variant !== 'app') return
+    if (!initialUserId) return
     setSelectedId(initialUserId)
+  }, [initialUserId])
+
+  useEffect(() => {
+    if (selectedId == null || variant !== 'app') return
     let cancelled = false
     void skillsApi
-      .card(initialUserId)
+      .card(selectedId)
       .then((res) => {
-        if (cancelled) return
-        setCards((prev) => (prev.some((c) => c.user_id === res.card.user_id) ? prev : [res.card, ...prev]))
+        if (!cancelled) {
+          setOpened(res.card)
+          setError(null)
+        }
       })
       .catch(() => {
-        if (!cancelled) setError('Cette fiche n’est pas visible')
+        if (!cancelled) {
+          setOpened(null)
+          setError('Cette fiche n’est pas visible')
+        }
       })
     return () => {
       cancelled = true
     }
-  }, [initialUserId, variant])
+  }, [selectedId, variant])
 
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('fr')
@@ -176,7 +196,11 @@ export function SkillsDirectory({
   const mineAppears = mine != null && cards.some((c) => c.user_id === mine.user_id)
   const others = visible.filter((c) => !c.is_me)
 
-  const selected = visible.find((c) => c.user_id === selectedId) ?? cards.find((c) => c.user_id === selectedId) ?? null
+  const selected =
+    (opened && opened.user_id === selectedId ? opened : null) ??
+    visible.find((c) => c.user_id === selectedId) ??
+    cards.find((c) => c.user_id === selectedId) ??
+    null
 
   const openMine = () => {
     if (typeof window !== 'undefined') sessionStorage.setItem(ACCOUNT_SKILLS_ANCHOR, 'competences')
@@ -415,10 +439,10 @@ export function SkillsDirectory({
                   <h3 className="text-2xl font-semibold text-slate-50 leading-tight">
                     {selected.display_name || selected.pseudo}
                   </h3>
-                  {selected.scope === 'mandala' && (
+                  {selected.skills_visible !== false && selected.scope === 'mandala' && (
                     <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
                   )}
-                  {selected.places.length > 0 && variant === 'app' && (
+                  {selected.skills_visible !== false && selected.places.length > 0 && variant === 'app' && (
                     <p className="mt-1 text-sm text-slate-500">
                       {selected.places.map((p) => p.name).join(' · ')}
                     </p>
@@ -426,7 +450,16 @@ export function SkillsDirectory({
                 </div>
               </header>
 
-              {selected.tags.length > 0 && (
+              {!!selected.bio?.trim() && (
+                <section className="space-y-2">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Bio</h4>
+                  <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap max-w-[68ch]">
+                    {selected.bio.trim()}
+                  </p>
+                </section>
+              )}
+
+              {selected.skills_visible !== false && selected.tags.length > 0 && (
                 <section className="space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-faire</h4>
                   <ul className="flex flex-wrap gap-2">
@@ -443,7 +476,7 @@ export function SkillsDirectory({
                 </section>
               )}
 
-              {selected.offer_text && (
+              {selected.skills_visible !== false && selected.offer_text && (
                 <section className="space-y-3 border-t border-slate-800 pt-6">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Ce que je peux apporter
@@ -452,7 +485,7 @@ export function SkillsDirectory({
                 </section>
               )}
 
-              {selected.seek_text && (
+              {selected.skills_visible !== false && selected.seek_text && (
                 <section className="space-y-3 border-t border-slate-800 pt-6">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Ce que je cherche
@@ -461,12 +494,39 @@ export function SkillsDirectory({
                 </section>
               )}
 
-              {selected.frame_text && (
+              {selected.skills_visible !== false && selected.frame_text && (
                 <section className="space-y-3 border-t border-slate-800 pt-6">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Mon cadre</h4>
                   <SkillProse text={selected.frame_text} />
                 </section>
               )}
+
+              {(selected.resources?.length ?? 0) > 0 && (
+                <section className="space-y-3 border-t border-slate-800 pt-6">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Ressources</h4>
+                  <ul className="space-y-2">
+                    {selected.resources!.map((resource) => (
+                      <li key={resource.id} className="rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                          {resourceKindLabel(resource.kind)}
+                        </p>
+                        <p className="text-sm font-medium text-slate-100">{resource.title}</p>
+                        {resource.summary && (
+                          <p className="mt-1 text-sm leading-6 text-slate-400">{resource.summary}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {!selected.bio?.trim() &&
+                selected.skills_visible === false &&
+                (selected.resources?.length ?? 0) === 0 && (
+                  <p className="text-sm text-slate-500">
+                    Cette personne n’a pas encore partagé sa bio, ses compétences ni ses ressources.
+                  </p>
+                )}
 
               {variant === 'app' && !selected.is_me && onOpenMessages && (
                 <button
