@@ -1,6 +1,7 @@
 'use client'
 
 import { create } from 'zustand'
+import { useCommunity } from '@/contexts/CommunityContext'
 import { socialApi } from '@/api/social'
 import type { MessageReactionSummary } from '@/lib/message-reactions'
 import type { ChatAttachmentMeta, MessageReplyQuote } from '@/lib/chat-attachments'
@@ -63,6 +64,7 @@ export interface SocialStoreState {
   ) => Promise<MessageReactionSummary[]>
   setTemperature: (channelId: number | string, value: string) => void
   clairiereUnreadCount: number
+  clairiereUnreadPlaces: { slug: string; name: string; count: number }[]
   fetchClairiereUnread: () => Promise<number>
   markChannelRead: (channelId: number | string) => Promise<void>
 }
@@ -215,13 +217,15 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
     })),
 
   clairiereUnreadCount: 0,
+  clairiereUnreadPlaces: [],
   fetchClairiereUnread: async () => {
     try {
       const data = await socialApi.clairiereUnreadCount()
-      set({ clairiereUnreadCount: data.count ?? 0 })
+      const places = data.byCommunity ?? []
+      set({ clairiereUnreadCount: data.count ?? 0, clairiereUnreadPlaces: places })
       return data.count ?? 0
     } catch {
-      set({ clairiereUnreadCount: 0 })
+      set({ clairiereUnreadCount: 0, clairiereUnreadPlaces: [] })
       return 0
     }
   },
@@ -234,3 +238,13 @@ export const useSocialStore = create<SocialStoreState>((set, get) => ({
     }
   },
 }))
+
+/** Badge Messages du lieu actif. Les autres lieux sont comptés à part. */
+export function usePlaceMessageUnread(): number {
+  const places = useSocialStore((s) => s.clairiereUnreadPlaces)
+  const total = useSocialStore((s) => s.clairiereUnreadCount)
+  const { active } = useCommunity()
+  if (!places.length) return total
+  if (!active?.slug) return total
+  return places.find((place) => place.slug === active.slug)?.count ?? 0
+}

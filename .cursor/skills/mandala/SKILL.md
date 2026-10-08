@@ -35,7 +35,7 @@ Socle technique proche de Fleur (auth, MariaDB, social léger) — **bases et po
 | Coolify DB | MariaDB Fleur | **Mandala-db** |
 
 - **Next.js** PWA (`start_url` `/app`)
-- Landing `/` (ancres `#mur` `#lieux` `#competences` `#ressources` `#projet`)
+- Landing `/` (ancres `#mur` `#lieux` `#projet`) ; pages `/competences` et `/ressources`
 - Déploiement Coolify sur le même VPS que Fleur / Korymb / Hermes
 - Secrets hors git : `sync-config.env`, `next/.env.local`, `nogit/`
 

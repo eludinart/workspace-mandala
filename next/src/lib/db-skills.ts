@@ -59,8 +59,12 @@ export type SkillCard = {
   tags: SkillTag[]
   places: SkillPlaceRef[]
   is_me: boolean
-  /** Présente seulement si la personne a coché « Profil visible dans Membres ». */
+  /** Bio de la fiche. Visible avec la fiche quand la portée est ouverte. */
   bio: string
+  /** Vrai si la personne et le lecteur partagent un lieu. */
+  shares_place?: boolean
+  /** Lieu commun, pour ouvrir une conversation. */
+  shared_place_slug?: string | null
   resources: SkillCardResource[]
   /** Faux quand la fiche compétences est cachée : l'identité, la bio et les ressources restent lisibles. */
   skills_visible: boolean
@@ -241,6 +245,11 @@ export async function getMySkillProfile(userId: number): Promise<SkillProfile> {
   return loadProfile(userId)
 }
 
+export async function skillScopeOf(userId: number): Promise<SkillScope> {
+  const profile = await loadProfile(userId)
+  return profile.scope
+}
+
 export type SkillProfileInput = {
   scope: SkillScope
   offer_text: string
@@ -372,6 +381,26 @@ function cardFromProfile(
   }
 }
 
+function toPlaceRefs(
+  rows: Array<{ id: number; slug: string; name: string; logo_emoji?: string | null }>
+): SkillPlaceRef[] {
+  return rows.map((c) => ({
+    id: c.id,
+    slug: c.slug,
+    name: c.name,
+    logo_emoji: c.logo_emoji ?? null,
+  }))
+}
+
+async function readBio(userId: number): Promise<string> {
+  const pool = getPool()
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${table('usermeta')} WHERE user_id = ? AND meta_key = 'mdl_bio' LIMIT 1`,
+    [userId]
+  )
+  return String(rows[0]?.meta_value ?? '').trim()
+}
+
 async function readSharedBio(userId: number, viewerId: number): Promise<string> {
   const pool = getPool()
   const tMeta = table('usermeta')
@@ -395,12 +424,10 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
   const mine = await listCommunitiesForUser(viewerId)
   const viewerPlaceIds = new Set(mine.map((c) => c.id))
   const skillsVisible = await viewerCanSeeProfile(viewerId, profile, viewerPlaceIds)
-  let sharesPlace = viewerId === subjectId || skillsVisible
-  if (!sharesPlace) {
-    const theirs = await listCommunitiesForUser(subjectId)
-    sharesPlace = theirs.some((c) => viewerPlaceIds.has(c.id))
-  }
-  if (!skillsVisible && !sharesPlace) return null
+  const theirs = await listCommunitiesForUser(subjectId)
+  const shared = theirs.find((c) => viewerPlaceIds.has(c.id))
+  const memberShares = viewerId !== subjectId && !!shared
+  if (!skillsVisible && !memberShares && viewerId !== subjectId) return null
   const identities = await displayIdentity([subjectId])
   const identity = identities.get(subjectId) ?? {
     pseudo: `user_${subjectId}`,
@@ -408,12 +435,15 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
     avatar_emoji: '🌸',
     avatar: null,
   }
-  const places = profile.places.filter((p) => viewerPlaceIds.has(p.id))
+  const places =
+    profile.scope === 'mandala' && (skillsVisible || viewerId === subjectId)
+      ? toPlaceRefs(theirs)
+      : profile.places.filter((p) => viewerPlaceIds.has(p.id))
   const [bio, resources] = await Promise.all([
-    readSharedBio(subjectId, viewerId),
+    skillsVisible || viewerId === subjectId ? readBio(subjectId) : readSharedBio(subjectId, viewerId),
     listVisibleResourcesByAuthor(viewerId, subjectId),
   ])
-  return cardFromProfile(profile, identity, viewerId, places, {
+  const card = cardFromProfile(profile, identity, viewerId, places, {
     bio,
     skillsVisible,
     resources: resources.map((r) => ({
@@ -423,6 +453,9 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
       summary: r.summary,
     })),
   })
+  card.shares_place = memberShares
+  card.shared_place_slug = shared?.slug ?? null
+  return card
 }
 
 export async function listSkillDirectory(params: {
@@ -493,15 +526,16 @@ export async function listSkillDirectory(params: {
         .toLocaleLowerCase('fr')
       if (!hay.includes(q)) continue
     }
-    const places = params.publicAccess
-      ? (await listCommunitiesForUser(userId)).map((c) => ({
-          id: c.id,
-          slug: c.slug,
-          name: c.name,
-          logo_emoji: c.logo_emoji,
-        }))
-      : profile.places.filter((p) => viewerPlaceIds.has(p.id))
-    cards.push(cardFromProfile(profile, identity, params.viewerId, places))
+    const memberships = await listCommunitiesForUser(userId)
+    const shared = memberships.find((c) => viewerPlaceIds.has(c.id))
+    const places =
+      params.publicAccess || params.view === 'mandala'
+        ? toPlaceRefs(memberships)
+        : profile.places.filter((p) => viewerPlaceIds.has(p.id))
+    const card = cardFromProfile(profile, identity, params.viewerId, places)
+    card.shares_place = params.viewerId !== userId && !!shared
+    card.shared_place_slug = shared?.slug ?? null
+    cards.push(card)
   }
 
   cards.sort((a, b) =>

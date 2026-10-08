@@ -19,6 +19,7 @@ import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncements
 import { TodayBoard } from '@/components/place/TodayBoard'
 import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
+import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
 
 function eventDateParts(startsAt: string | null): { day: string; month: string } | null {
   const d = parseMandalaDateTime(startsAt)
@@ -35,10 +36,15 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const [canManage, setCanManage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
+  const [joinOpen, setJoinOpen] = useState(false)
   const accent = active?.accent_color ?? '#7c3aed'
 
   const load = useCallback(async () => {
-    if (!active?.slug) return
+    if (!active?.slug) {
+      setEvents([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
       const evRes = (await eventsApi.list(active.slug)) as {
@@ -89,6 +95,47 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
       go: () => document.getElementById('vie-du-lieu')?.scrollIntoView({ behavior: 'smooth' }),
     },
   ]
+
+  if (!active) {
+    return (
+      <div className="w-full max-w-xl mx-auto px-4 py-8 space-y-6">
+        <header className="space-y-2">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Sans lieu</p>
+          <h1 className="text-2xl font-semibold text-slate-50">Votre espace</h1>
+          <p className="text-sm text-slate-400 leading-relaxed">
+            Complétez votre fiche, apparaissez dans l’annuaire si vous le souhaitez, et rejoignez un lieu quand vous voulez.
+          </p>
+        </header>
+        <div className="grid gap-3">
+          <button
+            type="button"
+            onClick={() => setJoinOpen(true)}
+            className="text-left rounded-2xl border border-violet-500/40 bg-violet-950/30 px-4 py-4 hover:border-violet-400/70"
+          >
+            <p className="font-medium text-slate-100">Rejoindre un lieu</p>
+            <p className="text-sm text-slate-400 mt-1">Le lieu, sa charte, puis sa vie quotidienne.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('directory')}
+            className="text-left rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-4 hover:border-slate-600"
+          >
+            <p className="font-medium text-slate-100">Annuaire</p>
+            <p className="text-sm text-slate-400 mt-1">Les personnes visibles sur Mandala, avec ou sans lieu.</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('account')}
+            className="text-left rounded-2xl border border-slate-800 bg-slate-900/50 px-4 py-4 hover:border-slate-600"
+          >
+            <p className="font-medium text-slate-100">Ma fiche</p>
+            <p className="text-sm text-slate-400 mt-1">Savoir-faire, ce que vous apportez, ce que vous cherchez.</p>
+          </button>
+        </div>
+        <CommunitySwitcher open={joinOpen} onClose={() => setJoinOpen(false)} />
+      </div>
+    )
+  }
 
   const locationLine = active?.location?.trim() || ''
   const tagline = active?.tagline?.trim() || ''

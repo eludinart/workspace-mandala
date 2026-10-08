@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { skillsApi, type SkillCard, type SkillProfile, type SkillTag } from '@/api/skills'
+import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ACCOUNT_SKILLS_ANCHOR } from '@/components/skills/SkillsProfileSection'
 import { ApiError } from '@/lib/api-client'
@@ -75,7 +76,10 @@ export function SkillsDirectory({
   communityName,
   lockToPlace = false,
   initialUserId,
+  peopleDirectory = false,
   onOpenMessages,
+  onOpenConversation,
+  onOpenAlerts,
   onEditProfile,
 }: {
   /** `public` : fiches ouvertes à Mandala, sans compte. */
@@ -84,11 +88,18 @@ export function SkillsDirectory({
   communityName?: string
   /** Sur la fiche d'un lieu : uniquement les personnes de ce lieu. */
   lockToPlace?: boolean
+  /** Annuaire des personnes, y compris sans lieu. */
+  peopleDirectory?: boolean
   initialUserId?: number | null
-  onOpenMessages?: (userId: string) => void
+  onOpenMessages?: (userId: string, communitySlug?: string) => void
+  onOpenConversation?: (channelId: number) => void
+  onOpenAlerts?: () => void
   onEditProfile?: () => void
 }) {
-  const [view, setView] = useState<'place' | 'mandala'>(lockToPlace || communitySlug ? 'place' : 'mandala')
+  const [view, setView] = useState<'place' | 'mandala'>(
+    peopleDirectory ? 'mandala' : lockToPlace || communitySlug ? 'place' : 'mandala'
+  )
+  const [placeFilter, setPlaceFilter] = useState<'all' | 'mine' | 'unattached'>('all')
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
@@ -111,8 +122,11 @@ export function SkillsDirectory({
               communitySlug: lockToPlace ? communitySlug : undefined,
             })
           : await skillsApi.directory({
-              view: lockToPlace ? 'place' : view,
-              communitySlug: lockToPlace || view === 'place' ? communitySlug : undefined,
+              view: peopleDirectory || (!lockToPlace && view === 'mandala') ? 'mandala' : 'place',
+              communitySlug:
+                peopleDirectory || (!lockToPlace && view === 'mandala')
+                  ? undefined
+                  : communitySlug,
             })
       setCards(res.cards ?? [])
     } catch (e: unknown) {
@@ -121,7 +135,7 @@ export function SkillsDirectory({
       setLoading(false)
       setRefreshing(false)
     }
-  }, [variant, view, communitySlug, lockToPlace])
+  }, [variant, view, communitySlug, lockToPlace, peopleDirectory])
 
   useEffect(() => {
     if (variant !== 'app') return
@@ -163,6 +177,15 @@ export function SkillsDirectory({
   const visible = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('fr')
     return cards.filter((card) => {
+      if (
+        peopleDirectory &&
+        placeFilter === 'mine' &&
+        !card.shares_place &&
+        !(card.is_me && card.places.length > 0)
+      ) {
+        return false
+      }
+      if (peopleDirectory && placeFilter === 'unattached' && card.places.length > 0) return false
       if (register && !card.tags.some((t) => t.register === register)) return false
       if (!matchesTag(card.tags, tag)) return false
       if (!q) return true
@@ -179,7 +202,7 @@ export function SkillsDirectory({
         .toLocaleLowerCase('fr')
       return hay.includes(q)
     })
-  }, [cards, register, tag, query])
+  }, [cards, register, tag, query, peopleDirectory, placeFilter])
 
   const skillCloud = useMemo(() => {
     const counts = new Map<string, number>()
@@ -207,30 +230,63 @@ export function SkillsDirectory({
     onEditProfile?.()
   }
 
-  const title = lockToPlace
-    ? `Annuaire · ${communityName ?? 'ce lieu'}`
-    : variant === 'public'
-      ? 'Annuaire des compétences'
-      : view === 'place'
-        ? `Annuaire · ${communityName ?? 'ce lieu'}`
-        : 'Annuaire Mandala'
+  const title = peopleDirectory
+    ? 'Annuaire'
+    : lockToPlace
+      ? `Annuaire · ${communityName ?? 'ce lieu'}`
+      : variant === 'public'
+        ? 'Annuaire des compétences'
+        : view === 'place'
+          ? `Annuaire · ${communityName ?? 'ce lieu'}`
+          : 'Annuaire Mandala'
 
-  const subtitle = lockToPlace || variant === 'public'
-    ? 'Personnes qui ont choisi de montrer leurs compétences à tout Mandala.'
-    : view === 'place'
-      ? 'Fiches visibles pour les membres de ce lieu, et celles ouvertes à Mandala.'
-      : 'Fiches ouvertes à tout membre connecté.'
+  const subtitle = peopleDirectory
+    ? 'Personnes qui ont choisi Tout Mandala sur leur fiche, avec ou sans lieu.'
+    : lockToPlace || variant === 'public'
+      ? 'Personnes qui ont choisi de montrer leurs compétences à tout Mandala.'
+      : view === 'place'
+        ? 'Fiches visibles pour les membres de ce lieu, et celles ouvertes à Mandala.'
+        : 'Fiches ouvertes à tout membre connecté.'
 
   return (
     <div className="space-y-5">
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Compétences</p>
+          <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">
+            {peopleDirectory ? 'Personnes' : 'Compétences'}
+          </p>
           <h2 className="text-2xl sm:text-3xl font-semibold text-slate-50">{title}</h2>
           <p className="text-sm text-slate-400 max-w-xl">{subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {variant === 'app' && !lockToPlace && (
+          {peopleDirectory && (
+            <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5" role="tablist">
+              {(
+                [
+                  ['all', 'Tous'],
+                  ['mine', 'Mon lieu'],
+                  ['unattached', 'Sans lieu'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={placeFilter === id}
+                  onClick={() => {
+                    setPlaceFilter(id)
+                    setSelectedId(null)
+                  }}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${
+                    placeFilter === id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          {variant === 'app' && !lockToPlace && !peopleDirectory && (
             <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5" role="tablist">
               {(
                 [
@@ -273,9 +329,11 @@ export function SkillsDirectory({
           <div>
             <p className="font-medium text-slate-100">Vous n’apparaissez pas encore</p>
             <p className="text-sm text-slate-400 mt-1">
-              {others.length === 0
-                ? 'Les fiches cachées ne s’affichent pas. Rendez la vôtre visible pour ce lieu.'
-                : 'Votre fiche est cachée, ou limitée à d’autres lieux.'}
+              {peopleDirectory
+                ? 'Choisissez Tout Mandala sur votre fiche pour apparaître ici, même sans lieu.'
+                : others.length === 0
+                  ? 'Les fiches cachées ne s’affichent pas. Rendez la vôtre visible pour ce lieu.'
+                  : 'Votre fiche est cachée, ou limitée à d’autres lieux.'}
             </p>
           </div>
           {onEditProfile && (
@@ -390,11 +448,13 @@ export function SkillsDirectory({
                     <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
                     <div className="min-w-0">
                       <p className="font-medium truncate">{card.display_name || card.pseudo}</p>
-                      {card.places.length > 0 && (
+                      {card.places.length > 0 ? (
                         <p className="text-[11px] text-slate-500 truncate">
                           {card.places.map((p) => p.name).join(' · ')}
                         </p>
-                      )}
+                      ) : peopleDirectory ? (
+                        <p className="text-[11px] text-slate-500">Sans lieu</p>
+                      ) : null}
                     </div>
                   </div>
                   {card.offer_text && (
@@ -442,9 +502,13 @@ export function SkillsDirectory({
                   {selected.skills_visible !== false && selected.scope === 'mandala' && (
                     <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
                   )}
-                  {selected.skills_visible !== false && selected.places.length > 0 && variant === 'app' && (
+                  {selected.skills_visible !== false &&
+                    variant === 'app' &&
+                    (selected.places.length > 0 || selected.scope === 'mandala') && (
                     <p className="mt-1 text-sm text-slate-500">
-                      {selected.places.map((p) => p.name).join(' · ')}
+                      {selected.places.length > 0
+                        ? selected.places.map((p) => p.name).join(' · ')
+                        : 'Sans lieu'}
                     </p>
                   )}
                 </div>
@@ -528,14 +592,21 @@ export function SkillsDirectory({
                   </p>
                 )}
 
-              {variant === 'app' && !selected.is_me && onOpenMessages && (
+              {variant === 'app' && !selected.is_me && selected.shares_place && selected.shared_place_slug && onOpenMessages && (
                 <button
                   type="button"
-                  onClick={() => onOpenMessages(String(selected.user_id))}
+                  onClick={() => onOpenMessages(String(selected.user_id), selected.shared_place_slug ?? undefined)}
                   className="text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
                 >
                   Envoyer un message
                 </button>
+              )}
+              {variant === 'app' && !selected.is_me && !selected.shares_place && (
+                <MeetRequestButton
+                  userId={selected.user_id}
+                  onOpenConversation={onOpenConversation}
+                  onOpenAlerts={onOpenAlerts}
+                />
               )}
               {variant === 'public' && (
                 <a

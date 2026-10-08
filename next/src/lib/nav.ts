@@ -42,7 +42,35 @@ export const MAIN_NAV: MainNavItem[] = [
   { id: 'messages', label: 'Messages', shortLabel: 'Messages', icon: '💬' },
 ]
 
+/** Personne sans lieu : pas de mur, de calendrier, ni de liste de membres. */
+export const SOLO_MAIN_NAV: MainNavItem[] = [
+  { id: 'home', label: 'Accueil', shortLabel: 'Accueil', icon: '🏠' },
+  { id: 'directory', label: 'Annuaire', shortLabel: 'Annuaire', icon: '👥' },
+  { id: 'messages', label: 'Messages', shortLabel: 'Messages', icon: '💬' },
+  { id: 'notifications', label: 'Alertes', shortLabel: 'Alertes', icon: '🔔' },
+  { id: 'account', label: 'Compte', shortLabel: 'Compte', icon: '👤' },
+]
+
+export const PLACE_BOUND_PAGES: MandalaPage[] = [
+  'calendar',
+  'events',
+  'members',
+  'resources',
+  'charter',
+  'place-settings',
+  'place-profile',
+  'place-charter',
+  'place-members',
+  'place-invites',
+  'place-announcements',
+  'managed-places',
+  'courses',
+  'logistics',
+  'circles',
+]
+
 export const SECONDARY_NAV: SecondaryNavItem[] = [
+  { id: 'directory', label: 'Annuaire', icon: '👥' },
   { id: 'skills', label: 'Compétences', icon: '✨' },
   { id: 'resources', label: 'Ressources', icon: '📚' },
   { id: 'notifications', label: 'Alertes', icon: '🔔' },
@@ -155,6 +183,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
 
 export const PAGE_LABELS: Record<MandalaPage, string> = {
   home: 'Accueil',
+  directory: 'Annuaire',
   calendar: 'Calendrier',
   events: 'Événements',
   members: 'Membres',

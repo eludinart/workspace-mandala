@@ -8,6 +8,7 @@ type Props = {
   title?: string
   subtitle?: string
   onComplete: (slug: string, inviteCode?: string | null) => Promise<void>
+  onSkip?: () => Promise<void>
   initialSlug?: string | null
   initialInviteCode?: string | null
 }
@@ -16,6 +17,7 @@ export function PlaceSelectionScreen({
   title = 'Choisissez votre lieu',
   subtitle = 'Sélectionnez au moins un lieu pour rejoindre la communauté Mandala.',
   onComplete,
+  onSkip,
   initialSlug = null,
   initialInviteCode = null,
 }: Props) {
@@ -24,6 +26,7 @@ export function PlaceSelectionScreen({
   const [selectedSlug, setSelectedSlug] = useState<string | null>(initialSlug)
   const [inviteCode, setInviteCode] = useState(initialInviteCode ?? '')
   const [submitting, setSubmitting] = useState(false)
+  const [skipping, setSkipping] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -174,6 +177,24 @@ export function PlaceSelectionScreen({
             ? 'Lieu fermé'
             : 'Rejoindre ce lieu'}
       </button>
+
+      {onSkip && (
+        <button
+          type="button"
+          disabled={skipping || submitting}
+          onClick={() => {
+            setSkipping(true)
+            setError(null)
+            void onSkip().catch((err: unknown) => {
+              setError((err as { message?: string })?.message ?? 'Impossible de continuer sans lieu.')
+              setSkipping(false)
+            })
+          }}
+          className="w-full rounded-xl border border-slate-600 py-3 text-sm text-slate-200 hover:bg-slate-800/80 disabled:opacity-50"
+        >
+          {skipping ? '…' : 'Continuer sans lieu'}
+        </button>
+      )}
     </div>
   )
 }

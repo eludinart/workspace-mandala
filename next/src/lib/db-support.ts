@@ -123,3 +123,26 @@ export async function updateSupportReportStatus(
   )
   return ((result as { affectedRows?: number }).affectedRows ?? 0) > 0
 }
+
+/** Supprime un retour uniquement s'il est déjà traité. */
+export async function deleteDoneSupportReport(
+  id: number
+): Promise<'deleted' | 'not_found' | 'not_done'> {
+  if (!isDbConfigured()) return 'not_found'
+  await ensureSupportTable()
+  const pool = getPool()
+  const [rows] = await exec(
+    pool,
+    `SELECT status FROM ${table('support_reports')} WHERE id = ?`,
+    [id]
+  )
+  const row = ((rows as Record<string, unknown>[]) ?? [])[0]
+  if (!row) return 'not_found'
+  if (row.status !== 'done') return 'not_done'
+  const [result] = await exec(
+    pool,
+    `DELETE FROM ${table('support_reports')} WHERE id = ? AND status = 'done'`,
+    [id]
+  )
+  return ((result as { affectedRows?: number }).affectedRows ?? 0) > 0 ? 'deleted' : 'not_found'
+}

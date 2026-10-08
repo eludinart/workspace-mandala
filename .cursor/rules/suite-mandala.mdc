@@ -1,0 +1,11 @@
+---
+description: >-
+  Chantiers Mandala pas encore livrés. Lire docs/SUITE.md et suivre le skill
+  suite-mandala quand on parle de la suite, des to-do, de la prochaine case,
+  des lieux amis ou des portes de fonctions.
+alwaysApply: false
+---
+
+# Suite
+
+La liste à jour est `docs/SUITE.md`. Une demande d’avancer ne traite que la première case non cochée de **À faire**, puis coche cette case. Une demande d’ajouter ou de réordonner ne modifie que ce fichier.

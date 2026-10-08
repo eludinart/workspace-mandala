@@ -53,6 +53,20 @@ export function AdminSupportTab() {
     }
   }
 
+  const remove = async (id: number) => {
+    if (!window.confirm('Supprimer ce retour traité ? Cette action est définitive.')) return
+    setBusyId(id)
+    setError(null)
+    try {
+      await supportApi.remove(id)
+      setItems((prev) => prev.filter((item) => item.id !== id))
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.detail : 'Suppression impossible')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Retours</h2>
@@ -123,6 +137,16 @@ export function AdminSupportTab() {
                   className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
                 >
                   Remettre en nouveau
+                </button>
+              )}
+              {item.status === 'done' && (
+                <button
+                  type="button"
+                  disabled={busyId === item.id}
+                  onClick={() => void remove(item.id)}
+                  className="text-xs px-2 py-1 rounded-lg border border-red-900 text-red-300 disabled:opacity-60"
+                >
+                  Supprimer
                 </button>
               )}
             </div>

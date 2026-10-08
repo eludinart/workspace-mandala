@@ -65,8 +65,9 @@ export function SkillsProfileSection() {
 
   const dirty = useMemo(() => {
     if (!savedRef.current) return false
+    if (draftLabel.trim()) return true
     return JSON.stringify(profile) !== savedRef.current
-  }, [profile])
+  }, [profile, draftLabel])
 
   useEffect(() => {
     window.__mdlSkillsDirty = dirty
@@ -88,10 +89,42 @@ export function SkillsProfileSection() {
     }
   }, [])
 
+  /** Intègre le brouillon dans la liste (mobile : souvent pas d’Entrée avant Enregistrer). */
+  const commitDraftTag = (
+    tags: SkillTag[],
+    raw: string,
+  ): { tags: SkillTag[]; draft: string; error: string | null } => {
+    const label = raw.trim().replace(/\s+/g, ' ')
+    if (!label) return { tags, draft: '', error: null }
+    if (tags.length >= MAX_SKILL_TAGS) {
+      return { tags, draft: raw, error: `Maximum ${MAX_SKILL_TAGS} savoir-faire` }
+    }
+    const key = label.toLocaleLowerCase('fr')
+    if (tags.some((t) => t.label.toLocaleLowerCase('fr') === key)) {
+      return { tags, draft: '', error: null }
+    }
+    return {
+      tags: [...tags, { label: label.slice(0, 40), register: 'share' }],
+      draft: '',
+      error: null,
+    }
+  }
+
   const save = async () => {
     setSaving(true)
     setMsg(null)
     setErr(null)
+    const committed = commitDraftTag(profile.tags, draftLabel)
+    if (committed.error) {
+      setErr(committed.error)
+      setSaving(false)
+      return
+    }
+    const tagsToSave = committed.tags
+    if (tagsToSave !== profile.tags) {
+      setProfile((p) => ({ ...p, tags: tagsToSave }))
+      setDraftLabel(committed.draft)
+    }
     try {
       const res = await skillsApi.saveMine({
         scope: profile.scope,
@@ -99,9 +132,10 @@ export function SkillsProfileSection() {
         seek_text: profile.seek_text,
         frame_text: profile.frame_text,
         place_ids: profile.place_ids,
-        tags: profile.tags,
+        tags: tagsToSave,
       })
       setProfile(res.profile)
+      setDraftLabel('')
       savedRef.current = JSON.stringify(res.profile)
       setMsg('Fiche enregistrée')
     } catch (e: unknown) {
@@ -112,17 +146,14 @@ export function SkillsProfileSection() {
   }
 
   const addTag = () => {
-    const label = draftLabel.trim().replace(/\s+/g, ' ')
-    if (!label) return
-    if (profile.tags.length >= MAX_SKILL_TAGS) return
-    const key = label.toLocaleLowerCase('fr')
-    if (profile.tags.some((t) => t.label.toLocaleLowerCase('fr') === key)) {
-      setDraftLabel('')
+    const committed = commitDraftTag(profile.tags, draftLabel)
+    if (committed.error) {
+      setErr(committed.error)
       return
     }
-    const tag: SkillTag = { label: label.slice(0, 40), register: 'share' }
-    setProfile((p) => ({ ...p, tags: [...p.tags, tag] }))
-    setDraftLabel('')
+    setErr(null)
+    setProfile((p) => ({ ...p, tags: committed.tags }))
+    setDraftLabel(committed.draft)
   }
 
   const setTagRegister = (label: string, register: SkillRegister) => {
@@ -135,14 +166,27 @@ export function SkillsProfileSection() {
   const placeNames = communities
     .filter((c) => profile.place_ids.includes(c.id))
     .map((c) => c.name)
+  const visibilityChoices =
+    communities.length === 0
+      ? ([
+          ['hidden', 'Personne'],
+          ['mandala', 'Tout Mandala'],
+        ] as const)
+      : ([
+          ['hidden', 'Personne'],
+          ['places', 'Les membres de mes lieux'],
+          ['mandala', 'Tout Mandala'],
+        ] as const)
   const visibilityPreview =
-    profile.scope === 'hidden'
-      ? 'Seuls vous la voyez.'
-      : profile.scope === 'mandala'
-        ? 'Toute personne sur Mandala verra votre fiche, y compris sur la page d’accueil.'
-        : placeNames.length
-          ? `Les membres de ${placeNames.join(', ')} verront votre fiche.`
-          : 'Cochez au moins un lieu, sinon personne d’autre ne la voit.'
+    communities.length === 0 && profile.scope === 'places'
+      ? 'Cette visibilité dépendait d’un lieu. Choisissez Personne ou Tout Mandala.'
+      : profile.scope === 'hidden'
+        ? 'Seuls vous la voyez.'
+        : profile.scope === 'mandala'
+          ? 'Toute personne sur Mandala verra votre fiche, y compris dans l’annuaire.'
+          : placeNames.length
+            ? `Les membres de ${placeNames.join(', ')} verront votre fiche.`
+            : 'Cochez au moins un lieu, sinon personne d’autre ne la voit.'
 
   const togglePlace = (id: number) => {
     setProfile((p) => ({
@@ -176,13 +220,7 @@ export function SkillsProfileSection() {
 
       <fieldset className="space-y-2">
         <legend className="text-sm text-slate-200">Qui peut me trouver ?</legend>
-        {(
-          [
-            ['hidden', 'Personne'],
-            ['places', 'Les membres de mes lieux'],
-            ['mandala', 'Tout Mandala'],
-          ] as const
-        ).map(([id, label]) => (
+        {visibilityChoices.map(([id, label]) => (
           <label key={id} className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="radio"
@@ -271,12 +309,24 @@ export function SkillsProfileSection() {
                   addTag()
                 }
               }}
+              enterKeyHint="done"
               maxLength={40}
-              placeholder="Entrée pour ajouter"
+              placeholder="ex. logistique, rédaction…"
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-2 text-sm text-slate-100"
             />
           </label>
+          <button
+            type="button"
+            onClick={addTag}
+            disabled={!draftLabel.trim() || profile.tags.length >= MAX_SKILL_TAGS}
+            className="shrink-0 rounded-lg border border-violet-700/70 bg-violet-950/50 px-3 py-2 text-sm text-violet-100 hover:bg-violet-900/50 disabled:opacity-40"
+          >
+            Ajouter
+          </button>
         </div>
+        <p className="text-xs text-slate-500">
+          Tapez un savoir-faire, puis Ajouter — ou Enregistrer : le texte en cours est inclus.
+        </p>
       </div>
 
       <label className="block text-sm">

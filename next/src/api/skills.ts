@@ -35,6 +35,8 @@ export type SkillCard = {
   tags: SkillTag[]
   places: SkillPlaceRef[]
   is_me: boolean
+  shares_place?: boolean
+  shared_place_slug?: string | null
   bio?: string
   resources?: Array<{ id: number; kind: string; title: string; summary: string }>
   skills_visible?: boolean

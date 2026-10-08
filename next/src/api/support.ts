@@ -29,4 +29,6 @@ export const supportApi = {
 
   setStatus: (id: number, status: SupportStatus) =>
     api.patch(`/api/support/${id}`, { status }) as Promise<{ ok: boolean }>,
+
+  remove: (id: number) => api.delete(`/api/support/${id}`) as Promise<{ ok: boolean }>,
 }

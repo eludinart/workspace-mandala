@@ -7,6 +7,7 @@ import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/views/LoginPage'
 import { HomePage } from '@/views/HomePage'
 import { SkillsPage } from '@/views/SkillsPage'
+import { DirectoryPage } from '@/views/DirectoryPage'
 import { queueSkillFiche } from '@/components/skills/SkillsDirectory'
 import { ResourcesPage } from '@/views/ResourcesPage'
 import { MembersPage } from '@/views/MembersPage'
@@ -30,6 +31,7 @@ import type { AdminTabId } from '@/lib/nav'
 
 export type MandalaPage =
   | 'home'
+  | 'directory'
   | 'calendar'
   | 'events'
   | 'members'
@@ -67,6 +69,7 @@ export type MandalaNavigate = (
 
 const APP_PAGES_FROM_URL: MandalaPage[] = [
   'home',
+  'directory',
   'calendar',
   'events',
   'members',
@@ -534,6 +537,8 @@ export function MandalaApp() {
         )
       case 'admin':
         return <AdminPage initialTab={adminTab} />
+      case 'directory':
+        return <DirectoryPage onNavigate={navigate} />
       default:
         return <HomePage onNavigate={navigate} />
     }

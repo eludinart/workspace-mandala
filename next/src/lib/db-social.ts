@@ -3,6 +3,7 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
+import { cacheDelPrefix } from './server-cache'
 import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
 import { messageReplyExcerpt, type MessageReplyQuote } from './chat-attachments'
 import { isAvatarImageUrl } from './user-avatar'
@@ -570,6 +571,20 @@ export async function getMyChannels(
         [communityId, ...otherIds]
       )
       const allowed = new Set((memberRows ?? []).map((r) => Number(r.user_id)))
+      try {
+        const [meetRows] = await pool.execute<RowDataPacket[]>(
+          `SELECT from_user_id, to_user_id FROM ${table('mandala_meet_requests')}
+           WHERE status = 'accepted' AND (from_user_id = ? OR to_user_id = ?)`,
+          [uid, uid]
+        )
+        for (const meet of meetRows ?? []) {
+          const other =
+            Number(meet.from_user_id) === uid ? Number(meet.to_user_id) : Number(meet.from_user_id)
+          if (other > 0) allowed.add(other)
+        }
+      } catch {
+        /* table absente tant qu’aucune rencontre n’a été demandée */
+      }
       directRows = directRows.filter((r) => {
         const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
         return allowed.has(otherId)
@@ -1240,62 +1255,175 @@ export async function getMessageMedia(
 }
 
 
-/** Retourne le nombre de messages non lus (La Clairière) pour l'utilisateur */
-export async function getClairiereUnreadCount(userId: string): Promise<number> {
+export type ClairiereUnreadPlace = {
+  slug: string
+  name: string
+  count: number
+}
+
+/**
+ * Non-lus par lieu, avec le même filtre que la liste des conversations.
+ * Un direct partagé entre deux lieux compte dans chacun. Le total ne compte chaque fil qu'une fois.
+ */
+export async function getClairiereUnreadSummary(userId: string): Promise<{
+  total: number
+  byCommunity: ClairiereUnreadPlace[]
+}> {
+  const empty = { total: 0, byCommunity: [] as ClairiereUnreadPlace[] }
   const pool = getPool()
   const uid = parseInt(userId, 10)
-  if (!uid) return 0
+  if (!uid) return empty
 
   const tCh = table('chat_channels')
   const t = table(P2P_MESSAGES_TABLE)
   const tMeta = table('usermeta')
   const tMembers = table('chat_channel_members')
+  const tComm = table('mandala_communities')
+  const tCommMembers = table('mandala_community_members')
   const metaPrefix = CHANNEL_READ_META_PREFIX
 
   await ensureGroupChannelSupport(pool)
   await ensureMessagesTable(pool)
 
-  // Direct channels
+  const [placeRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT c.id, c.slug, c.name
+     FROM ${tCommMembers} m
+     INNER JOIN ${tComm} c ON c.id = m.community_id AND c.is_active = 1
+     WHERE m.user_id = ?
+     ORDER BY c.name ASC`,
+    [uid]
+  )
+  const places = (placeRows ?? [])
+    .map((row) => ({
+      id: Number(row.id),
+      slug: String(row.slug ?? ''),
+      name: String(row.name ?? ''),
+      count: 0,
+    }))
+    .filter((place) => place.id > 0 && place.slug)
+  const placeIds = places.map((place) => place.id)
+
   const [directRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT COALESCE(SUM(sub.cnt), 0) AS total
-     FROM (
-       SELECT COUNT(m.id) AS cnt
-       FROM ${tCh} c
-       JOIN ${t} m
-         ON m.channel_id = c.id
-         AND m.sender_id != ?
-       LEFT JOIN ${tMeta} um
-         ON um.user_id = ?
-         AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
-       WHERE (c.user_a = ? OR c.user_b = ?)
-         AND COALESCE(c.channel_type, 'direct') = 'direct'
-         AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
-       GROUP BY c.id
-     ) sub`,
+    `SELECT c.id AS channel_id, c.user_a, c.user_b, COUNT(m.id) AS cnt
+     FROM ${tCh} c
+     JOIN ${t} m
+       ON m.channel_id = c.id
+       AND m.sender_id != ?
+     LEFT JOIN ${tMeta} um
+       ON um.user_id = ?
+       AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
+     WHERE (c.user_a = ? OR c.user_b = ?)
+       AND COALESCE(c.channel_type, 'direct') = 'direct'
+       AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
+     GROUP BY c.id, c.user_a, c.user_b`,
     [uid, uid, metaPrefix, uid, uid]
   )
 
-  // Group channels
   const [groupRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT COALESCE(SUM(sub.cnt), 0) AS total
-     FROM (
-       SELECT COUNT(m.id) AS cnt
-       FROM ${tCh} c
-       INNER JOIN ${tMembers} cm ON cm.channel_id = c.id AND cm.user_id = ?
-       JOIN ${t} m
-         ON m.channel_id = c.id
-         AND m.sender_id != ?
-       LEFT JOIN ${tMeta} um
-         ON um.user_id = ?
-         AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
-       WHERE c.channel_type = 'group'
-         AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
-       GROUP BY c.id
-     ) sub`,
+    `SELECT c.id AS channel_id, c.community_id, COUNT(m.id) AS cnt
+     FROM ${tCh} c
+     INNER JOIN ${tMembers} cm ON cm.channel_id = c.id AND cm.user_id = ?
+     JOIN ${t} m
+       ON m.channel_id = c.id
+       AND m.sender_id != ?
+     LEFT JOIN ${tMeta} um
+       ON um.user_id = ?
+       AND um.meta_key = CONCAT(?, c.id, '_last_read_at')
+     WHERE c.channel_type = 'group'
+       AND (um.meta_value IS NULL OR m.created_at > um.meta_value)
+     GROUP BY c.id, c.community_id`,
     [uid, uid, uid, metaPrefix]
   )
 
-  return Number(directRows?.[0]?.total ?? 0) + Number(groupRows?.[0]?.total ?? 0)
+  const directUnread = (directRows ?? []).map((row) => {
+    const userA = Number(row.user_a)
+    const userB = Number(row.user_b)
+    return {
+      channelId: Number(row.channel_id),
+      otherId: userA === uid ? userB : userA,
+      cnt: Number(row.cnt ?? 0),
+    }
+  })
+  const otherIds = [...new Set(directUnread.map((row) => row.otherId).filter((id) => id > 0))]
+  const membersByPlace = new Map<number, Set<number>>()
+  if (placeIds.length && otherIds.length) {
+    const placePh = placeIds.map(() => '?').join(',')
+    const otherPh = otherIds.map(() => '?').join(',')
+    const [memberRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT community_id, user_id
+       FROM ${tCommMembers}
+       WHERE community_id IN (${placePh}) AND user_id IN (${otherPh})`,
+      [...placeIds, ...otherIds]
+    )
+    for (const row of memberRows ?? []) {
+      const communityId = Number(row.community_id)
+      const memberId = Number(row.user_id)
+      const set = membersByPlace.get(communityId) ?? new Set<number>()
+      set.add(memberId)
+      membersByPlace.set(communityId, set)
+    }
+  }
+
+  const meetPartners = new Set<number>()
+  try {
+    const [meetRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT from_user_id, to_user_id FROM ${table('mandala_meet_requests')}
+       WHERE status = 'accepted' AND (from_user_id = ? OR to_user_id = ?)`,
+      [uid, uid]
+    )
+    for (const meet of meetRows ?? []) {
+      const other = Number(meet.from_user_id) === uid ? Number(meet.to_user_id) : Number(meet.from_user_id)
+      if (other > 0) meetPartners.add(other)
+    }
+  } catch {
+    /* table absente tant qu’aucune rencontre n’a été demandée */
+  }
+
+  const placeById = new Map(places.map((place) => [place.id, place]))
+  let total = 0
+  const countedDirect = new Set<number>()
+
+  for (const row of groupRows ?? []) {
+    const communityId = Number(row.community_id)
+    const cnt = Number(row.cnt ?? 0)
+    const place = placeById.get(communityId)
+    if (!place || cnt <= 0) continue
+    place.count += cnt
+    total += cnt
+  }
+
+  for (const row of directUnread) {
+    const channelId = row.channelId
+    const otherId = row.otherId
+    const cnt = row.cnt
+    if (!otherId || cnt <= 0) continue
+    let visibleSomewhere = false
+    for (const place of places) {
+      const inPlace = membersByPlace.get(place.id)?.has(otherId) || meetPartners.has(otherId)
+      if (!inPlace) continue
+      place.count += cnt
+      visibleSomewhere = true
+    }
+    if (visibleSomewhere && !countedDirect.has(channelId)) {
+      countedDirect.add(channelId)
+      total += cnt
+    }
+  }
+
+  return {
+    total,
+    byCommunity: places.map((place) => ({
+      slug: place.slug,
+      name: place.name,
+      count: place.count,
+    })),
+  }
+}
+
+/** Retourne le nombre de messages non lus visibles (La Clairière) pour l'utilisateur */
+export async function getClairiereUnreadCount(userId: string): Promise<number> {
+  const summary = await getClairiereUnreadSummary(userId)
+  return summary.total
 }
 
 /** Retourne l'ID de l'autre utilisateur dans un canal (pour notifications) */
@@ -1538,10 +1666,27 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
 
   const tMeta = table('usermeta')
   const metaKey = `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`
-  const now = new Date().toISOString().slice(0, 19).replace('T', ' ')
 
   await assertChannelAccess(pool, channelId, uid)
   await markChatNotificationsReadForChannel(pool, channelId, uid)
+
+  let now = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  try {
+    await ensureMessagesTable(pool)
+    const tMsg = table(P2P_MESSAGES_TABLE)
+    const [stampRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT DATE_FORMAT(
+         GREATEST(UTC_TIMESTAMP(), COALESCE(MAX(created_at), UTC_TIMESTAMP())),
+         '%Y-%m-%d %H:%i:%s'
+       ) AS ts
+       FROM ${tMsg} WHERE channel_id = ?`,
+      [channelId]
+    )
+    const ts = stampRows?.[0]?.ts ? String(stampRows[0].ts).trim().slice(0, 19) : ''
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)) now = ts
+  } catch {
+    /* l'heure UTC du processus reste un repli */
+  }
 
   const [existing] = await pool.execute<RowDataPacket[]>(
     `SELECT umeta_id FROM ${tMeta} WHERE user_id = ? AND meta_key = ?`,
@@ -1552,6 +1697,7 @@ export async function markChannelAsRead(channelId: number, userId: string): Prom
   } else {
     await pool.execute(`INSERT INTO ${tMeta} (user_id, meta_key, meta_value) VALUES (?, ?, ?)`, [uid, metaKey, now])
   }
+  cacheDelPrefix(`clairiere_unread:${userId}`)
 }
 
 /** Crée les tables seeds et prairie_links si besoin */

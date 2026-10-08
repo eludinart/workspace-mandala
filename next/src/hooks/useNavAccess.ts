@@ -7,7 +7,7 @@ import { isCommunityManagerRole } from '@/lib/community-role-labels'
 /** Droits d’affichage du menu (utilisateur / gestionnaire de lieu / administrateur). */
 export function useNavAccess() {
   const { isRealAdmin, showAdminUi, actingRole } = useAuth()
-  const { active } = useCommunity()
+  const { active, communities, loading: communitiesLoading } = useCommunity()
   const { managedPlaces, loadingManagedPlaces } = useManagedPlaces()
 
   return useMemo(() => {
@@ -40,6 +40,10 @@ export function useNavAccess() {
       roleLabel = managesActive ? 'Gestionnaire' : 'Gestionnaire · membre'
     }
 
+    if (!communitiesLoading && communities.length === 0 && roleLabel === 'Membre') {
+      roleLabel = 'Sans lieu'
+    }
+
     const managedCommunities = managedPlaces.map((p) => ({
       id: p.id,
       slug: p.slug,
@@ -62,6 +66,8 @@ export function useNavAccess() {
     }
   }, [
     active,
+    communities,
+    communitiesLoading,
     actingRole,
     isRealAdmin,
     managedPlaces,

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ApiError, requireAdmin } from '@/lib/api-auth'
-import { updateSupportReportStatus, type SupportStatus } from '@/lib/db-support'
+import {
+  deleteDoneSupportReport,
+  updateSupportReportStatus,
+  type SupportStatus,
+} from '@/lib/db-support'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +26,35 @@ export async function PATCH(
     }
     const ok = await updateSupportReportStatus(id, status)
     if (!ok) return NextResponse.json({ error: 'Retour introuvable' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    const message = err instanceof Error ? err.message : 'Erreur'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireAdmin(req)
+    const { id: raw } = await ctx.params
+    const id = parseInt(raw, 10)
+    if (!id) return NextResponse.json({ error: 'Identifiant invalide' }, { status: 400 })
+    const result = await deleteDoneSupportReport(id)
+    if (result === 'not_found') {
+      return NextResponse.json({ error: 'Retour introuvable' }, { status: 404 })
+    }
+    if (result === 'not_done') {
+      return NextResponse.json(
+        { error: 'Seuls les retours traités peuvent être supprimés.' },
+        { status: 409 }
+      )
+    }
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {
     if (err instanceof ApiError) {

@@ -71,7 +71,10 @@ export const socialApi = {
   },
   presenceHeartbeat: () => api.get('/api/social/presence_heartbeat'),
   clairiereUnreadCount: () =>
-    api.get('/api/social/clairiere_unread_count') as Promise<{ count: number }>,
+    api.get('/api/social/clairiere_unread_count') as Promise<{
+      count: number
+      byCommunity?: { slug: string; name: string; count: number }[]
+    }>,
   markChannelRead: (channelId: number) =>
     api.post('/api/social/mark_channel_read', { channelId }),
   toggleMessageReaction: (messageId: number, emoji: string) =>

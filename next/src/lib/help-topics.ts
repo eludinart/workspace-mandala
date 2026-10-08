@@ -19,7 +19,7 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
     'Ouvrez une fiche pour envoyer un message.',
   ],
   messages: [
-    'Conversations du lieu. Le badge indique les messages non lus.',
+    'Conversations du lieu actif. Le badge compte les messages non lus de ce lieu.',
     'Le bouton en haut à droite sert à écrire à un membre.',
     '« Mandala » en haut à gauche ramène à la page précédente.',
   ],

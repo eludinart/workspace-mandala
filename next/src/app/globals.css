@@ -501,6 +501,44 @@ html.light .m-landing-footer {
   background: #f3ece6;
 }
 
+.m-skills-carousel-track {
+  display: flex;
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.m-skills-carousel-bar {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: rgb(var(--accent-400));
+}
+
+.m-skills-carousel-nav {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(var(--slate-700) / 0.8);
+  color: rgb(var(--slate-200));
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.m-skills-carousel-nav:hover {
+  border-color: rgb(var(--accent-500) / 0.7);
+  color: #fff;
+}
+
+@keyframes m-carousel-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .m-skills-carousel-track {
+    transition: none;
+  }
+}
+
 /* Accueil connecté — hero photo pleine largeur + fondu à gauche */
 .m-home-hero {
   position: relative;

@@ -25,8 +25,17 @@ export function SkillsPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         communityName={active?.name}
         initialUserId={openUserId}
         onOpenMessages={
-          onNavigate ? (userId) => onNavigate('messages', { messagesUserId: userId }) : undefined
+          onNavigate
+            ? (userId, communitySlug) =>
+                onNavigate('messages', { messagesUserId: userId, communitySlug })
+            : undefined
         }
+        onOpenConversation={
+          onNavigate
+            ? (channelId) => onNavigate('messages', { messagesChannelId: String(channelId) })
+            : undefined
+        }
+        onOpenAlerts={onNavigate ? () => onNavigate('notifications') : undefined}
         onEditProfile={onNavigate ? () => onNavigate('account') : undefined}
       />
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useNotifications } from '@/contexts/NotificationContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
@@ -11,6 +11,8 @@ import {
   PAGE_READ_PREVIEW_LIMIT,
   splitNotificationsForDisplay,
 } from '@/lib/notification-retention'
+import { directoryApi } from '@/api/directory'
+import { ApiError } from '@/lib/api-client'
 
 export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { items, unreadCount, loading, fetchList, markRead, markAllRead, deleteRead } = useNotifications()
@@ -79,7 +81,12 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
         {unread.length === 0 ? (
           <p className="text-slate-500 text-sm italic">Aucune alerte non lue.</p>
         ) : (
-          <NotificationList items={unread} onNavigate={onNavigate} onOpen={openNotification} onMarkRead={markRead} />
+          <NotificationList
+            items={unread}
+            onNavigate={onNavigate}
+            onOpen={openNotification}
+            onMarkRead={markRead}
+          />
         )}
       </section>
 
@@ -109,12 +116,40 @@ function NotificationList({
   onOpen: (n: NotificationItem) => void
   onMarkRead: (ids: string[]) => Promise<void>
 }) {
+  const [meetBusy, setMeetBusy] = useState<number | null>(null)
+  const [meetError, setMeetError] = useState<string | null>(null)
+  const [meetDone, setMeetDone] = useState<number[]>([])
+
+  const respondMeet = async (n: NotificationItem, accept: boolean) => {
+    const requestId = parseInt(String(n.source_id ?? ''), 10)
+    if (!requestId) return
+    setMeetBusy(requestId)
+    setMeetError(null)
+    try {
+      const res = await directoryApi.respondMeet(requestId, accept)
+      if (!n.read_at) void onMarkRead([n.id])
+      setMeetDone((ids) => [...ids, requestId])
+      if (accept && res.channel_id && onNavigate) {
+        onNavigate('messages', { messagesChannelId: String(res.channel_id) })
+      }
+    } catch (e: unknown) {
+      setMeetError(e instanceof ApiError ? e.detail : 'Réponse impossible')
+    } finally {
+      setMeetBusy(null)
+    }
+  }
   return (
     <ul className="space-y-2">
       {items.map((n) => {
         const isUnread = !n.read_at
         const id = parseInt(n.id, 10)
-        const clickable = !!onNavigate
+        const requestId = parseInt(String(n.source_id ?? ''), 10)
+        const canRespond =
+          n.type === 'meet_request' &&
+          n.action_label === 'Répondre' &&
+          requestId > 0 &&
+          !meetDone.includes(requestId)
+        const clickable = !!onNavigate && !canRespond
         return (
           <li key={n.delivery_id ?? n.id}>
             <div
@@ -156,6 +191,27 @@ function NotificationList({
                       {new Date(n.created_at).toLocaleString('fr-FR')}
                     </p>
                   )}
+                  {canRespond && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <button
+                        type="button"
+                        disabled={meetBusy === requestId}
+                        onClick={() => void respondMeet(n, true)}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
+                      >
+                        Accepter
+                      </button>
+                      <button
+                        type="button"
+                        disabled={meetBusy === requestId}
+                        onClick={() => void respondMeet(n, false)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                      >
+                        Refuser
+                      </button>
+                    </div>
+                  )}
+                  {meetError && canRespond && <p className="text-xs text-red-400 mt-2">{meetError}</p>}
                   {clickable && <p className="text-[10px] text-violet-400/80 mt-2">Ouvrir →</p>}
                 </div>
                 {isUnread && Number.isFinite(id) && (

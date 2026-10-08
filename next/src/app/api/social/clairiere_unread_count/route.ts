@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
-import { getClairiereUnreadCount } from '@/lib/db-social'
+import { getClairiereUnreadSummary, type ClairiereUnreadPlace } from '@/lib/db-social'
 import { cacheGet, cacheSet } from '@/lib/server-cache'
 
 export const dynamic = 'force-dynamic'
@@ -30,17 +30,23 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await requireAuth(req)
-    if (!userId) return NextResponse.json({ count: 0 })
-    if (!isDbConfigured()) return NextResponse.json({ count: 0 })
+    if (!userId) return NextResponse.json({ count: 0, byCommunity: [] })
+    if (!isDbConfigured()) return NextResponse.json({ count: 0, byCommunity: [] })
 
     const cacheKey = `clairiere_unread:${userId}`
-    const cached = cacheGet<number>(cacheKey)
-    if (cached !== undefined) return NextResponse.json({ count: cached })
+    const cached = cacheGet<{ count: number; byCommunity: ClairiereUnreadPlace[] }>(cacheKey)
+    if (cached !== undefined && Array.isArray(cached.byCommunity)) {
+      return NextResponse.json(cached)
+    }
 
-    const count = await withTimeout(getClairiereUnreadCount(userId), DB_TIMEOUT_MS).catch(() => 0)
-    cacheSet(cacheKey, count, CLAIRIERE_TTL_MS)
-    return NextResponse.json({ count })
+    const summary = await withTimeout(getClairiereUnreadSummary(userId), DB_TIMEOUT_MS).catch(() => null)
+    const payload = {
+      count: summary?.total ?? 0,
+      byCommunity: summary?.byCommunity ?? [],
+    }
+    if (summary) cacheSet(cacheKey, payload, CLAIRIERE_TTL_MS)
+    return NextResponse.json(payload)
   } catch {
-    return NextResponse.json({ count: 0 })
+    return NextResponse.json({ count: 0, byCommunity: [] })
   }
 }

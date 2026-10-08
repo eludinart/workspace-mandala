@@ -1,8 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
+import type { MouseEvent, ReactNode } from 'react'
 import { ThemePicker } from '@/components/theme/ThemePicker'
+
+function scrollLandingTo(from: HTMLElement, id: string) {
+  const scroller = from.closest('.m-landing')?.querySelector(':scope > .overflow-y-auto')
+  if (id === 'top') {
+    if (scroller instanceof HTMLElement) scroller.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 export function MandalaMark({ className = '' }: { className?: string }) {
   return (
@@ -24,6 +34,13 @@ export function PublicSiteChrome({
   authLoading?: boolean
   children: ReactNode
 }) {
+  const pathname = usePathname()
+  const onLandingAnchor = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+    if (pathname !== '/') return
+    event.preventDefault()
+    scrollLandingTo(event.currentTarget, id)
+  }
   return (
     <div className="m-landing flex-1 h-full min-h-0 flex flex-col bg-slate-950 text-slate-100">
       <div className="flex-1 min-h-0 overflow-y-auto scroll-smooth pb-[env(safe-area-inset-bottom,0px)]">
@@ -52,12 +69,28 @@ export function PublicSiteChrome({
 
       <nav className="m-landing-nav sticky top-0 z-40 shadow-md shadow-black/20">
         <div className="max-w-6xl mx-auto px-2 sm:px-6 flex items-center justify-center gap-1 sm:gap-4 overflow-x-auto">
-          <a href="/#top">Accueil</a>
-          <a href="/#mur">Mur &amp; carte</a>
-          <a href="/#competences">Compétences</a>
-          <a href="/#ressources">Ressources</a>
-          <a href="/#projet">Le projet</a>
-          <a href="/#lieux">Lieux</a>
+          <a
+            href="/#top"
+            aria-current={pathname === '/' ? 'page' : undefined}
+            onClick={(event) => onLandingAnchor(event, 'top')}
+          >
+            Accueil
+          </a>
+          <a href="/#mur" onClick={(event) => onLandingAnchor(event, 'mur')}>
+            Mur &amp; carte
+          </a>
+          <Link href="/competences" aria-current={pathname === '/competences' ? 'page' : undefined}>
+            Compétences
+          </Link>
+          <Link href="/ressources" aria-current={pathname === '/ressources' ? 'page' : undefined}>
+            Ressources
+          </Link>
+          <a href="/#projet" onClick={(event) => onLandingAnchor(event, 'projet')}>
+            Le projet
+          </a>
+          <a href="/#lieux" onClick={(event) => onLandingAnchor(event, 'lieux')}>
+            Lieux
+          </a>
           {!user && (
             <Link href="/app?mode=register">Rejoindre</Link>
           )}

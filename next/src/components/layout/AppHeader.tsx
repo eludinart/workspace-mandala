@@ -1,7 +1,7 @@
 'use client'
 
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
-import { useSocialStore } from '@/store/useSocialStore'
+import { usePlaceMessageUnread } from '@/store/useSocialStore'
 import { NotificationCenter } from '@/components/NotificationCenter'
 import { ThemePicker } from '@/components/theme/ThemePicker'
 import { ProfileMenu } from '@/components/layout/ProfileMenu'
@@ -19,7 +19,7 @@ export function AppHeader({
   onOpenMenu: () => void
   onBack?: () => void
 }) {
-  const clairiereUnread = useSocialStore((s) => s.clairiereUnreadCount)
+  const clairiereUnread = usePlaceMessageUnread()
 
   return (
     <header className="sticky top-0 z-50 shrink-0 border-b border-slate-800 bg-slate-950/95 backdrop-blur-md">

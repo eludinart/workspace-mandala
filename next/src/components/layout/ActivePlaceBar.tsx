@@ -7,6 +7,7 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
 import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
 import { PAGE_LABELS } from '@/lib/nav'
+import { useSocialStore } from '@/store/useSocialStore'
 
 type ActivePlaceBarProps = {
   /** Titre de page courante sous le lieu (en-tête principal). */
@@ -18,6 +19,8 @@ type ActivePlaceBarProps = {
 
 export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: ActivePlaceBarProps) {
   const { active } = useCommunity()
+  const unreadPlaces = useSocialStore((s) => s.clairiereUnreadPlaces)
+  const otherUnread = unreadPlaces.some((place) => place.slug !== active?.slug && place.count > 0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const accent = active?.accent_color ?? '#7c3aed'
   const placeRole = formatCommunityRoleLabel(active?.role)
@@ -44,7 +47,9 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
             ? 'border-transparent hover:bg-slate-900/80 px-2 py-1.5 -ml-1'
             : 'border-slate-700/80 bg-slate-900/70 hover:border-violet-500/40 p-2.5'
         } ${className}`}
-        aria-label={`Lieu actif : ${active?.name ?? 'aucun'}. Changer de lieu`}
+        aria-label={`Lieu actif : ${active?.name ?? 'aucun'}. Changer de lieu${
+          otherUnread ? '. D’autres lieux ont des messages non lus' : ''
+        }`}
       >
         <p
           className={`uppercase tracking-widest font-semibold ${
@@ -66,7 +71,7 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
               className={`font-semibold truncate ${isHeader ? 'text-base sm:text-lg' : 'text-sm'}`}
               style={{ color: accent }}
             >
-              {active?.name ?? 'Choisir un lieu'}
+              {active?.name ?? 'Sans lieu'}
             </p>
             <p className="text-[10px] text-slate-500 truncate">
               {active ? (
@@ -75,12 +80,15 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
                   {active.slug ? ` · ${active.slug}` : ''}
                 </>
               ) : (
-                'Sélectionnez une communauté'
+                'Rejoindre un lieu'
               )}
             </p>
           </div>
-          <span className="text-slate-500 shrink-0 text-xs" aria-hidden>
+          <span className="relative text-slate-500 shrink-0 text-xs" aria-hidden>
             ▾
+            {otherUnread && (
+              <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-violet-500" />
+            )}
           </span>
         </div>
         {page && page !== 'admin' && isHeader && (

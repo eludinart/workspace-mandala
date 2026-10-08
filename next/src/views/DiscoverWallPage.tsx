@@ -1,8 +1,9 @@
 'use client'
 
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { SkillsCarousel } from '@/components/landing/SkillsCarousel'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
-import { OPEN_SKILL_USER_KEY } from '@/components/skills/SkillsDirectory'
+import { OPEN_SKILL_USER_KEY, queueSkillFiche } from '@/components/skills/SkillsDirectory'
 
 /**
  * Mur d'actualité + carte du réseau (espace connecté `/app`).
@@ -46,6 +47,17 @@ export function DiscoverWallPage({ onNavigate }: { onNavigate?: MandalaNavigate 
           </button>
         </div>
       )}
+
+      <SkillsCarousel
+        onOpenProfile={
+          onNavigate
+            ? (userId) => {
+                queueSkillFiche(userId)
+                onNavigate('skills')
+              }
+            : undefined
+        }
+      />
 
       <WallDiscoverSection
         feedLimit={40}

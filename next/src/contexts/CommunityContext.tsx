@@ -42,7 +42,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [communities, setCommunities] = useState<Community[]>([])
   const [activeSlug, setActiveSlugState] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [placeSwitchNotice, setPlaceSwitchNotice] = useState<PlaceSwitchNotice | null>(null)
   const communitiesRef = useRef<Community[]>([])
   const activeSlugRef = useRef<string | null>(null)
@@ -59,6 +59,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!user) {
       setCommunities([])
+      setLoading(false)
       return
     }
     setLoading(true)

@@ -55,6 +55,7 @@ export function MessagesPage({
   const { active, setActiveSlug } = useCommunity()
   const { user } = useAuth()
   const fetchClairiereUnread = useSocialStore((s) => s.fetchClairiereUnread)
+  const unreadPlaces = useSocialStore((s) => s.clairiereUnreadPlaces)
   const [channels, setChannels] = useState<Channel[]>([])
   const [pending, setPending] = useState<PendingSeed[]>([])
   const [members, setMembers] = useState<CommunityMember[]>([])
@@ -66,6 +67,7 @@ export function MessagesPage({
   const [listTab, setListTab] = useState<'dialogues' | 'members'>('dialogues')
   const openedForRef = useRef<string | null>(null)
   const openedChannelRef = useRef<string | null>(null)
+  const selectedIdRef = useRef<number | null>(null)
 
   const loadChannels = useCallback(async () => {
     setLoading(true)
@@ -79,7 +81,10 @@ export function MessagesPage({
           ? (membersApi.listCommunity(slug) as Promise<{ members?: CommunityMember[] }>)
           : Promise.resolve({ members: [] }),
       ])
-      const list = chData?.channels ?? []
+      const openId = selectedIdRef.current
+      const list = (chData?.channels ?? []).map((channel) =>
+        openId != null && channel.channelId === openId ? { ...channel, unreadCount: 0 } : channel
+      )
       setChannels(list)
       setPending(seedsData?.items ?? [])
       setMembers(membersData?.members ?? [])
@@ -149,9 +154,8 @@ export function MessagesPage({
       setActiveSlug(openCommunitySlug)
       return
     }
-    if (!active?.slug) return
 
-    const openKey = `${openWithChannelId}:${active.slug}`
+    const openKey = `${openWithChannelId}:${active?.slug ?? ''}`
     if (openedChannelRef.current === openKey) return
     openedChannelRef.current = openKey
 
@@ -162,6 +166,11 @@ export function MessagesPage({
         const list = await loadChannels()
         const existing = list.find((c) => c.channelId === channelId)
         if (existing) {
+          setSelectedId(channelId)
+          onOpenChannel?.(channelId)
+          return
+        }
+        if (!active?.slug) {
           setSelectedId(channelId)
           onOpenChannel?.(channelId)
           return
@@ -212,7 +221,11 @@ export function MessagesPage({
     }
   }
 
+  selectedIdRef.current = selectedId
   const selected = channels.find((c) => c.channelId === selectedId)
+  const otherUnreadPlaces = unreadPlaces.filter(
+    (place) => place.slug !== active?.slug && place.count > 0
+  )
 
   const participantsById = useMemo(() => {
     const map: Record<
@@ -301,6 +314,22 @@ export function MessagesPage({
               <ComposeIcon />
             </button>
           </header>
+
+          {otherUnreadPlaces.length > 0 && (
+            <div className="shrink-0 mx-3 mt-2 space-y-1">
+              {otherUnreadPlaces.map((place) => (
+                <button
+                  key={place.slug}
+                  type="button"
+                  onClick={() => setActiveSlug(place.slug)}
+                  className="w-full text-left rounded-xl border border-violet-500/40 bg-violet-950/40 px-3 py-2 text-sm text-violet-100 hover:bg-violet-950/70"
+                >
+                  {place.count} message{place.count > 1 ? 's' : ''} non lu{place.count > 1 ? 's' : ''} dans{' '}
+                  {place.name}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div
             className="shrink-0 mx-3 mt-2 flex rounded-xl border border-slate-800 bg-slate-900/40 p-1 gap-1"
@@ -422,8 +451,16 @@ export function MessagesPage({
                   key={ch.channelId}
                   type="button"
                   onClick={() => {
+                    selectedIdRef.current = ch.channelId
                     setSelectedId(ch.channelId)
                     onOpenChannel?.(ch.channelId)
+                    if (ch.unreadCount > 0) {
+                      setChannels((prev) =>
+                        prev.map((c) =>
+                          c.channelId === ch.channelId ? { ...c, unreadCount: 0 } : c
+                        )
+                      )
+                    }
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 text-left border-b border-slate-800/70 ${
                     activeRow ? 'bg-slate-800/80' : 'hover:bg-slate-900/80'

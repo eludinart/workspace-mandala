@@ -1,7 +1,8 @@
 'use client'
 
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
-import type { AdminTabId } from '@/lib/nav'
+import { useCommunity } from '@/contexts/CommunityContext'
+import { PLACE_BOUND_PAGES, type AdminTabId } from '@/lib/nav'
 import { useAuth } from '@/contexts/AuthContext'
 import { socialApi } from '@/api/social'
 import { useSocialStore } from '@/store/useSocialStore'
@@ -29,8 +30,14 @@ export function Layout({
   children: React.ReactNode
 }) {
   const { user } = useAuth()
+  const { communities, loading: communitiesLoading } = useCommunity()
   const fetchClairiereUnread = useSocialStore((s) => s.fetchClairiereUnread)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  useEffect(() => {
+    if (communitiesLoading || communities.length > 0) return
+    if (PLACE_BOUND_PAGES.includes(page)) onNavigate('home')
+  }, [communities.length, communitiesLoading, onNavigate, page])
 
   useEffect(() => {
     if (!user) return

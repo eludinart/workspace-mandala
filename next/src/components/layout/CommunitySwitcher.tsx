@@ -7,6 +7,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
+import { useSocialStore } from '@/store/useSocialStore'
 
 type CatalogItem = {
   slug: string
@@ -21,6 +22,7 @@ type CatalogItem = {
 
 export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { communities, active, setActiveSlug, refresh, joinCommunity } = useCommunity()
+  const unreadPlaces = useSocialStore((s) => s.clairiereUnreadPlaces)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null)
@@ -64,7 +66,9 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
           <section>
             <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">Mes espaces</p>
             <ul className="space-y-2">
-              {communities.map((c) => (
+              {communities.map((c) => {
+                const unread = unreadPlaces.find((place) => place.slug === c.slug)?.count ?? 0
+                return (
                 <li key={c.slug}>
                   <button
                     type="button"
@@ -86,12 +90,18 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                       {c.tagline && <p className="text-xs text-slate-500 truncate">{c.tagline}</p>}
                     </div>
                     <span className="text-[10px] text-slate-500 shrink-0">{formatCommunityRoleLabel(c.role)}</span>
+                    {unread > 0 && (
+                      <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-600 text-[11px] font-semibold text-white inline-flex items-center justify-center">
+                        {unread > 99 ? '99+' : unread}
+                      </span>
+                    )}
                     {active?.slug === c.slug && (
                       <span className="text-[10px] text-violet-400 shrink-0">Actif</span>
                     )}
                   </button>
                 </li>
-              ))}
+                )
+              })}
             </ul>
           </section>
           <button

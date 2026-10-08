@@ -1368,6 +1368,9 @@ export async function removeUserFromCommunity(
   if (Number((del as { affectedRows?: number }).affectedRows ?? 0) === 0) {
     throw new Error('Suppression du membre impossible')
   }
+
+  const remaining = await listCommunitiesForUser(targetUserId)
+  if (remaining.length === 0) await markContinueWithoutPlace(targetUserId)
 }
 
 export async function requireCommunityMembership(
@@ -1780,6 +1783,51 @@ export function userNeedsCharterAcceptance(
   return !acceptance.accepted || acceptance.charter_hash !== hash
 }
 
+const CONTINUE_WITHOUT_PLACE_META = 'mdl_continue_without_place'
+
+async function readUserMeta(userId: number, key: string): Promise<string | null> {
+  const pool = getPool()
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT meta_value FROM ${table('usermeta')} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [userId, key]
+  )
+  const value = rows[0]?.meta_value
+  return value == null ? null : String(value)
+}
+
+async function writeUserMeta(userId: number, key: string, value: string): Promise<void> {
+  const pool = getPool()
+  const tbl = table('usermeta')
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT umeta_id FROM ${tbl} WHERE user_id = ? AND meta_key = ? LIMIT 1`,
+    [userId, key]
+  )
+  if (existing.length) {
+    await pool.execute(`UPDATE ${tbl} SET meta_value = ? WHERE user_id = ? AND meta_key = ?`, [
+      value,
+      userId,
+      key,
+    ])
+    return
+  }
+  await pool.execute(`INSERT INTO ${tbl} (user_id, meta_key, meta_value) VALUES (?, ?, ?)`, [
+    userId,
+    key,
+    value,
+  ])
+}
+
+/** La personne a choisi d’entrer sans lieu, ou elle a quitté son dernier lieu. */
+export async function markContinueWithoutPlace(userId: number): Promise<void> {
+  if (!userId) return
+  await writeUserMeta(userId, CONTINUE_WITHOUT_PLACE_META, '1')
+}
+
+export async function hasContinuedWithoutPlace(userId: number): Promise<boolean> {
+  if (!userId) return false
+  return (await readUserMeta(userId, CONTINUE_WITHOUT_PLACE_META)) === '1'
+}
+
 export type OnboardingStatus = {
   needs_place_selection: boolean
   pending_charter_slugs: string[]
@@ -1787,7 +1835,8 @@ export type OnboardingStatus = {
 
 export async function getOnboardingStatus(userId: number): Promise<OnboardingStatus> {
   const memberships = await listCommunitiesForUser(userId)
-  const needs_place_selection = memberships.length === 0
+  const needs_place_selection =
+    memberships.length === 0 && !(await hasContinuedWithoutPlace(userId))
   const pending_charter_slugs: string[] = []
 
   for (const m of memberships) {

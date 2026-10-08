@@ -1,8 +1,9 @@
 'use client'
 
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
-import { MAIN_NAV } from '@/lib/nav'
-import { useSocialStore } from '@/store/useSocialStore'
+import { useCommunity } from '@/contexts/CommunityContext'
+import { MAIN_NAV, SOLO_MAIN_NAV } from '@/lib/nav'
+import { usePlaceMessageUnread } from '@/store/useSocialStore'
 
 export function BottomNav({
   page,
@@ -11,7 +12,9 @@ export function BottomNav({
   page: MandalaPage
   onNavigate: MandalaNavigate
 }) {
-  const clairiereUnread = useSocialStore((s) => s.clairiereUnreadCount)
+  const { communities, loading } = useCommunity()
+  const clairiereUnread = usePlaceMessageUnread()
+  const items = !loading && communities.length === 0 ? SOLO_MAIN_NAV : MAIN_NAV
 
   return (
     <nav
@@ -19,7 +22,7 @@ export function BottomNav({
       aria-label="Navigation principale"
     >
       <div className="flex items-stretch justify-around px-1 pt-1">
-        {MAIN_NAV.map((item) => (
+        {items.map((item) => (
           <button
             key={item.id}
             type="button"

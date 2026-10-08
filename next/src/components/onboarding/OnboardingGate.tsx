@@ -48,7 +48,12 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const refreshStatus = useCallback(async () => {
     if (communitiesLoading) return
     if (communities.length === 0) {
-      setPhase('place')
+      try {
+        const status = await communitiesApi.onboardingStatus()
+        setPhase(status.needs_place_selection ? 'place' : 'ready')
+      } catch {
+        setPhase('place')
+      }
       return
     }
     try {
@@ -103,6 +108,11 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     void refreshStatus()
   }, [communitiesLoading, refreshStatus, active?.slug, communities.length])
 
+  const handleContinueWithoutPlace = useCallback(async () => {
+    await communitiesApi.continueWithoutPlace()
+    setPhase('ready')
+  }, [])
+
   const handlePlaceJoined = useCallback(
     async (slug: string, inviteCode?: string | null) => {
       await joinCommunity(slug, inviteCode)
@@ -148,9 +158,10 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
               subtitle={
                 pendingInvite
                   ? `Entrez le code reçu pour rejoindre « ${pendingInvite.slug} », ou choisissez un autre lieu public.`
-                  : 'Choisissez le lieu sur lequel vous souhaitez vous inscrire. Vous pourrez en rejoindre d’autres plus tard.'
+                  : 'Choisissez un lieu, ou continuez sans lieu. Vous pourrez en rejoindre un plus tard.'
               }
               onComplete={handlePlaceJoined}
+              onSkip={handleContinueWithoutPlace}
               initialSlug={pendingInvite?.slug ?? null}
               initialInviteCode={pendingInvite?.code ?? null}
             />

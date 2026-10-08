@@ -11,6 +11,7 @@ export type NotificationNavigationTarget = {
 
 const APP_PAGES: MandalaPage[] = [
   'home',
+  'directory',
   'calendar',
   'events',
   'members',

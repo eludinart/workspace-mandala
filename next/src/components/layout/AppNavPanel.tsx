@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { MandalaNavigate, MandalaPage } from '@/components/MandalaApp'
 import { useAuth } from '@/contexts/AuthContext'
+import { useCommunity } from '@/contexts/CommunityContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import {
   ADMIN_NAV,
@@ -11,9 +12,10 @@ import {
   ORGANISATION_PLACE_PAGES,
   PLACE_LIFE_NAV,
   SECONDARY_NAV,
+  SOLO_MAIN_NAV,
   type AdminTabId,
 } from '@/lib/nav'
-import { useSocialStore } from '@/store/useSocialStore'
+import { usePlaceMessageUnread } from '@/store/useSocialStore'
 import { ActivePlaceBar } from '@/components/layout/ActivePlaceBar'
 
 function NavButton({
@@ -125,8 +127,12 @@ export function AppNavPanel({
   adminTab?: AdminTabId
 }) {
   const { logout, isRealAdmin, setActingRole, showAdminUi } = useAuth()
+  const { communities, loading: communitiesLoading } = useCommunity()
   const { isAppAdmin, isSiteManager, roleLabel } = useNavAccess()
-  const clairiereUnread = useSocialStore((s) => s.clairiereUnreadCount)
+  const hasPlace = communitiesLoading || communities.length > 0
+  const mainNav = hasPlace ? MAIN_NAV : SOLO_MAIN_NAV
+  const secondaryNav = hasPlace ? SECONDARY_NAV : []
+  const clairiereUnread = usePlaceMessageUnread()
 
   const go = (target: MandalaPage, opts?: { adminTab?: AdminTabId }) => {
     if (target === 'admin' && isRealAdmin && !showAdminUi) {
@@ -154,14 +160,14 @@ export function AppNavPanel({
             </p>
           </div>
           <ActivePlaceBar />
-          <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />
+          {hasPlace && <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />}
         </div>
       )}
 
       {!showBranding && (
         <div className="px-2 pb-2 border-b border-slate-800 shrink-0 space-y-2">
           <ActivePlaceBar />
-          <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />
+          {hasPlace && <PlaceCharterAccess active={page === 'charter'} onClick={() => go('charter')} />}
         </div>
       )}
 
@@ -178,7 +184,7 @@ export function AppNavPanel({
 
         <SectionTitle>Navigation</SectionTitle>
         <nav className="flex flex-col gap-0.5 px-2">
-          {MAIN_NAV.map((item) => (
+          {mainNav.map((item) => (
             <NavButton
               key={item.id}
               active={page === item.id}
@@ -190,7 +196,8 @@ export function AppNavPanel({
           ))}
         </nav>
 
-        <SectionTitle>Vie du lieu</SectionTitle>
+        {hasPlace && <SectionTitle>Vie du lieu</SectionTitle>}
+        {hasPlace && (
         <nav className="flex flex-col gap-0.5 px-2">
           {PLACE_LIFE_NAV.map((item) => (
             <NavButton
@@ -203,8 +210,9 @@ export function AppNavPanel({
             />
           ))}
         </nav>
+        )}
 
-        {(isSiteManager || isAppAdmin) && (
+        {hasPlace && (isSiteManager || isAppAdmin) && (
           <>
             <SectionTitle>Organisation</SectionTitle>
             <nav className="flex flex-col gap-0.5 px-2">
@@ -231,9 +239,10 @@ export function AppNavPanel({
           </>
         )}
 
-        <SectionTitle>Compte</SectionTitle>
+        {secondaryNav.length > 0 && <SectionTitle>Compte</SectionTitle>}
+        {secondaryNav.length > 0 && (
         <nav className="flex flex-col gap-0.5 px-2">
-          {SECONDARY_NAV.map((item) => (
+          {secondaryNav.map((item) => (
             <NavButton
               key={item.id}
               active={page === item.id}
@@ -243,6 +252,7 @@ export function AppNavPanel({
             />
           ))}
         </nav>
+        )}
 
         {isAppAdmin && (
           <>

@@ -86,6 +86,8 @@ export const communitiesApi = {
       needs_place_selection?: boolean
       pending_charter_slugs?: string[]
     }>,
+  continueWithoutPlace: () =>
+    api.post('/api/onboarding/continue-without-place', {}) as Promise<{ ok: boolean }>,
   getCharter: (slug: string) =>
     api.get(`/api/communities/${encodeURIComponent(slug)}/charter`) as Promise<{
       charter: MemberCharterView
