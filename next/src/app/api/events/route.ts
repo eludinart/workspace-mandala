@@ -4,7 +4,7 @@ import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communi
 import {
   createEvent,
   listEventsForCommunity,
-  seedDemoEventsIfEmpty,
+  purgeAutoSeededDemoEvents,
   type EventPhase,
 } from '@/lib/db-mandala-events'
 import { isDbConfigured } from '@/lib/db'
@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
     if (!community) {
       return NextResponse.json({ error: 'Communauté introuvable' }, { status: 404 })
     }
-    await seedDemoEventsIfEmpty(community.id, uid)
+    // Nettoie d’anciens faux événements injectés dans les lieux vides (plus de seed).
+    await purgeAutoSeededDemoEvents(community.id)
     const events = await listEventsForCommunity(community.id)
     const role = await requireCommunityMembership(uid, community.id)
     const can_manage = await userCanOrganizeEventsInCommunity(uid, role)

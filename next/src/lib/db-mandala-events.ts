@@ -593,42 +593,49 @@ export async function removeEventMedia(params: {
   await pool.execute(`DELETE FROM ${tM} WHERE id = ? AND event_id = ?`, [params.mediaId, params.eventId])
 }
 
-export async function seedDemoEventsIfEmpty(communityId: number, createdBy: number): Promise<void> {
+/**
+ * Empreinte des faux événements autrefois injectés dans chaque lieu vide
+ * (titre + lieu + phase — assez unique pour ne pas toucher aux vrais événements).
+ */
+const AUTO_SEEDED_DEMO_EVENTS = [
+  { title: 'Accueil & méditation', location: 'Salle principale', phase: 'preparation' },
+  { title: 'Journée portes ouvertes', location: 'Jardin & bâtiment', phase: 'day' },
+  { title: 'Bilan & rangement', location: 'Salle commune', phase: 'after' },
+] as const
+
+/**
+ * Retire les événements démo auto-injectés.
+ * Ne touche pas aux vrais événements créés à la main.
+ */
+export async function purgeAutoSeededDemoEvents(communityId: number): Promise<void> {
+  if (!communityId) return
   await ensureEventsTables()
   const pool = getPool()
   const tE = table('events')
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT COUNT(*) as c FROM ${tE} WHERE community_id = ?`,
-    [communityId]
-  )
-  if (Number(rows[0]?.c ?? 0) > 0) return
+  const tM = table('event_media')
+  const tS = table('event_staff')
+  const tT = table('event_tasks')
 
-  const demos = [
-    {
-      title: 'Accueil & méditation',
-      description: 'Préparation du lieu, accueil des participants, méditation d’ouverture.',
-      phase: 'preparation',
-      location: 'Salle principale',
-    },
-    {
-      title: 'Journée portes ouvertes',
-      description: 'Visites, ateliers, échanges avec les visiteurs.',
-      phase: 'day',
-      location: 'Jardin & bâtiment',
-    },
-    {
-      title: 'Bilan & rangement',
-      description: 'Débrief équipe, rangement, clôture logistique.',
-      phase: 'after',
-      location: 'Salle commune',
-    },
-  ]
-
-  for (const d of demos) {
-    await pool.execute(
-      `INSERT INTO ${tE} (community_id, title, description, location, phase, status, created_by, starts_at)
-       VALUES (?, ?, ?, ?, ?, 'published', ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
-      [communityId, d.title, d.description, d.location, d.phase, createdBy]
+  const ids: number[] = []
+  for (const d of AUTO_SEEDED_DEMO_EVENTS) {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT id FROM ${tE}
+       WHERE community_id = ?
+         AND title = ?
+         AND location = ?
+         AND phase = ?`,
+      [communityId, d.title, d.location, d.phase]
     )
+    for (const r of rows ?? []) {
+      const id = Number(r.id)
+      if (id > 0) ids.push(id)
+    }
   }
+  if (ids.length === 0) return
+
+  const placeholders = ids.map(() => '?').join(',')
+  await pool.execute(`DELETE FROM ${tM} WHERE event_id IN (${placeholders})`, ids)
+  await pool.execute(`DELETE FROM ${tS} WHERE event_id IN (${placeholders})`, ids)
+  await pool.execute(`DELETE FROM ${tT} WHERE event_id IN (${placeholders})`, ids)
+  await pool.execute(`DELETE FROM ${tE} WHERE id IN (${placeholders})`, ids)
 }
