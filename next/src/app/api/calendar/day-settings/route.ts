@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, userCanManageInCommunity } from '@/lib/api-auth'
 import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communities'
-import { setCalendarDayDisabled, setCalendarDayMaxParticipants } from '@/lib/db-calendar'
+import { MAX_CALENDAR_BULK_DAYS, setCalendarDayDisabled, setCalendarDayMaxParticipants } from '@/lib/db-calendar'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -15,9 +15,13 @@ export async function POST(req: NextRequest) {
     const uid = parseInt(userId, 10)
     const body = await req.json()
     const slug = String(body.community_slug ?? '').trim()
-    const day = String(body.day ?? '').trim()
+    const rawDays = Array.isArray(body.days) ? body.days : body.day != null ? [body.day] : []
+    const days = rawDays.map((d: unknown) => String(d ?? '').trim()).filter(Boolean)
     if (!slug) return NextResponse.json({ error: 'community_slug requis' }, { status: 400 })
-    if (!day) return NextResponse.json({ error: 'day requis (YYYY-MM-DD)' }, { status: 400 })
+    if (days.length === 0) return NextResponse.json({ error: 'day requis (YYYY-MM-DD)' }, { status: 400 })
+    if (days.length > MAX_CALENDAR_BULK_DAYS) {
+      return NextResponse.json({ error: `Maximum ${MAX_CALENDAR_BULK_DAYS} jours` }, { status: 400 })
+    }
     const community = await getCommunityBySlug(slug)
     if (!community) return NextResponse.json({ error: 'Communauté introuvable' }, { status: 404 })
     const role = await requireCommunityMembership(uid, community.id)
@@ -36,27 +40,35 @@ export async function POST(req: NextRequest) {
     if (hasDisabled) {
       const is_disabled = !!body.is_disabled
       const reason = body.reason != null ? String(body.reason) : undefined
-      await setCalendarDayDisabled({
-        communityId: community.id,
-        day,
-        is_disabled,
-        byUserId: uid,
-        reason,
-      })
+      for (const day of days) {
+        await setCalendarDayDisabled({
+          communityId: community.id,
+          day,
+          is_disabled,
+          byUserId: uid,
+          reason,
+        })
+      }
     }
 
     let max_participants: number | undefined
     if (hasMax) {
-      const res = await setCalendarDayMaxParticipants({
-        communityId: community.id,
-        day,
-        max_participants: body.max_participants,
-        byUserId: uid,
-      })
-      max_participants = res.max_participants
+      for (const day of days) {
+        const res = await setCalendarDayMaxParticipants({
+          communityId: community.id,
+          day,
+          max_participants: body.max_participants,
+          byUserId: uid,
+        })
+        max_participants = res.max_participants
+      }
     }
 
-    return NextResponse.json({ ok: true, ...(max_participants != null ? { max_participants } : {}) })
+    return NextResponse.json({
+      ok: true,
+      updated: days.length,
+      ...(max_participants != null ? { max_participants } : {}),
+    })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
     return NextResponse.json({ error: e.message ?? 'Erreur' }, { status: e.status ?? 400 })

@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
       can_manage: canManage,
       presence: {
         is_disabled: cal.detail.is_disabled,
+        disabled_reason: cal.detail.disabled_reason,
         max_participants: cal.detail.max_participants,
         present_count: presentUsers.length,
         i_am_present: iAmPresent,

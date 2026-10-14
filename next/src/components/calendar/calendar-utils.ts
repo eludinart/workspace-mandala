@@ -25,6 +25,7 @@ export type DayEvent = MonthEvent & { spanPosition: EventSpanPosition }
 export type MonthDay = {
   day: string
   is_disabled: boolean
+  disabled_reason?: string | null
   max_participants: number
   present_count: number
   i_am_present: boolean
@@ -33,10 +34,49 @@ export type MonthDay = {
 
 export type MonthData = {
   ym: string
-  settings: { show_presence: boolean; show_events: boolean }
+  settings: { show_presence: boolean; show_events: boolean; open_weekdays?: number[] }
   days: MonthDay[]
   events: MonthEvent[]
   can_manage?: boolean
+}
+
+export type DayTone = 'closed' | 'full' | 'open'
+
+export function dayTone(info?: Pick<MonthDay, 'is_disabled' | 'present_count' | 'max_participants'> | null): DayTone {
+  if (!info || info.is_disabled) return 'closed'
+  if (info.present_count >= info.max_participants) return 'full'
+  return 'open'
+}
+
+export function dayToneLabel(tone: DayTone): string {
+  if (tone === 'closed') return 'Fermé'
+  if (tone === 'full') return 'Complet'
+  return 'Ouvert'
+}
+
+/** Jours de `ordered` compris entre `from` et `to`, bornes incluses. */
+export function daysInSelection(from: string, to: string, ordered: string[]): string[] {
+  const a = ordered.indexOf(from)
+  const b = ordered.indexOf(to)
+  if (a < 0 || b < 0) return [to]
+  const lo = Math.min(a, b)
+  const hi = Math.max(a, b)
+  return ordered.slice(lo, hi + 1)
+}
+
+export function selectionSpan(days: string[]): { start: string; end: string; gaps: boolean } | null {
+  if (days.length === 0) return null
+  const sorted = [...days].sort()
+  const start = sorted[0]
+  const end = sorted[sorted.length - 1]
+  let span = 1
+  let cursor = start
+  while (cursor < end) {
+    cursor = addDays(cursor, 1)
+    span += 1
+    if (span > sorted.length + 40) break
+  }
+  return { start, end, gaps: span !== sorted.length }
 }
 
 const USER_BAR_COLORS = [

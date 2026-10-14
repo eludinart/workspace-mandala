@@ -14,6 +14,7 @@ type TodayPayload = {
   can_manage?: boolean
   presence: {
     is_disabled: boolean
+    disabled_reason?: string | null
     max_participants: number
     present_count: number
     i_am_present: boolean
@@ -161,8 +162,12 @@ export function TodayBoard({
                 <p className="text-sm font-semibold text-slate-100">Présents</p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {data.presence.is_disabled
-                    ? 'Journée fermée'
-                    : `${data.presence.present_count} / ${data.presence.max_participants}`}
+                    ? data.presence.disabled_reason
+                      ? `Journée fermée — ${data.presence.disabled_reason}`
+                      : 'Journée fermée'
+                    : data.presence.present_count >= data.presence.max_participants
+                      ? `Complet (${data.presence.present_count} / ${data.presence.max_participants})`
+                      : `${data.presence.present_count} / ${data.presence.max_participants}`}
                   {data.presence.present_users.length > 0 && (
                     <span className="text-slate-500">
                       {' '}
@@ -178,7 +183,12 @@ export function TodayBoard({
               </div>
               <button
                 type="button"
-                disabled={data.presence.is_disabled || presenceBusy}
+                disabled={
+                  data.presence.is_disabled ||
+                  presenceBusy ||
+                  (!data.presence.i_am_present &&
+                    data.presence.present_count >= data.presence.max_participants)
+                }
                 onClick={() => void togglePresence()}
                 className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-40 ${
                   data.presence.i_am_present

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, userCanManageInCommunity } from '@/lib/api-auth'
 import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communities'
-import { getCalendarSettings, upsertCalendarSettings } from '@/lib/db-calendar'
+import { getCalendarSettings, parseOpenWeekdays, upsertCalendarSettings } from '@/lib/db-calendar'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -42,9 +42,10 @@ export async function PATCH(req: NextRequest) {
     const can_manage = await userCanManageInCommunity(uid, role)
     if (!can_manage) return NextResponse.json({ error: 'Droits admin requis' }, { status: 403 })
 
-    const patch: { show_presence?: boolean; show_events?: boolean } = {}
+    const patch: { show_presence?: boolean; show_events?: boolean; open_weekdays?: number[] } = {}
     if (body.show_presence !== undefined) patch.show_presence = !!body.show_presence
     if (body.show_events !== undefined) patch.show_events = !!body.show_events
+    if (body.open_weekdays !== undefined) patch.open_weekdays = parseOpenWeekdays(body.open_weekdays)
     const settings = await upsertCalendarSettings({ communityId: community.id, patch })
     return NextResponse.json({ settings })
   } catch (err: unknown) {

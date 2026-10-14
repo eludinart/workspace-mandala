@@ -7,8 +7,9 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
     'Le lieu en cours se change dans la barre en haut.',
   ],
   calendar: [
-    'Le calendrier affiche les événements du lieu sur le mois, la semaine ou le jour.',
-    'Ouvrez une date pour voir le détail de la journée.',
+    'Les jours sont fermés tant qu’un gestionnaire ne les ouvre pas, ou ne coche pas un rythme de semaine.',
+    'Un jour ou plusieurs : Ouvrir, Fermer et Créer un événement sont dans le même bloc de détail.',
+    'Sur un événement de plusieurs jours, « Je viens sur tous les jours ouverts » inscrit la présence d’un coup.',
   ],
   events: [
     'Liste des événements du lieu. Ouvrez une carte pour le programme.',

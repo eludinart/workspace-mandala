@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { parseMandalaDateTime } from '@/lib/format-datetime'
 import { enumerateEventDays, getEventSpanPosition } from '@/lib/event-dates'
 import { ApiError } from '@/lib/api-client'
+import { eventsApi } from '@/api/events'
 import { CalendarMonthGrid } from '@/components/calendar/CalendarMonthGrid'
 import { CalendarWeekView } from '@/components/calendar/CalendarWeekView'
 import { CalendarDayPanel, type DayDetailData } from '@/components/calendar/CalendarDayPanel'
@@ -18,11 +19,14 @@ import {
   addMonths,
   addWeeks,
   dateToDay,
+  daysInSelection,
   mergeMonthData,
   monthLabelFr,
+  selectionSpan,
   startOfWeekMonday,
   weekDaysFromMonday,
   weekLabelFr,
+  weekdayHeadersFr,
   ymsForWeek,
   ymToday,
 } from '@/components/calendar/calendar-utils'
@@ -38,12 +42,15 @@ export function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedDays, setSelectedDays] = useState<string[]>([])
+  const [anchorDay, setAnchorDay] = useState<string | null>(null)
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [bulkBusy, setBulkBusy] = useState(false)
   const [dayDetail, setDayDetail] = useState<DayDetailData | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [presenceBusy, setPresenceBusy] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
-  const [mobileSheetOpen, setMobileSheetOpen] = useState(false)
 
   const today = useMemo(() => new Date(), [])
   const weekDays = useMemo(() => weekDaysFromMonday(weekAnchor), [weekAnchor])
@@ -126,12 +133,9 @@ export function CalendarPage() {
   }, [data?.events])
 
   const openDay = useCallback(
-    async (day: string, opts?: { sheet?: boolean }) => {
+    async (day: string) => {
       if (!active?.slug) return
       setSelectedDay(day)
-      if (opts?.sheet !== false && typeof window !== 'undefined' && window.innerWidth < 1024) {
-        setMobileSheetOpen(true)
-      }
       setDetailLoading(true)
       setActionMsg(null)
       try {
@@ -156,7 +160,7 @@ export function CalendarPage() {
       if (t) window.clearTimeout(t)
       t = window.setTimeout(() => {
         void loadData()
-        if (selectedDay) void openDay(selectedDay, { sheet: false })
+        if (selectedDay) void openDay(selectedDay)
       }, 250)
     }
     window.addEventListener('mandala-events-changed', onEventsChanged)
@@ -165,12 +169,6 @@ export function CalendarPage() {
       window.removeEventListener('mandala-events-changed', onEventsChanged)
     }
   }, [active?.slug, loadData, openDay, selectedDay])
-
-  useEffect(() => {
-    if (loading || !data || selectedDay) return
-    const todayStr = dateToDay(today)
-    void openDay(todayStr, { sheet: false })
-  }, [loading, data, selectedDay, today, openDay])
 
   const setPresence = useCallback(
     async (day: string, present: boolean, userId?: number) => {
@@ -185,7 +183,7 @@ export function CalendarPage() {
           ...(userId != null ? { user_id: userId } : {}),
         })
         await loadData()
-        if (selectedDay === day) await openDay(day, { sheet: false })
+        if (selectedDay === day) await openDay(day)
       } catch (e: unknown) {
         setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
       } finally {
@@ -195,48 +193,14 @@ export function CalendarPage() {
     [active?.slug, loadData, openDay, selectedDay]
   )
 
-  const setDayDisabled = useCallback(
-    async (day: string, is_disabled: boolean) => {
-      if (!active?.slug) return
-      setActionMsg(null)
-      try {
-        await calendarApi.setDayDisabled({ community_slug: active.slug, day, is_disabled })
-        await loadData()
-        if (selectedDay === day) await openDay(day, { sheet: false })
-      } catch (e: unknown) {
-        setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
-      }
-    },
-    [active?.slug, loadData, openDay, selectedDay]
-  )
-
-  const setDayMaxParticipants = useCallback(
-    async (day: string, max_participants: number) => {
-      if (!active?.slug) return
-      setActionMsg(null)
-      try {
-        await calendarApi.setDayMaxParticipants({
-          community_slug: active.slug,
-          day,
-          max_participants,
-        })
-        await loadData()
-        if (selectedDay === day) await openDay(day, { sheet: false })
-      } catch (e: unknown) {
-        setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
-      }
-    },
-    [active?.slug, loadData, openDay, selectedDay]
-  )
-
   const updateSettings = useCallback(
-    async (patch: { show_presence?: boolean; show_events?: boolean }) => {
+    async (patch: { show_presence?: boolean; show_events?: boolean; open_weekdays?: number[] }) => {
       if (!active?.slug) return
       setActionMsg(null)
       try {
         await calendarApi.updateSettings({ community_slug: active.slug, ...patch })
         await loadData()
-        if (selectedDay) await openDay(selectedDay, { sheet: false })
+        if (selectedDay) await openDay(selectedDay)
       } catch (e: unknown) {
         setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
       }
@@ -247,16 +211,134 @@ export function CalendarPage() {
   const canManage = !!data?.can_manage
   const showPresence = data?.settings?.show_presence ?? true
   const showEvents = data?.settings?.show_events ?? true
+  const openWeekdays = data?.settings?.open_weekdays ?? []
   const selectedDayInfo = selectedDay ? daysMap.get(selectedDay) : undefined
+  const todayStr = dateToDay(today)
+  const upcomingOpen = (data?.days ?? []).filter((d) => d.day >= todayStr && !d.is_disabled).slice(0, 8)
+  const periodReachesToday = (data?.days ?? []).some((d) => d.day >= todayStr)
 
-  const handleSelectDay = (day: string) => {
+  const orderedDays = viewMode === 'month' ? grid.filter((c) => c.inMonth).map((c) => c.day) : weekDays
+
+  const handleSelectDay = (day: string, shift: boolean) => {
+    if (canManage && shift && anchorDay) {
+      setSelectedDays(daysInSelection(anchorDay, day, orderedDays))
+      void openDay(day)
+      return
+    }
+    if (canManage && multiSelect) {
+      const next = selectedDays.includes(day)
+        ? selectedDays.filter((d) => d !== day)
+        : [...selectedDays, day].sort()
+      setAnchorDay(day)
+      setSelectedDays(next)
+      if (next.length === 0) {
+        setSelectedDay(null)
+        setDayDetail(null)
+        return
+      }
+      void openDay(next.includes(day) ? day : next[next.length - 1])
+      return
+    }
+    setAnchorDay(day)
+    setSelectedDays([day])
     void openDay(day)
+  }
+
+  const refreshAfterBulk = async () => {
+    await loadData()
+    if (selectedDay && selectedDays.includes(selectedDay)) await openDay(selectedDay)
+  }
+
+  const applyToSelection = async (patch: {
+    is_disabled?: boolean
+    reason?: string
+    max_participants?: number
+  }) => {
+    if (!active?.slug || selectedDays.length === 0) return
+    setActionMsg(null)
+    setBulkBusy(true)
+    try {
+      await calendarApi.setDays({ community_slug: active.slug, days: selectedDays, ...patch })
+      await refreshAfterBulk()
+    } catch (e: unknown) {
+      setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const createEventFromSelection = async (title: string, openDays: boolean) => {
+    if (!active?.slug) return
+    const span = selectionSpan(selectedDays)
+    if (!span) return
+    setActionMsg(null)
+    setBulkBusy(true)
+    try {
+      await eventsApi.create({
+        community_slug: active.slug,
+        title,
+        starts_at: `${span.start} 10:00:00`,
+        ends_at: `${span.end} 18:00:00`,
+        phase: 'preparation',
+      })
+      if (openDays) {
+        await calendarApi.setDays({
+          community_slug: active.slug,
+          days: selectedDays,
+          is_disabled: false,
+        })
+      }
+      window.dispatchEvent(
+        new CustomEvent('mandala-events-changed', { detail: { communitySlug: active.slug } })
+      )
+      await refreshAfterBulk()
+      setActionMsg('Événement créé.')
+    } catch (e: unknown) {
+      setActionMsg(e instanceof ApiError ? e.detail : 'Création impossible')
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const setEventSpanPresence = async (days: string[], present: boolean) => {
+    if (!active?.slug || days.length === 0) return
+    setActionMsg(null)
+    setPresenceBusy(true)
+    try {
+      if (days.length === 1) {
+        await calendarApi.setPresence({ community_slug: active.slug, day: days[0], present })
+        setActionMsg(present ? 'Inscription enregistrée.' : 'Inscription retirée.')
+      } else {
+        const res = (await calendarApi.setPresenceDays({
+          community_slug: active.slug,
+          days,
+          present,
+        })) as { applied?: string[]; skipped?: Array<{ day: string; reason: string }> }
+        const applied = res.applied?.length ?? 0
+        const skipped = res.skipped?.length ?? 0
+        if (present) {
+          const bits = [`Inscrit sur ${applied} jour${applied > 1 ? 's' : ''}.`]
+          if (skipped > 0) bits.push(`${skipped} jour${skipped > 1 ? 's' : ''} fermé${skipped > 1 ? 's' : ''} ou complet${skipped > 1 ? 's' : ''}.`)
+          setActionMsg(bits.join(' '))
+        } else {
+          setActionMsg('Inscription retirée sur ces jours.')
+        }
+      }
+      await loadData()
+      if (selectedDay) await openDay(selectedDay)
+    } catch (e: unknown) {
+      setActionMsg(e instanceof ApiError ? e.detail : 'Action impossible')
+    } finally {
+      setPresenceBusy(false)
+    }
   }
 
   const goToday = () => {
     const t = dateToDay(today)
     setYm(ymToday())
     setWeekAnchor(startOfWeekMonday(t))
+    setAnchorDay(t)
+    setSelectedDays([t])
     void openDay(t)
   }
 
@@ -271,7 +353,11 @@ export function CalendarPage() {
     }
   }
 
-  const closeMobileSheet = () => setMobileSheetOpen(false)
+  const clearSelection = () => {
+    setSelectedDays([])
+    setSelectedDay(null)
+    setDayDetail(null)
+  }
 
   const panelProps = selectedDay
     ? {
@@ -284,10 +370,21 @@ export function CalendarPage() {
         canManage,
         viewerId,
         presenceBusy,
+        selectedDays,
+        selectionBusy: bulkBusy,
         onToggleSelfPresence: (present: boolean) => void setPresence(selectedDay, present),
-        onToggleDayDisabled: (disabled: boolean) => void setDayDisabled(selectedDay, disabled),
-        onSetMaxParticipants: (max: number) => setDayMaxParticipants(selectedDay, max),
+        onApplySelection: (patch: {
+          is_disabled?: boolean
+          reason?: string
+          max_participants?: number
+        }) => void applyToSelection(patch),
+        onCreateSelectionEvent: (title: string, openDays: boolean) =>
+          void createEventFromSelection(title, openDays),
+        onClearSelection: clearSelection,
         onRemoveUser: (userId: number) => void setPresence(selectedDay, false, userId),
+        onSetEventSpanPresence: (days: string[], present: boolean) => void setEventSpanPresence(days, present),
+        dayOpen: (day: string) => (daysMap.has(day) ? !daysMap.get(day)!.is_disabled : null),
+        dayPresent: (day: string) => (daysMap.has(day) ? !!daysMap.get(day)!.i_am_present : null),
       }
     : null
 
@@ -303,7 +400,7 @@ export function CalendarPage() {
             </p>
           </div>
 
-          <div className="flex rounded-xl border border-slate-800 bg-slate-900/60 p-1 self-start">
+          <div className="flex flex-wrap rounded-xl border border-slate-800 bg-slate-900/60 p-1 self-start gap-1">
             <button
               type="button"
               onClick={() => switchView('month')}
@@ -326,6 +423,17 @@ export function CalendarPage() {
             >
               Semaine
             </button>
+            {canManage && (
+              <button
+                type="button"
+                onClick={() => setMultiSelect((v) => !v)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  multiSelect ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Plusieurs jours
+              </button>
+            )}
           </div>
         </div>
 
@@ -370,6 +478,9 @@ export function CalendarPage() {
           <span className="w-3 h-3 rounded-sm bg-emerald-600" /> Jour ouvert
         </span>
         <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-amber-600" /> Complet
+        </span>
+        <span className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-red-600" /> Jour fermé
         </span>
         {showEvents && (
@@ -396,7 +507,7 @@ export function CalendarPage() {
             onClick={() => setAdminOpen((o) => !o)}
             className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/30"
           >
-            <span className="text-sm font-medium text-slate-300">Réglages d&apos;affichage</span>
+            <span className="text-sm font-medium text-slate-300">Réglages du calendrier</span>
             <span className="text-slate-500 text-sm">{adminOpen ? '▴' : '▾'}</span>
           </button>
           {adminOpen && (
@@ -419,6 +530,36 @@ export function CalendarPage() {
                 />
                 Événements
               </label>
+              <div className="w-full">
+                <p className="text-xs text-slate-400 mb-2">Ouverts chaque semaine</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {weekdayHeadersFr(false).map((label, index) => {
+                    const on = openWeekdays.includes(index)
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => {
+                          const next = on
+                            ? openWeekdays.filter((d) => d !== index)
+                            : [...openWeekdays, index].sort((a, b) => a - b)
+                          void updateSettings({ open_weekdays: next })
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${
+                          on
+                            ? 'bg-emerald-600 border-emerald-500 text-white'
+                            : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  Sans ces jours, le calendrier reste fermé tant qu&apos;un jour n&apos;est pas ouvert.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -435,17 +576,54 @@ export function CalendarPage() {
       {!loading && !error && (
         <div
           className={
-            viewMode === 'week'
+            panelProps
               ? 'lg:grid lg:grid-cols-[1fr_minmax(300px,340px)] lg:gap-5 lg:items-start'
-              : 'lg:grid lg:grid-cols-[1fr_minmax(300px,340px)] lg:gap-5 lg:items-start'
+              : ''
           }
         >
           <div className="space-y-3">
+            {periodReachesToday && (
+              <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-2.5">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">
+                  Prochains jours ouverts
+                </p>
+                {upcomingOpen.length === 0 ? (
+                  <p className="text-sm text-slate-500">Aucun jour ouvert pour l&apos;instant.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5">
+                    {upcomingOpen.map((d) => {
+                      const when = new Date(`${d.day}T12:00:00`).toLocaleDateString('fr-FR', {
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
+                      })
+                      const full = d.present_count >= d.max_participants
+                      return (
+                        <button
+                          key={d.day}
+                          type="button"
+                          onClick={() => handleSelectDay(d.day, false)}
+                          className={`px-2.5 py-1 rounded-lg text-xs border ${
+                            full
+                              ? 'border-amber-600/50 text-amber-100 bg-amber-950/30'
+                              : 'border-emerald-600/40 text-emerald-100 bg-emerald-950/30'
+                          }`}
+                        >
+                          {when}
+                          {full ? ' · complet' : ''}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {viewMode === 'month' ? (
               <CalendarMonthGrid
                 grid={grid}
                 events={data?.events ?? []}
-                selectedDay={selectedDay}
+                selectedDays={selectedDays}
                 today={today}
                 showEvents={showEvents}
                 showPresence={showPresence}
@@ -457,7 +635,7 @@ export function CalendarPage() {
                 weekDays={weekDays}
                 daysMap={daysMap}
                 eventsByDay={eventsByDay}
-                selectedDay={selectedDay}
+                selectedDays={selectedDays}
                 today={today}
                 showEvents={showEvents}
                 showPresence={showPresence}
@@ -466,9 +644,17 @@ export function CalendarPage() {
               />
             )}
 
-            <p className="lg:hidden text-center text-xs text-slate-500 pb-1">
-              Touchez un jour pour le détail complet
+            <p className="text-center text-xs text-slate-500 pb-1">
+              {canManage
+                ? 'Un jour ou plusieurs : ouvrir et fermer se font dans le bloc de détail.'
+                : 'Touchez un jour pour le détail.'}
             </p>
+
+            {panelProps && (
+              <div className="lg:hidden">
+                <CalendarDayPanel {...panelProps} variant="sidebar" />
+              </div>
+            )}
           </div>
 
           {panelProps && (
@@ -479,16 +665,6 @@ export function CalendarPage() {
         </div>
       )}
 
-      {panelProps && mobileSheetOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-50 bg-black/70 flex items-end justify-center"
-          onClick={closeMobileSheet}
-        >
-          <div className="w-full px-2 pb-2" onClick={(e) => e.stopPropagation()}>
-            <CalendarDayPanel {...panelProps} variant="sheet" onClose={closeMobileSheet} />
-          </div>
-        </div>
-      )}
     </div>
   )
 }

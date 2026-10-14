@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import type { MonthEvent } from '@/components/calendar/calendar-utils'
-import { phaseColor, weekdayHeadersFr } from '@/components/calendar/calendar-utils'
+import { dayTone, dayToneLabel, phaseColor, weekdayHeadersFr, type DayTone } from '@/components/calendar/calendar-utils'
 import {
   countHiddenEventBars,
   layoutEventBarsForWeek,
@@ -30,7 +30,7 @@ function weekMetrics(isMobile: boolean) {
 export function CalendarMonthGrid({
   grid,
   events,
-  selectedDay,
+  selectedDays,
   today,
   showEvents,
   showPresence,
@@ -39,12 +39,12 @@ export function CalendarMonthGrid({
 }: {
   grid: MonthGridCell[]
   events: MonthEvent[]
-  selectedDay: string | null
+  selectedDays: string[]
   today: Date
   showEvents: boolean
   showPresence: boolean
   viewerId?: number | null
-  onSelectDay: (day: string) => void
+  onSelectDay: (day: string, shift: boolean) => void
 }) {
   const weeks = useMemo(() => splitGridIntoWeeks(grid), [grid])
 
@@ -70,7 +70,7 @@ export function CalendarMonthGrid({
             key={week.days[0]?.day ?? 'w'}
             week={week}
             events={showEvents ? events : []}
-            selectedDay={selectedDay}
+            selectedDays={selectedDays}
             today={today}
             showPresence={showPresence}
             viewerId={viewerId}
@@ -85,7 +85,7 @@ export function CalendarMonthGrid({
 function MonthWeekRowBlock({
   week,
   events,
-  selectedDay,
+  selectedDays,
   today,
   showPresence,
   viewerId,
@@ -93,11 +93,11 @@ function MonthWeekRowBlock({
 }: {
   week: { days: MonthGridCell[] }
   events: MonthEvent[]
-  selectedDay: string | null
+  selectedDays: string[]
   today: Date
   showPresence: boolean
   viewerId: number | null
-  onSelectDay: (day: string) => void
+  onSelectDay: (day: string, shift: boolean) => void
 }) {
   const weekDays = week.days.map((d) => d.day)
   const segments = useMemo(() => layoutEventBarsForWeek(weekDays, events), [weekDays, events])
@@ -110,7 +110,7 @@ function MonthWeekRowBlock({
           week={week}
           segments={segments}
           eventRowCount={eventRowCount}
-          selectedDay={selectedDay}
+          selectedDays={selectedDays}
           today={today}
           showPresence={showPresence}
           viewerId={viewerId}
@@ -123,7 +123,7 @@ function MonthWeekRowBlock({
           week={week}
           segments={segments}
           eventRowCount={eventRowCount}
-          selectedDay={selectedDay}
+          selectedDays={selectedDays}
           today={today}
           showPresence={showPresence}
           viewerId={viewerId}
@@ -139,7 +139,7 @@ function WeekRowInner({
   week,
   segments,
   eventRowCount,
-  selectedDay,
+  selectedDays,
   today,
   showPresence,
   viewerId,
@@ -149,11 +149,11 @@ function WeekRowInner({
   week: { days: MonthGridCell[] }
   segments: ReturnType<typeof layoutEventBarsForWeek>
   eventRowCount: number
-  selectedDay: string | null
+  selectedDays: string[]
   today: Date
   showPresence: boolean
   viewerId: number | null
-  onSelectDay: (day: string) => void
+  onSelectDay: (day: string, shift: boolean) => void
   isMobile: boolean
 }) {
   const { headerH, barH, gap, padBottom, overflowH } = weekMetrics(isMobile)
@@ -195,25 +195,19 @@ function WeekRowInner({
       <div className="absolute inset-0 z-0 grid grid-cols-7">
         {week.days.map((cell) => {
           const inMonth = cell.inMonth
-          const selected = selectedDay === cell.day
-          const disabled = cell.info?.is_disabled ?? false
-          const statusBg = !inMonth
-            ? 'bg-slate-950/60'
-            : disabled
-              ? 'bg-red-600/60 hover:bg-red-600/70'
-              : 'bg-emerald-600/50 hover:bg-emerald-600/60'
+          const selected = selectedDays.includes(cell.day)
+          const tone = dayTone(cell.info)
+          const statusBg = !inMonth ? 'bg-slate-950/60' : toneBg(tone)
           return (
             <button
               key={`bg-${cell.day}`}
               type="button"
               disabled={!inMonth}
-              onClick={() => inMonth && onSelectDay(cell.day)}
+              onClick={(e) => inMonth && onSelectDay(cell.day, e.shiftKey)}
               className={`border-r border-slate-800/40 last:border-r-0 text-left transition-colors ${statusBg} ${
                 selected ? 'ring-2 ring-inset ring-violet-300' : ''
               }`}
-              aria-label={
-                inMonth ? `${cell.day}, ${disabled ? 'fermé' : 'ouvert'}` : cell.day
-              }
+              aria-label={inMonth ? `${cell.day}, ${dayToneLabel(tone)}` : cell.day}
               aria-pressed={selected}
             />
           )
@@ -293,9 +287,10 @@ function WeekRowInner({
           const d = new Date(cell.day + 'T12:00:00')
           const isToday = isSameDay(d, today)
           const inMonth = cell.inMonth
-          const disabled = cell.info?.is_disabled ?? false
+          const tone = dayTone(cell.info)
           const iAmPresent = cell.info?.i_am_present ?? false
           const presentCount = cell.info?.present_count ?? 0
+          const reason = cell.info?.disabled_reason
 
           return (
             <div
@@ -307,32 +302,29 @@ function WeekRowInner({
                   !inMonth
                     ? 'text-slate-600'
                     : isToday
-                      ? `bg-violet-600 text-white shadow-sm shadow-violet-900/50 ring-2 ${
-                          disabled ? 'ring-red-300' : 'ring-emerald-300'
-                        }`
-                      : disabled
-                        ? 'bg-red-600 text-white shadow-sm shadow-red-950/40'
-                        : 'bg-emerald-600 text-white shadow-sm shadow-emerald-950/40'
+                      ? `bg-violet-600 text-white shadow-sm shadow-violet-900/50 ring-2 ${toneRing(tone)}`
+                      : toneBadge(tone)
                 } ${iAmPresent && showPresence && inMonth && !isToday ? 'ring-2 ring-white' : ''}`}
-                title={inMonth ? (disabled ? 'Jour fermé' : 'Jour ouvert') : undefined}
+                title={inMonth ? (reason ? `${dayToneLabel(tone)} — ${reason}` : dayToneLabel(tone)) : undefined}
               >
                 {d.getDate()}
               </span>
               {showPresence && inMonth && presentCount > 0 && !iAmPresent && (
-                <span
-                  className={`text-[9px] mt-1.5 shrink-0 tabular-nums font-medium ${
-                    disabled ? 'text-red-100' : 'text-emerald-50'
-                  }`}
-                >
+                <span className={`text-[9px] mt-1.5 shrink-0 tabular-nums font-medium ${toneCount(tone)}`}>
                   {presentCount}/{cell.info?.max_participants ?? 20}
                 </span>
               )}
-              {disabled && inMonth && !(showPresence && presentCount > 0 && !iAmPresent) && (
+              {tone === 'closed' && inMonth && !(showPresence && presentCount > 0 && !iAmPresent) && (
                 <span
                   className="hidden sm:inline text-[9px] font-bold uppercase tracking-wide text-white bg-red-700 rounded px-1 py-0.5 mt-1 shrink-0"
-                  title="Fermé"
+                  title={reason || 'Fermé'}
                 >
                   Fermé
+                </span>
+              )}
+              {tone === 'full' && inMonth && !(showPresence && presentCount > 0 && !iAmPresent) && (
+                <span className="hidden sm:inline text-[9px] font-bold uppercase tracking-wide text-white bg-amber-700 rounded px-1 py-0.5 mt-1 shrink-0">
+                  Complet
                 </span>
               )}
             </div>
@@ -341,6 +333,30 @@ function WeekRowInner({
       </div>
     </div>
   )
+}
+
+function toneBg(tone: DayTone): string {
+  if (tone === 'closed') return 'bg-red-600/60 hover:bg-red-600/70'
+  if (tone === 'full') return 'bg-amber-600/55 hover:bg-amber-600/65'
+  return 'bg-emerald-600/50 hover:bg-emerald-600/60'
+}
+
+function toneBadge(tone: DayTone): string {
+  if (tone === 'closed') return 'bg-red-600 text-white shadow-sm shadow-red-950/40'
+  if (tone === 'full') return 'bg-amber-600 text-white shadow-sm shadow-amber-950/40'
+  return 'bg-emerald-600 text-white shadow-sm shadow-emerald-950/40'
+}
+
+function toneRing(tone: DayTone): string {
+  if (tone === 'closed') return 'ring-red-300'
+  if (tone === 'full') return 'ring-amber-300'
+  return 'ring-emerald-300'
+}
+
+function toneCount(tone: DayTone): string {
+  if (tone === 'closed') return 'text-red-100'
+  if (tone === 'full') return 'text-amber-50'
+  return 'text-emerald-50'
 }
 
 function isSameDay(d: Date, today: Date): boolean {

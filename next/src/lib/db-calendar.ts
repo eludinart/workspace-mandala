@@ -4,12 +4,13 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
-import { normalizeDbDateTime } from './format-datetime'
 import { listEventsForCommunityBetween, type EventRecord } from './db-mandala-events'
 
 export type CalendarSettings = {
   show_presence: boolean
   show_events: boolean
+  /** 0 = lundi … 6 = dimanche. Vide : aucun jour ouvert par le rythme. */
+  open_weekdays: number[]
 }
 
 export type CalendarPresentUser = {
@@ -21,6 +22,7 @@ export type CalendarPresentUser = {
 export type CalendarDaySummary = {
   day: string // YYYY-MM-DD
   is_disabled: boolean
+  disabled_reason: string | null
   /** Capacité d’inscription pour le jour (défaut 20). */
   max_participants: number
   present_count: number
@@ -31,10 +33,13 @@ export type CalendarDaySummary = {
 export type CalendarDayDetail = {
   day: string
   is_disabled: boolean
+  disabled_reason: string | null
   max_participants: number
   present_users: Array<{ user_id: number; pseudo: string; display_name: string }>
   events: Array<Pick<EventRecord, 'id' | 'title' | 'starts_at' | 'ends_at' | 'location' | 'phase'>>
 }
+
+export const MAX_CALENDAR_BULK_DAYS = 62
 
 export const DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS = 20
 
@@ -50,6 +55,36 @@ function assertYm(ym: string): string {
   return v
 }
 
+/** 0 = lundi … 6 = dimanche. */
+function mondayIndex(day: string): number {
+  const [y, m, d] = assertDay(day).split('-').map((x) => parseInt(x, 10))
+  const dt = new Date(y, m - 1, d)
+  return (dt.getDay() + 6) % 7
+}
+
+export function parseOpenWeekdays(raw: unknown): number[] {
+  const parts = Array.isArray(raw) ? raw : String(raw ?? '').split(',')
+  const out: number[] = []
+  for (const part of parts) {
+    const n = typeof part === 'number' ? part : parseInt(String(part).trim(), 10)
+    if (Number.isInteger(n) && n >= 0 && n <= 6 && !out.includes(n)) out.push(n)
+  }
+  return out.sort((a, b) => a - b)
+}
+
+function serializeOpenWeekdays(days: number[]): string {
+  return parseOpenWeekdays(days).join(',')
+}
+
+/**
+ * Sans ligne explicite, le jour est fermé, sauf s'il tombe un jour du rythme.
+ * Une ligne existante gagne toujours sur le rythme.
+ */
+function dayIsClosed(explicitDisabled: boolean | null, day: string, openWeekdays: number[]): boolean {
+  if (explicitDisabled != null) return explicitDisabled
+  return !openWeekdays.includes(mondayIndex(day))
+}
+
 function monthRange(ym: string): { start: string; endExclusive: string } {
   const safe = assertYm(ym)
   const [yStr, mStr] = safe.split('-')
@@ -63,7 +98,7 @@ function monthRange(ym: string): { start: string; endExclusive: string } {
 }
 
 export async function ensureCalendarTables(): Promise<void> {
-  return ensureOnce('calendar', async () => {
+  return ensureOnce('calendar-v2', async () => {
   const pool = getPool()
   const tP = table('calendar_presence')
   const tD = table('calendar_day_settings')
@@ -90,7 +125,7 @@ export async function ensureCalendarTables(): Promise<void> {
       id INT AUTO_INCREMENT PRIMARY KEY,
       community_id INT NOT NULL,
       day DATE NOT NULL,
-      is_disabled TINYINT(1) NOT NULL DEFAULT 0,
+      is_disabled TINYINT(1) NULL DEFAULT NULL,
       disabled_by INT DEFAULT NULL,
       disabled_reason VARCHAR(255) DEFAULT NULL,
       max_participants INT NOT NULL DEFAULT ${DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS},
@@ -108,12 +143,27 @@ export async function ensureCalendarTables(): Promise<void> {
       /* colonne déjà présente */
     })
 
+  await pool
+    .execute(`ALTER TABLE ${tD} MODIFY is_disabled TINYINT(1) NULL DEFAULT NULL`)
+    .catch(() => {
+      /* défaut déjà à jour */
+    })
+
+  await pool
+    .execute(
+      `ALTER TABLE ${tS} ADD COLUMN open_weekdays VARCHAR(32) NOT NULL DEFAULT ''`
+    )
+    .catch(() => {
+      /* colonne déjà présente */
+    })
+
   await exec(
     pool,
     `CREATE TABLE IF NOT EXISTS ${tS} (
       community_id INT NOT NULL PRIMARY KEY,
       show_presence TINYINT(1) NOT NULL DEFAULT 1,
       show_events TINYINT(1) NOT NULL DEFAULT 1,
+      open_weekdays VARCHAR(32) NOT NULL DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
@@ -125,12 +175,16 @@ export async function getCalendarSettings(communityId: number): Promise<Calendar
   const pool = getPool()
   const tS = table('calendar_settings')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT show_presence, show_events FROM ${tS} WHERE community_id = ? LIMIT 1`,
+    `SELECT show_presence, show_events, open_weekdays FROM ${tS} WHERE community_id = ? LIMIT 1`,
     [communityId]
   )
   const r = rows[0]
-  if (!r) return { show_presence: true, show_events: true }
-  return { show_presence: Number(r.show_presence ?? 1) === 1, show_events: Number(r.show_events ?? 1) === 1 }
+  if (!r) return { show_presence: true, show_events: true, open_weekdays: [] }
+  return {
+    show_presence: Number(r.show_presence ?? 1) === 1,
+    show_events: Number(r.show_events ?? 1) === 1,
+    open_weekdays: parseOpenWeekdays(r.open_weekdays),
+  }
 }
 
 export async function upsertCalendarSettings(params: {
@@ -144,14 +198,16 @@ export async function upsertCalendarSettings(params: {
   const next: CalendarSettings = {
     show_presence: params.patch.show_presence ?? current.show_presence,
     show_events: params.patch.show_events ?? current.show_events,
+    open_weekdays: params.patch.open_weekdays ?? current.open_weekdays,
   }
+  const openWeekdays = serializeOpenWeekdays(next.open_weekdays)
   await pool.execute(
-    `INSERT INTO ${tS} (community_id, show_presence, show_events)
-     VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE show_presence = VALUES(show_presence), show_events = VALUES(show_events)`,
-    [params.communityId, next.show_presence ? 1 : 0, next.show_events ? 1 : 0]
+    `INSERT INTO ${tS} (community_id, show_presence, show_events, open_weekdays)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE show_presence = VALUES(show_presence), show_events = VALUES(show_events), open_weekdays = VALUES(open_weekdays)`,
+    [params.communityId, next.show_presence ? 1 : 0, next.show_events ? 1 : 0, openWeekdays]
   )
-  return next
+  return { ...next, open_weekdays: parseOpenWeekdays(openWeekdays) }
 }
 
 export async function setCalendarDayDisabled(params: {
@@ -200,7 +256,7 @@ export async function setCalendarDayMaxParticipants(params: {
   const max = clampMaxParticipants(params.max_participants)
   await pool.execute(
     `INSERT INTO ${tD} (community_id, day, is_disabled, disabled_by, disabled_reason, max_participants)
-     VALUES (?, ?, 0, NULL, NULL, ?)
+     VALUES (?, ?, NULL, NULL, NULL, ?)
      ON DUPLICATE KEY UPDATE max_participants = VALUES(max_participants)`,
     [params.communityId, day, max]
   )
@@ -219,15 +275,30 @@ async function getDayMaxParticipants(communityId: number, day: string): Promise<
   return clampMaxParticipants(rows[0].max_participants)
 }
 
-async function isDayDisabled(communityId: number, day: string): Promise<boolean> {
+async function readExplicitDay(
+  communityId: number,
+  day: string
+): Promise<{ is_disabled: boolean | null; reason: string | null; max: number | null } | null> {
   await ensureCalendarTables()
   const pool = getPool()
   const tD = table('calendar_day_settings')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT is_disabled FROM ${tD} WHERE community_id = ? AND day = ? LIMIT 1`,
+    `SELECT is_disabled, disabled_reason, max_participants FROM ${tD} WHERE community_id = ? AND day = ? LIMIT 1`,
     [communityId, assertDay(day)]
   )
-  return Number(rows[0]?.is_disabled ?? 0) === 1
+  const row = rows[0]
+  if (!row) return null
+  return {
+    is_disabled: row.is_disabled == null ? null : Number(row.is_disabled) === 1,
+    reason: row.disabled_reason ? String(row.disabled_reason) : null,
+    max: row.max_participants == null ? null : clampMaxParticipants(row.max_participants),
+  }
+}
+
+async function isDayDisabled(communityId: number, day: string): Promise<boolean> {
+  const explicit = await readExplicitDay(communityId, day)
+  const settings = await getCalendarSettings(communityId)
+  return dayIsClosed(explicit?.is_disabled ?? null, day, settings.open_weekdays)
 }
 
 export async function setPresence(params: {
@@ -242,8 +313,8 @@ export async function setPresence(params: {
   const pool = getPool()
   const tP = table('calendar_presence')
   const day = assertDay(params.day)
-  if (!params.bypassDisabled && (await isDayDisabled(params.communityId, day))) {
-    throw new Error('Cette journée est désactivée par un administrateur.')
+  if (params.present && !params.bypassDisabled && (await isDayDisabled(params.communityId, day))) {
+    throw new Error('Cette journée est fermée.')
   }
   if (params.present) {
     const [existing] = await pool.execute<RowDataPacket[]>(
@@ -274,6 +345,41 @@ export async function setPresence(params: {
     params.userId,
   ])
   return { present: false, user_id: params.userId }
+}
+
+export async function setPresenceMany(params: {
+  communityId: number
+  days: string[]
+  userId: number
+  present: boolean
+  bypassDisabled?: boolean
+}): Promise<{ applied: string[]; skipped: Array<{ day: string; reason: string }> }> {
+  const unique: string[] = []
+  for (const raw of params.days) {
+    const day = assertDay(raw)
+    if (!unique.includes(day)) unique.push(day)
+  }
+  if (unique.length === 0) throw new Error('Aucun jour')
+  if (unique.length > MAX_CALENDAR_BULK_DAYS) {
+    throw new Error(`Maximum ${MAX_CALENDAR_BULK_DAYS} jours`)
+  }
+  const applied: string[] = []
+  const skipped: Array<{ day: string; reason: string }> = []
+  for (const day of unique) {
+    try {
+      await setPresence({
+        communityId: params.communityId,
+        day,
+        userId: params.userId,
+        present: params.present,
+        bypassDisabled: params.bypassDisabled,
+      })
+      applied.push(day)
+    } catch (err: unknown) {
+      skipped.push({ day, reason: err instanceof Error ? err.message : 'Impossible' })
+    }
+  }
+  return { applied, skipped }
 }
 
 async function fetchPresentUsersByDay(
@@ -347,17 +453,19 @@ export async function getCalendarMonth(params: {
     : new Map<string, CalendarPresentUser[]>()
 
   const [disabledRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT DATE_FORMAT(day, '%Y-%m-%d') AS day, is_disabled, max_participants
+    `SELECT DATE_FORMAT(day, '%Y-%m-%d') AS day, is_disabled, disabled_reason, max_participants
      FROM ${tD}
      WHERE community_id = ? AND day >= ? AND day < ?`,
     [params.communityId, start, endExclusive]
   )
-  const disabledMap = new Map<string, boolean>()
-  const maxMap = new Map<string, number>()
+  const explicitMap = new Map<string, { is_disabled: boolean | null; reason: string | null; max: number }>()
   for (const r of disabledRows ?? []) {
     const d = String(r.day)
-    disabledMap.set(d, Number(r.is_disabled ?? 0) === 1)
-    maxMap.set(d, clampMaxParticipants(r.max_participants))
+    explicitMap.set(d, {
+      is_disabled: r.is_disabled == null ? null : Number(r.is_disabled) === 1,
+      reason: r.disabled_reason ? String(r.disabled_reason) : null,
+      max: clampMaxParticipants(r.max_participants),
+    })
   }
 
   // Construire toutes les journées du mois (1..N)
@@ -368,12 +476,14 @@ export async function getCalendarMonth(params: {
   const days: CalendarDaySummary[] = []
   for (let i = 1; i <= daysInMonth; i++) {
     const day = `${yearStr}-${monthStr}-${String(i).padStart(2, '0')}`
-    const is_disabled = disabledMap.get(day) ?? false
+    const explicit = explicitMap.get(day)
+    const is_disabled = dayIsClosed(explicit?.is_disabled ?? null, day, settings.open_weekdays)
     const present_users = presentByDay.get(day) ?? []
     days.push({
       day,
       is_disabled,
-      max_participants: maxMap.get(day) ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS,
+      disabled_reason: is_disabled ? (explicit?.reason ?? null) : null,
+      max_participants: explicit?.max ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS,
       present_count: countMap.get(day) ?? present_users.length,
       i_am_present: present_users.some((u) => u.user_id === params.viewerUserId),
       present_users,
@@ -405,18 +515,10 @@ export async function getCalendarDayDetail(params: {
   const day = assertDay(params.day)
   const pool = getPool()
   const settings = await getCalendarSettings(params.communityId)
-
-  const tD = table('calendar_day_settings')
-  const [dRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT is_disabled, disabled_reason, disabled_by, updated_at, max_participants
-     FROM ${tD} WHERE community_id = ? AND day = ? LIMIT 1`,
-    [params.communityId, day]
-  )
-  const is_disabled = Number(dRows[0]?.is_disabled ?? 0) === 1
-  const max_participants = clampMaxParticipants(
-    dRows[0]?.max_participants ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS
-  )
-  void normalizeDbDateTime(dRows[0]?.updated_at)
+  const explicit = await readExplicitDay(params.communityId, day)
+  const is_disabled = dayIsClosed(explicit?.is_disabled ?? null, day, settings.open_weekdays)
+  const disabled_reason = is_disabled ? (explicit?.reason ?? null) : null
+  const max_participants = explicit?.max ?? DEFAULT_CALENDAR_DAY_MAX_PARTICIPANTS
 
   const present_users: CalendarDayDetail['present_users'] = []
   if (settings.show_presence) {
@@ -465,6 +567,7 @@ export async function getCalendarDayDetail(params: {
     detail: {
       day,
       is_disabled,
+      disabled_reason,
       max_participants,
       present_users,
       events,

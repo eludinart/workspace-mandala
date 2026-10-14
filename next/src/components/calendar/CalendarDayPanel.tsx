@@ -1,15 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { enumerateEventDays } from '@/lib/event-dates'
 import {
   type MonthEvent,
   type MonthDay,
   type PresentUser,
   dayLabelFr,
+  dayTone,
   displayLabel,
   formatEventTime,
   phaseColor,
   phaseSoftBg,
+  selectionSpan,
 } from '@/components/calendar/calendar-utils'
 
 const DEFAULT_MAX = 20
@@ -18,6 +21,7 @@ export type DayDetailData = {
   detail: {
     day: string
     is_disabled: boolean
+    disabled_reason?: string | null
     max_participants?: number
     present_users: PresentUser[]
     events: MonthEvent[]
@@ -36,10 +40,16 @@ export function CalendarDayPanel({
   viewerId,
   presenceBusy,
   onClose,
+  selectedDays,
+  selectionBusy,
   onToggleSelfPresence,
-  onToggleDayDisabled,
-  onSetMaxParticipants,
+  onApplySelection,
+  onCreateSelectionEvent,
+  onClearSelection,
   onRemoveUser,
+  onSetEventSpanPresence,
+  dayOpen,
+  dayPresent,
   variant,
 }: {
   selectedDay: string
@@ -52,10 +62,20 @@ export function CalendarDayPanel({
   viewerId: number | null
   presenceBusy: boolean
   onClose?: () => void
+  selectedDays: string[]
+  selectionBusy: boolean
   onToggleSelfPresence: (present: boolean) => void
-  onToggleDayDisabled: (disabled: boolean) => void
-  onSetMaxParticipants: (max: number) => void | Promise<void>
+  onApplySelection: (patch: {
+    is_disabled?: boolean
+    reason?: string
+    max_participants?: number
+  }) => void | Promise<void>
+  onCreateSelectionEvent: (title: string, openDays: boolean) => void | Promise<void>
+  onClearSelection: () => void
   onRemoveUser: (userId: number) => void
+  onSetEventSpanPresence?: (days: string[], present: boolean) => void
+  dayOpen?: (day: string) => boolean | null
+  dayPresent?: (day: string) => boolean | null
   variant: 'sheet' | 'sidebar'
 }) {
   const maxParticipants =
@@ -66,55 +86,77 @@ export function CalendarDayPanel({
     dayDetail?.detail.present_users.length ?? selectedDayInfo?.present_count ?? 0
   const isFull = presentCount >= maxParticipants
   const [maxDraft, setMaxDraft] = useState(String(maxParticipants))
-  const [maxBusy, setMaxBusy] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
+  const [eventOpen, setEventOpen] = useState(false)
+  const [eventTitle, setEventTitle] = useState('')
+  const [openDaysToo, setOpenDaysToo] = useState(true)
+  const many = selectedDays.length > 1
+  const span = selectionSpan(selectedDays)
 
   useEffect(() => {
     setMaxDraft(String(maxParticipants))
   }, [selectedDay, maxParticipants])
 
-  const dayClosed = dayDetail?.detail.is_disabled ?? selectedDayInfo?.is_disabled ?? false
+  const tone = dayTone(
+    dayDetail
+      ? {
+          is_disabled: dayDetail.detail.is_disabled,
+          present_count: dayDetail.detail.present_users.length,
+          max_participants: maxParticipants,
+        }
+      : selectedDayInfo
+  )
+  const closedReason = dayDetail?.detail.disabled_reason ?? selectedDayInfo?.disabled_reason ?? null
   const shellClass =
     variant === 'sidebar'
       ? `rounded-2xl border-2 overflow-hidden flex flex-col h-full min-h-[320px] ${
-          dayClosed
-            ? 'border-red-500/70 bg-red-950/20'
-            : 'border-emerald-600/60 bg-emerald-950/15'
+          many ? 'border-violet-500/60 bg-slate-900' : toneShell(tone)
         }`
-      : `m-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border-2 overflow-hidden flex flex-col shadow-2xl ${
-          dayClosed ? 'border-red-500/70 bg-slate-900' : 'border-emerald-600/60 bg-slate-900'
+      : `m-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border-2 overflow-hidden flex flex-col shadow-2xl bg-slate-900 ${
+          many ? 'border-violet-500/60' : toneShell(tone)
         }`
 
-  const saveMax = async () => {
+  const saveMax = () => {
     const n = parseInt(maxDraft, 10)
     if (!Number.isFinite(n) || n < 1) return
-    setMaxBusy(true)
-    try {
-      await onSetMaxParticipants(n)
-    } finally {
-      setMaxBusy(false)
-    }
+    void onApplySelection({ max_participants: n })
   }
 
   return (
     <div className={shellClass}>
       <div
         className={`flex items-center justify-between gap-2 px-4 py-3 border-b shrink-0 ${
-          dayClosed
-            ? 'border-red-500/40 bg-red-950/50'
-            : 'border-emerald-500/30 bg-emerald-950/40'
+          many ? 'border-violet-500/40 bg-violet-950/40' : toneHeader(tone)
         }`}
       >
         <div className="min-w-0">
           <p
             className={`text-[10px] uppercase tracking-widest font-semibold ${
-              dayClosed ? 'text-red-200' : 'text-emerald-200'
+              many ? 'text-violet-200' : toneLabelClass(tone)
             }`}
           >
-            {dayClosed ? 'Jour fermé' : 'Jour ouvert'}
+            {many
+              ? 'Jours choisis'
+              : tone === 'closed'
+                ? 'Jour fermé'
+                : tone === 'full'
+                  ? 'Jour complet'
+                  : 'Jour ouvert'}
           </p>
           <p className="font-semibold capitalize text-sm sm:text-base leading-tight text-slate-50">
-            {dayLabelFr(selectedDay)}
+            {many
+              ? `${selectedDays.length} jours`
+              : dayLabelFr(selectedDay)}
           </p>
+          {many && span && (
+            <p className="text-xs text-violet-200/80 mt-0.5">
+              {shortRange(span.start, span.end)}
+              {span.gaps ? ' · des jours manquent entre les deux' : ''}
+            </p>
+          )}
+          {!many && tone === 'closed' && closedReason && (
+            <p className="text-xs text-red-200/90 mt-0.5 truncate">{closedReason}</p>
+          )}
         </div>
         {onClose && (
           <button
@@ -135,7 +177,7 @@ export function CalendarDayPanel({
           </div>
         )}
 
-        {!detailLoading && showPresence && selectedDayInfo && (
+        {!detailLoading && !many && showPresence && selectedDayInfo && (
           <div
             className={`m-user-form rounded-xl border p-4 flex items-center justify-between gap-3 ${
               selectedDayInfo.i_am_present
@@ -147,7 +189,9 @@ export function CalendarDayPanel({
               <p className="text-sm font-semibold text-slate-100">Mon inscription</p>
               <p className="text-xs text-slate-400 mt-0.5">
                 {selectedDayInfo.is_disabled
-                  ? 'Cette journée est fermée.'
+                  ? closedReason
+                    ? `Cette journée est fermée. ${closedReason}`
+                    : 'Cette journée est fermée.'
                   : selectedDayInfo.i_am_present
                     ? 'Vous serez présent(e) ce jour-là.'
                     : isFull
@@ -174,27 +218,58 @@ export function CalendarDayPanel({
           </div>
         )}
 
-        {!detailLoading && dayDetail && canManage && (
+        {canManage && (
           <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-3 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-amber-100">Gestion du lieu</p>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Réservé aux gestionnaires et administrateurs.
+                  {many
+                    ? 'Les boutons agissent sur tous les jours choisis.'
+                    : 'Les mêmes boutons servent pour un jour ou pour plusieurs.'}
                 </p>
               </div>
+              {many && (
+                <button
+                  type="button"
+                  onClick={onClearSelection}
+                  className="text-xs text-slate-400 hover:text-slate-200 shrink-0"
+                >
+                  Effacer
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => onToggleDayDisabled(!dayDetail.detail.is_disabled)}
-                className={`px-3 py-1.5 text-sm rounded-lg border font-medium ${
-                  dayDetail.detail.is_disabled
-                    ? 'border-emerald-600/50 text-emerald-200 hover:bg-emerald-900/30'
-                    : 'border-amber-600/50 text-amber-200 hover:bg-amber-900/30'
-                }`}
+                disabled={selectionBusy}
+                onClick={() => void onApplySelection({ is_disabled: false })}
+                className="px-3 py-1.5 text-sm rounded-lg border border-emerald-600/50 text-emerald-100 hover:bg-emerald-900/30 disabled:opacity-40"
               >
-                {dayDetail.detail.is_disabled ? 'Réouvrir' : 'Fermer le jour'}
+                Ouvrir
+              </button>
+              <button
+                type="button"
+                disabled={selectionBusy}
+                onClick={() => void onApplySelection({ is_disabled: true, reason: closeReason })}
+                className="px-3 py-1.5 text-sm rounded-lg border border-red-600/50 text-red-100 hover:bg-red-900/30 disabled:opacity-40"
+              >
+                Fermer
               </button>
             </div>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] uppercase tracking-wide text-amber-200/70">
+                Motif de fermeture
+              </span>
+              <input
+                type="text"
+                value={closeReason}
+                maxLength={255}
+                placeholder="Retraite, lieu vide…"
+                onChange={(e) => setCloseReason(e.target.value)}
+                className="w-full rounded-lg border border-amber-800/50 bg-slate-950/60 px-2 py-1.5 text-sm text-slate-100"
+              />
+            </label>
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 min-w-[8rem]">
                 <span className="text-[11px] uppercase tracking-wide text-amber-200/70">
@@ -211,17 +286,64 @@ export function CalendarDayPanel({
               </label>
               <button
                 type="button"
-                disabled={maxBusy || parseInt(maxDraft, 10) === maxParticipants}
-                onClick={() => void saveMax()}
+                disabled={selectionBusy}
+                onClick={saveMax}
                 className="px-3 py-1.5 text-sm rounded-lg border border-amber-600/50 text-amber-100 hover:bg-amber-900/30 disabled:opacity-40"
               >
                 Enregistrer
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setEventOpen((v) => !v)}
+              className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white hover:bg-violet-500"
+            >
+              Créer un événement
+            </button>
+            {eventOpen && span && (
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!eventTitle.trim()) return
+                  void onCreateSelectionEvent(eventTitle.trim(), openDaysToo)
+                  setEventTitle('')
+                  setEventOpen(false)
+                }}
+              >
+                <p className="text-xs text-slate-400">
+                  Du {shortRange(span.start, span.end)}
+                  {span.gaps ? ', y compris les jours non cochés' : ''}. Seuls les jours choisis sont ouverts.
+                </p>
+                <input
+                  type="text"
+                  value={eventTitle}
+                  required
+                  placeholder="Titre"
+                  onChange={(e) => setEventTitle(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                />
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={openDaysToo}
+                    onChange={(e) => setOpenDaysToo(e.target.checked)}
+                  />
+                  Ouvrir ces jours
+                </label>
+                <button
+                  type="submit"
+                  disabled={selectionBusy || !eventTitle.trim()}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-violet-600 text-white disabled:opacity-40"
+                >
+                  {selectionBusy ? 'Création…' : 'Créer'}
+                </button>
+              </form>
+            )}
           </div>
         )}
 
-        {!detailLoading && dayDetail && showEvents && (
+        {!detailLoading && !many && dayDetail && showEvents && (
           <section className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               Événements ({dayDetail.detail.events.length})
@@ -243,6 +365,15 @@ export function CalendarDayPanel({
                         {ev.location && (
                           <p className="text-xs opacity-70 mt-1">📍 {ev.location}</p>
                         )}
+                        {onSetEventSpanPresence && (
+                          <EventSpanButton
+                            event={ev}
+                            dayOpen={dayOpen}
+                            dayPresent={dayPresent}
+                            busy={presenceBusy}
+                            onSet={onSetEventSpanPresence}
+                          />
+                        )}
                       </div>
                     </div>
                   </li>
@@ -252,7 +383,7 @@ export function CalendarDayPanel({
           </section>
         )}
 
-        {!detailLoading && dayDetail && showPresence && (
+        {!detailLoading && !many && dayDetail && showPresence && (
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -304,4 +435,60 @@ export function CalendarDayPanel({
       </div>
     </div>
   )
+}
+
+function EventSpanButton({
+  event,
+  dayOpen,
+  dayPresent,
+  busy,
+  onSet,
+}: {
+  event: MonthEvent
+  dayOpen?: (day: string) => boolean | null
+  dayPresent?: (day: string) => boolean | null
+  busy: boolean
+  onSet: (days: string[], present: boolean) => void
+}) {
+  const span = enumerateEventDays(event.starts_at, event.ends_at)
+  if (span.length < 2 || !dayOpen || !dayPresent) return null
+  const knownOpen = span.filter((day) => dayOpen(day) === true)
+  const unknown = span.some((day) => dayOpen(day) == null)
+  if (!unknown && knownOpen.length < 2) return null
+  const targets = knownOpen.length > 0 ? knownOpen : span
+  const allPresent = !unknown && targets.every((day) => dayPresent(day) === true)
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => onSet(span, !allPresent)}
+      className="mt-2 text-xs px-2.5 py-1 rounded-lg border border-violet-500/40 text-violet-100 hover:bg-violet-900/30 disabled:opacity-40"
+    >
+      {allPresent ? 'Annuler sur tous les jours' : 'Je viens sur tous les jours ouverts'}
+    </button>
+  )
+}
+
+function shortRange(start: string, end: string): string {
+  const fmt = (day: string) =>
+    new Date(`${day}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+  return start === end ? fmt(start) : `${fmt(start)} – ${fmt(end)}`
+}
+
+function toneShell(tone: 'closed' | 'full' | 'open'): string {
+  if (tone === 'closed') return 'border-red-500/70 bg-red-950/20'
+  if (tone === 'full') return 'border-amber-500/70 bg-amber-950/20'
+  return 'border-emerald-600/60 bg-emerald-950/15'
+}
+
+function toneHeader(tone: 'closed' | 'full' | 'open'): string {
+  if (tone === 'closed') return 'border-red-500/40 bg-red-950/50'
+  if (tone === 'full') return 'border-amber-500/40 bg-amber-950/40'
+  return 'border-emerald-500/30 bg-emerald-950/40'
+}
+
+function toneLabelClass(tone: 'closed' | 'full' | 'open'): string {
+  if (tone === 'closed') return 'text-red-200'
+  if (tone === 'full') return 'text-amber-200'
+  return 'text-emerald-200'
 }

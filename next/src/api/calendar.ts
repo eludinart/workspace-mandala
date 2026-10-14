@@ -11,8 +11,17 @@ export const calendarApi = {
     ),
   setPresence: (body: { community_slug: string; day: string; present: boolean; user_id?: number }) =>
     api.post('/api/calendar/presence', body),
+  setPresenceDays: (body: { community_slug: string; days: string[]; present: boolean }) =>
+    api.post('/api/calendar/presence', body),
   setDayDisabled: (body: { community_slug: string; day: string; is_disabled: boolean; reason?: string }) =>
     api.post('/api/calendar/day-settings', body),
+  setDays: (body: {
+    community_slug: string
+    days: string[]
+    is_disabled?: boolean
+    reason?: string
+    max_participants?: number
+  }) => api.post('/api/calendar/day-settings', body),
   setDayMaxParticipants: (body: {
     community_slug: string
     day: string
@@ -20,7 +29,11 @@ export const calendarApi = {
   }) => api.post('/api/calendar/day-settings', body),
   settings: (communitySlug: string) =>
     api.get(`/api/calendar/settings?community_slug=${encodeURIComponent(communitySlug)}`),
-  updateSettings: (body: { community_slug: string; show_presence?: boolean; show_events?: boolean }) =>
-    api.patch('/api/calendar/settings', body),
+  updateSettings: (body: {
+    community_slug: string
+    show_presence?: boolean
+    show_events?: boolean
+    open_weekdays?: number[]
+  }) => api.patch('/api/calendar/settings', body),
 }
 
