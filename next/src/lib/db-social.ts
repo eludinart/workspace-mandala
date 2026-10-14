@@ -101,6 +101,7 @@ export type MyChannelRecord = {
   unreadCount: number
   memberCount?: number
   memberIds?: number[]
+  channelKind?: 'core' | null
   lastMessage?: string | null
   lastMessageAt?: string | null
 }
@@ -653,9 +654,11 @@ export async function getMyChannels(
     const memberIds = (memberIdRows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
     const unreadCount = await countUnreadForChannel(pool, channelId, uid, 'group')
     const groupName = String(gr.channel_name ?? '').trim() || `Groupe (${memberIds.length})`
+    const coreChannel = String(gr.member_fingerprint ?? '') === 'core'
     list.push({
       channelId,
       channelType: 'group',
+      channelKind: coreChannel ? 'core' : null,
       communityId: gr.community_id ? Number(gr.community_id) : null,
       createdBy: gr.created_by != null ? Number(gr.created_by) : null,
       otherPseudo: groupName,
@@ -682,6 +685,32 @@ function sqlDateToSortable(value: unknown): string | null {
   const s = String(value).trim()
   if (!s || s.startsWith('0000-00-00')) return null
   return s.slice(0, 19)
+}
+
+function plainGroupName(name: string): string {
+  return name
+    .replace(/œ/gi, 'oe')
+    .replace(/æ/gi, 'ae')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function isCoreConversation(ch: MyChannelRecord): boolean {
+  if (ch.channelKind === 'core') return true
+  const name = plainGroupName(ch.otherPseudo)
+  return name.includes('coeur') || (name.includes('noyau') && name.includes('abricot'))
+}
+
+/** Groupe cœur, puis les autres groupes, puis les conversations à deux. */
+function compareConversationRecords(a: MyChannelRecord, b: MyChannelRecord): number {
+  const tier = (ch: MyChannelRecord) => (ch.channelType !== 'group' ? 2 : isCoreConversation(ch) ? 0 : 1)
+  const byTier = tier(a) - tier(b)
+  if (byTier !== 0) return byTier
+  const ta = a.lastMessageAt ?? ''
+  const tb = b.lastMessageAt ?? ''
+  if (ta !== tb) return ta < tb ? 1 : -1
+  return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
 }
 
 async function attachLastMessages(
@@ -721,12 +750,7 @@ async function attachLastMessages(
   } catch {
     /* table absente ou pas encore migrée */
   }
-  list.sort((a, b) => {
-    const ta = a.lastMessageAt ?? ''
-    const tb = b.lastMessageAt ?? ''
-    if (ta !== tb) return ta < tb ? 1 : -1
-    return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
-  })
+  list.sort(compareConversationRecords)
 }
 
 export async function renameGroupChannel(params: {

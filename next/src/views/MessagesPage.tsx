@@ -24,6 +24,7 @@ type Channel = {
   memberCount?: number
   memberIds?: number[]
   createdBy?: number | null
+  channelKind?: 'core' | null
   lastMessage?: string | null
   lastMessageAt?: string | null
 }
@@ -35,6 +36,32 @@ type PendingSeed = {
   from_avatar?: string | null
   from_avatar_emoji?: string
   intention_id: string
+}
+
+function plainGroupName(name: string): string {
+  return name
+    .replace(/œ/gi, 'oe')
+    .replace(/æ/gi, 'ae')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function isCoreGroupLabel(ch: Channel): boolean {
+  if (ch.channelKind === 'core') return true
+  const name = plainGroupName(ch.otherPseudo)
+  return name.includes('coeur') || (name.includes('noyau') && name.includes('abricot'))
+}
+
+/** Groupe cœur, puis les autres groupes, puis les conversations à deux. */
+function compareConversations(a: Channel, b: Channel): number {
+  const tier = (ch: Channel) => (ch.channelType !== 'group' ? 2 : isCoreGroupLabel(ch) ? 0 : 1)
+  const byTier = tier(a) - tier(b)
+  if (byTier !== 0) return byTier
+  const ta = a.lastMessageAt ?? ''
+  const tb = b.lastMessageAt ?? ''
+  if (ta !== tb) return ta < tb ? 1 : -1
+  return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
 }
 
 export function MessagesPage({
@@ -271,8 +298,8 @@ export function MessagesPage({
 
   const visibleChannels = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return channels
-    return channels.filter((c) => c.otherPseudo.toLowerCase().includes(q))
+    const list = q ? channels.filter((c) => c.otherPseudo.toLowerCase().includes(q)) : channels
+    return [...list].sort(compareConversations)
   }, [channels, query])
 
   const chatOpen = selectedId != null
