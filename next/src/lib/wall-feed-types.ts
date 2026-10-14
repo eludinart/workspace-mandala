@@ -9,6 +9,8 @@ export type WallPlaceRef = {
   logo_emoji: string | null
   accent_color: string | null
   avatar: string | null
+  /** Fiche /lieux/[slug]. Faux : pas de lien, la page répond 404. */
+  profile_public: boolean
 }
 
 export type WallFeedItemBase = {

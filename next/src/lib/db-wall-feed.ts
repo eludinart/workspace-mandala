@@ -1,6 +1,8 @@
 /**
  * Mur d'actualité — agrégation événements, annonces et brèves Agora.
- * Visiteurs : aperçus publics. Membres connectés : contenu complet de leurs lieux.
+ * Visiteurs : aperçus publics. Membres connectés : contenu de leurs lieux listés.
+ * Un lieu retiré du catalogue (listed_public = 0) n'alimente pas Découvrir,
+ * même si un contenu a « mur public » coché, même pour un membre.
  */
 import type { RowDataPacket } from 'mysql2'
 import { getPool, isDbConfigured, table } from './db'
@@ -20,6 +22,9 @@ const PUBLIC_PAST_EVENT_DAYS = 60
 const MEMBER_ANNOUNCEMENT_PER_PLACE = 10
 const MEMBER_POST_PER_PLACE = 15
 const MEMBER_EVENT_PER_PLACE = 10
+
+/** Lieu présent sur la page Découvrir (catalogue, carte, fil). */
+const LISTED_PLACE_SQL = 'COALESCE(c.listed_public, 1) = 1'
 
 function isUpcomingEvent(ev: {
   starts_at: string | null
@@ -56,6 +61,11 @@ function eventFeedMeta(ev: {
 }
 
 function placeRefFromRow(r: RowDataPacket): WallPlaceRef {
+  const rawProfile = r.profile_public
+  const profilePublic =
+    rawProfile == null || rawProfile === ''
+      ? true
+      : rawProfile === true || rawProfile === 1 || String(rawProfile) === '1'
   return {
     id: Number(r.community_id ?? r.place_id ?? r.id),
     slug: String(r.place_slug ?? r.slug ?? ''),
@@ -68,6 +78,7 @@ function placeRefFromRow(r: RowDataPacket): WallPlaceRef {
         : r.avatar != null
           ? String(r.avatar)
           : null,
+    profile_public: profilePublic,
   }
 }
 
@@ -80,10 +91,10 @@ async function fetchPublicWallEvents(limit: number): Promise<WallFeedItem[]> {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT e.id, e.title, e.description, e.starts_at, e.ends_at, e.location, e.phase, e.cover_image, e.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public
      FROM ${tE} e
      JOIN ${tC} c ON c.id = e.community_id AND c.is_active = 1
-     WHERE e.status = 'published' AND e.wall_public = 1
+     WHERE e.status = 'published' AND e.wall_public = 1 AND ${LISTED_PLACE_SQL}
      ORDER BY COALESCE(e.ends_at, e.starts_at, e.created_at) DESC
      LIMIT ?`,
     [Math.min(limit * 4, 80)]
@@ -133,7 +144,7 @@ async function fetchPublicAnnouncements(limit: number): Promise<WallFeedItem[]> 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT a.id, a.title, a.body, a.image_data, a.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar,
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', a.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji
      FROM ${tA} a
@@ -141,7 +152,7 @@ async function fetchPublicAnnouncements(limit: number): Promise<WallFeedItem[]> 
      JOIN ${table('users')} u ON u.ID = a.author_id
      LEFT JOIN ${table('usermeta')} pm ON pm.user_id = a.author_id AND pm.meta_key = 'mdl_pseudo'
      LEFT JOIN ${table('usermeta')} em ON em.user_id = a.author_id AND em.meta_key = 'mdl_avatar_emoji'
-     WHERE a.wall_public = 1 AND COALESCE(a.audience, 'all') = 'all'
+     WHERE a.wall_public = 1 AND COALESCE(a.audience, 'all') = 'all' AND ${LISTED_PLACE_SQL}
      ORDER BY a.created_at DESC
      LIMIT ?`,
     [limit]
@@ -173,7 +184,7 @@ async function fetchPublicPosts(limit: number): Promise<WallFeedItem[]> {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT p.id, p.type, p.content, p.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar,
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', p.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji
      FROM ${tP} p
@@ -181,7 +192,7 @@ async function fetchPublicPosts(limit: number): Promise<WallFeedItem[]> {
      JOIN ${table('users')} u ON u.ID = p.author_id
      LEFT JOIN ${table('usermeta')} pm ON pm.user_id = p.author_id AND pm.meta_key = 'mdl_pseudo'
      LEFT JOIN ${table('usermeta')} em ON em.user_id = p.author_id AND em.meta_key = 'mdl_avatar_emoji'
-     WHERE p.wall_public = 1
+     WHERE p.wall_public = 1 AND ${LISTED_PLACE_SQL}
      ORDER BY p.created_at DESC
      LIMIT ?`,
     [limit]
@@ -213,7 +224,7 @@ async function fetchMemberAnnouncements(
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT a.id, a.title, a.body, a.image_data, a.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar,
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', a.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji
      FROM ${tA} a
@@ -221,7 +232,7 @@ async function fetchMemberAnnouncements(
      JOIN ${table('users')} u ON u.ID = a.author_id
      LEFT JOIN ${table('usermeta')} pm ON pm.user_id = a.author_id AND pm.meta_key = 'mdl_pseudo'
      LEFT JOIN ${table('usermeta')} em ON em.user_id = a.author_id AND em.meta_key = 'mdl_avatar_emoji'
-     WHERE a.community_id IN (${placeholders})
+     WHERE a.community_id IN (${placeholders}) AND ${LISTED_PLACE_SQL}
      ORDER BY a.created_at DESC
      LIMIT ?`,
     [...communityIds, Math.min(communityIds.length * perPlace, 80)]
@@ -251,7 +262,7 @@ async function fetchMemberPosts(communityIds: number[], perPlace: number): Promi
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT p.id, p.type, p.content, p.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar,
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', p.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji
      FROM ${tP} p
@@ -259,7 +270,7 @@ async function fetchMemberPosts(communityIds: number[], perPlace: number): Promi
      JOIN ${table('users')} u ON u.ID = p.author_id
      LEFT JOIN ${table('usermeta')} pm ON pm.user_id = p.author_id AND pm.meta_key = 'mdl_pseudo'
      LEFT JOIN ${table('usermeta')} em ON em.user_id = p.author_id AND em.meta_key = 'mdl_avatar_emoji'
-     WHERE p.community_id IN (${placeholders})
+     WHERE p.community_id IN (${placeholders}) AND ${LISTED_PLACE_SQL}
      ORDER BY p.created_at DESC
      LIMIT ?`,
     [...communityIds, Math.min(communityIds.length * perPlace, 100)]
@@ -288,10 +299,10 @@ async function fetchMemberEvents(communityIds: number[], perPlace: number): Prom
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT e.id, e.title, e.description, e.starts_at, e.ends_at, e.location, e.phase, e.cover_image, e.created_at,
             c.id AS community_id, c.slug AS place_slug, c.name AS place_name,
-            c.logo_emoji, c.accent_color, c.avatar AS place_avatar
+            c.logo_emoji, c.accent_color, c.avatar AS place_avatar, c.profile_public
      FROM ${tE} e
      JOIN ${tC} c ON c.id = e.community_id
-     WHERE e.community_id IN (${placeholders}) AND e.status != 'cancelled'
+     WHERE e.community_id IN (${placeholders}) AND e.status != 'cancelled' AND ${LISTED_PLACE_SQL}
      ORDER BY COALESCE(e.starts_at, e.created_at) DESC
      LIMIT ?`,
     [...communityIds, Math.min(communityIds.length * perPlace, 80)]
@@ -369,7 +380,8 @@ export async function buildWallFeed(params: {
 
   if (uid) {
     const memberships = await listCommunitiesForUser(uid)
-    const communityIds = memberships.map((m) => m.id)
+    const listed = memberships.filter((m) => m.listed_public)
+    const communityIds = listed.map((m) => m.id)
     const [announcements, posts, events] = await Promise.all([
       fetchMemberAnnouncements(communityIds, MEMBER_ANNOUNCEMENT_PER_PLACE),
       fetchMemberPosts(communityIds, MEMBER_POST_PER_PLACE),
@@ -380,7 +392,7 @@ export async function buildWallFeed(params: {
     return {
       items: sorted,
       is_authenticated: true,
-      member_place_count: communityIds.length,
+      member_place_count: listed.length,
       hidden_count: 0,
     }
   }

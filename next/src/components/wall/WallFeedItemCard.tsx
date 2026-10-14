@@ -28,16 +28,13 @@ function KindBadge({ kind }: { kind: WallFeedItem['kind'] }) {
 
 function PlaceHeader({ place }: { place: WallFeedItem['place'] }) {
   const surface = placeAccentSurface(place.accent_color)
-  return (
-    <Link
-      href={`/lieux/${encodeURIComponent(place.slug)}`}
-      className="flex items-center gap-3 px-3 py-2.5 border-b transition-colors hover:brightness-110"
-      style={{
-        backgroundColor: surface.headerBg,
-        borderColor: surface.cardBorder,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
+  const className = 'flex items-center gap-3 px-3 py-2.5 border-b'
+  const style = {
+    backgroundColor: surface.headerBg,
+    borderColor: surface.cardBorder,
+  }
+  const body = (
+    <>
       <CommunityAvatar
         avatar={place.avatar}
         logoEmoji={place.logo_emoji ?? '🏛️'}
@@ -49,6 +46,23 @@ function PlaceHeader({ place }: { place: WallFeedItem['place'] }) {
         <p className="text-[10px] uppercase tracking-widest text-slate-400/90 font-medium">Lieu</p>
         <p className="text-sm sm:text-base font-bold text-slate-50 truncate leading-tight">{place.name}</p>
       </div>
+    </>
+  )
+  if (!place.profile_public) {
+    return (
+      <div className={className} style={style}>
+        {body}
+      </div>
+    )
+  }
+  return (
+    <Link
+      href={`/lieux/${encodeURIComponent(place.slug)}`}
+      className={`${className} transition-colors hover:brightness-110`}
+      style={style}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {body}
       <span className="text-slate-400 text-xs shrink-0 hidden sm:inline">Voir →</span>
     </Link>
   )

@@ -416,7 +416,7 @@ export async function listCommunitiesForUser(
   const tM = table('mandala_community_members')
   const [memberRows] = await pool.execute<RowDataPacket[]>(
     `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location, c.website, c.contact_email,
-            c.accent_color, c.logo_emoji, c.avatar, m.role, m.circle
+            c.accent_color, c.logo_emoji, c.avatar, c.listed_public, c.profile_public, m.role, m.circle
      FROM ${tM} m
      JOIN ${tC} c ON c.id = m.community_id
      WHERE m.user_id = ? AND c.is_active = 1
