@@ -6,6 +6,7 @@ import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 import { ApiError } from '@/lib/api-client'
 import { WallPublicToggle } from '@/components/wall/WallPublicToggle'
+import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 
 type DetailTab = 'overview' | 'team' | 'tasks' | 'photos'
 
@@ -444,6 +445,7 @@ export function EventDetailPage({
               ))}
             </div>
           )}
+          <ReturnsBlock mode="event" eventId={eventId} communitySlug={communitySlug} compact heading="Retours" />
         </div>
       )}
 

@@ -6,6 +6,7 @@ import { AdminCommunityBanner } from '@/components/admin/AdminCommunityBanner'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { AdminCommunitiesTab } from '@/views/admin/AdminCommunitiesTab'
 import { AdminSupportTab } from '@/components/admin/AdminSupportTab'
+import { AdminEvaluationsTab } from '@/components/returns/AdminEvaluationsTab'
 import { authApi } from '@/api/auth'
 import { notificationsApi } from '@/api/notifications'
 import { adminApi } from '@/api/admin'
@@ -54,6 +55,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'communications', label: 'Communications' },
   { id: 'telemetry', label: 'Télémétrie' },
   { id: 'places', label: 'Lieux & communautés' },
+  { id: 'evaluations', label: 'Évaluations' },
   { id: 'support', label: 'Retours' },
 ]
 
@@ -647,6 +649,7 @@ export function AdminPage({
       )}
 
       {tab === 'support' && <AdminSupportTab />}
+      {tab === 'evaluations' && <AdminEvaluationsTab />}
 
       {tab === 'places' && (
         <section className="space-y-3">

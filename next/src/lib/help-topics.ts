@@ -14,6 +14,7 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   events: [
     'Liste des événements du lieu. Ouvrez une carte pour le programme.',
     'Les gestionnaires peuvent créer et modifier un événement.',
+    'Après la date, une personne présente peut écrire un retour. L’équipe de l’événement ne le fait pas.',
   ],
   members: [
     'Annuaire des personnes du lieu actif.',
@@ -30,6 +31,7 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   skills: [
     'Les savoir-faire servent à vous retrouver. Le texte décrit des rôles, pas une liste de qualités.',
     'L’annuaire montre les fiches que les membres ont choisi de rendre visibles.',
+    'Un retour sur un moment passé avec quelqu’un s’ouvre après une présence passée, si la personne accepte d’être désignée.',
   ],
   resources: [
     'Textes, recettes, vidéos et documents partagés dans le lieu.',
@@ -40,6 +42,7 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   ],
   account: [
     'Photo, nom, mot de passe et notifications sur cet appareil.',
+    'La section Évaluations ouvre les retours sur ce que vous proposez, et montre les demandes reçues.',
   ],
   charter: [
     'Texte du lieu à lire et à accepter pour participer.',

@@ -17,6 +17,7 @@ import { formatPlaceMembershipLabel, isCommunityManagerRole } from '@/lib/commun
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
+import { MyEvaluationsSection } from '@/components/returns/MyEvaluationsSection'
 import {
   enablePushNotifications,
   IOS_PUSH_HOME_SCREEN_HINT,
@@ -28,6 +29,7 @@ const EMOJI_PRESETS = ['🌸', '🕉️', '🌿', '✨', '🌻', '🦋', '🔥',
 
 const SECTIONS = [
   { id: 'profil', label: 'Profil' },
+  { id: 'evaluations', label: 'Évaluations' },
   { id: 'competences', label: 'Compétences' },
   { id: 'ressources', label: 'Ressources' },
   { id: 'communautes', label: 'Mes communautés' },
@@ -396,6 +398,11 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             {saving ? 'Enregistrement…' : 'Enregistrer'}
           </button>
         </div>
+      </section>
+
+      <section id="evaluations" className="scroll-mt-20 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-200">Évaluations</h2>
+        <MyEvaluationsSection />
       </section>
 
       <section id="competences" className="scroll-mt-20 space-y-3">

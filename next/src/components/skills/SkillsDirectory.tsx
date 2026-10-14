@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { skillsApi, type SkillCard, type SkillProfile, type SkillTag } from '@/api/skills'
 import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
+import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ACCOUNT_SKILLS_ANCHOR } from '@/components/skills/SkillsProfileSection'
 import { ApiError } from '@/lib/api-client'
@@ -564,6 +565,18 @@ export function SkillsDirectory({
                   <SkillProse text={selected.frame_text} />
                 </section>
               )}
+
+              <div className="border-t border-slate-800 pt-6">
+                <ReturnsBlock
+                  key={selected.user_id}
+                  mode="person"
+                  userId={selected.user_id}
+                  communitySlug={communitySlug || selected.shared_place_slug || undefined}
+                  compact
+                  heading="Retours"
+                  allowDesignate={!selected.is_me}
+                />
+              </div>
 
               {(selected.resources?.length ?? 0) > 0 && (
                 <section className="space-y-3 border-t border-slate-800 pt-6">

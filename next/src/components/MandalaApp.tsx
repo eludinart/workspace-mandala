@@ -298,7 +298,7 @@ export function MandalaApp() {
     const eventIdRaw = params.get('eventId')
     const eventId = eventIdRaw ? Number(eventIdRaw) : undefined
     const adminTabRaw = params.get('adminTab')
-    const adminTabs: AdminTabId[] = ['people', 'communications', 'telemetry', 'places', 'support']
+    const adminTabs: AdminTabId[] = ['people', 'communications', 'telemetry', 'places', 'support', 'evaluations']
     const adminTabParam =
       adminTabRaw && adminTabs.includes(adminTabRaw as AdminTabId)
         ? (adminTabRaw as AdminTabId)

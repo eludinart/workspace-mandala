@@ -7,6 +7,7 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
 import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
 import { ResourceLibrary } from '@/components/resources/ResourceLibrary'
+import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { useAuth } from '@/contexts/AuthContext'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 
@@ -152,6 +153,8 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                 </div>
               </section>
             )}
+
+            <ReturnsBlock mode="place" communitySlug={place.slug} />
 
             <section id="competences" className="space-y-4 scroll-mt-20">
               <SkillsDirectory
