@@ -16,7 +16,7 @@ import {
   READ_NOTIFICATION_KEEP_COUNT,
   READ_NOTIFICATION_RETENTION_DAYS,
 } from './notification-retention'
-import { actionUrlToWebPath, isWebPushConfigured, sendWebPushToUser } from './web-push-send'
+import { actionUrlToWebPath, isWebPushConfigured, sendWebPushToUsers } from './web-push-send'
 
 const T_NOTIF = () => table('notifications')
 const T_DELIV = () => table('notification_deliveries')
@@ -204,7 +204,13 @@ async function resolveRecipients(input: NotificationCreateInput): Promise<Array<
 
 export async function createNotification(
   input: NotificationCreateInput
-): Promise<{ notification_id: number; deliveries: number; deduplicated?: boolean }> {
+): Promise<{
+  notification_id: number
+  deliveries: number
+  deduplicated?: boolean
+  push_sent?: number
+  push_errors?: number
+}> {
   if (!isDbConfigured()) throw new Error('DB non configurée')
   await ensureNotificationsTables()
   const pool = getPool()
@@ -311,19 +317,27 @@ export async function createNotification(
   }
   invalidateNotifUnreadCache(deliveredUserIds)
 
-  // Push appareil (best-effort)
+  // Push appareil. Au-delà d'une vingtaine de comptes, un envoi parallèle
+  // dépasse la file MariaDB et une partie des alertes disparaît.
+  let pushSent = 0
+  let pushErrors = 0
   if (isWebPushConfigured() && deliveredUserIds.length > 0) {
     const webPath = actionUrlToWebPath(actionUrl)
     const pushBody = body ?? title
-    const jobs = deliveredUserIds.map((uid) => sendWebPushToUser(uid, title, pushBody, webPath))
-    if (deliveredUserIds.length <= 20) {
-      await Promise.allSettled(jobs)
-    } else {
-      void Promise.allSettled(jobs)
-    }
+    const stats = await sendWebPushToUsers(deliveredUserIds, title, pushBody, webPath)
+    pushSent = stats.sent
+    pushErrors = stats.errors
+    console.info(
+      '[web-push] notification',
+      notificationId,
+      `sent=${stats.sent}`,
+      `gone=${stats.gone}`,
+      `errors=${stats.errors}`,
+      `users=${stats.users}`
+    )
   }
 
-  return { notification_id: notificationId, deliveries }
+  return { notification_id: notificationId, deliveries, push_sent: pushSent, push_errors: pushErrors }
 }
 
 const GLOBAL_PURGE_INTERVAL_MS = 60 * 60 * 1000

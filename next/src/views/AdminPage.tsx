@@ -211,16 +211,23 @@ export function AdminPage({
     setNPublishing(true)
     setMsg(null)
     try {
-      await notificationsApi.create({
+      const res = (await notificationsApi.create({
         type: 'announcement',
         title,
         body: nBody.trim(),
         recipient_type: nRecipient,
         recipient_role: nRecipient === 'role' ? nRole : undefined,
         priority: 'normal',
-      })
+      })) as { deliveries?: number; push_sent?: number; push_errors?: number }
       setMsgOk(true)
-      setMsg('Info envoyée')
+      const deliveries = res.deliveries ?? 0
+      const pushSent = res.push_sent ?? 0
+      const pushErrors = res.push_errors ?? 0
+      setMsg(
+        pushErrors > 0
+          ? `Info envoyée à ${deliveries} personnes. Alertes push : ${pushSent}, échecs : ${pushErrors}.`
+          : `Info envoyée à ${deliveries} personnes. Alertes push : ${pushSent}.`
+      )
       setNTitle('')
       setNBody('')
       void loadAdminNotifs()
@@ -429,7 +436,7 @@ export function AdminPage({
             >
               <p className="font-semibold text-sm">Message rapide (Infos)</p>
               <p className="text-xs text-slate-500 mt-1">
-                Notification in-app immédiate, ciblée par rôle si besoin.
+                Notification immédiate dans l’application, et alerte sur les appareils qui les ont activées.
               </p>
             </button>
             <button

@@ -96,7 +96,13 @@ export async function sendWebPushToUser(
   if (!ensureVapid()) {
     return { sent: 0, gone: 0, errors: 0 }
   }
-  const subs = await listPushSubscriptionsForUser(userId)
+  let subs: PushSubscriptionRow[]
+  try {
+    subs = await listPushSubscriptionsForUser(userId)
+  } catch (err: unknown) {
+    console.error('[web-push] list failed', userId, (err as Error)?.message ?? err)
+    return { sent: 0, gone: 0, errors: 1 }
+  }
   if (!subs.length) return { sent: 0, gone: 0, errors: 0 }
 
   const webPath = actionUrlToWebPath(actionUrl)
@@ -110,4 +116,38 @@ export async function sendWebPushToUser(
     else errors += 1
   }
   return { sent, gone, errors }
+}
+
+const PUSH_FANOUT_CONCURRENCY = 4
+
+/**
+ * Envoie la même push à plusieurs comptes, peu à peu.
+ * Le pool MariaDB refuse au-delà d'une courte file : un envoi massif en parallèle
+ * perd des destinataires sans erreur visible.
+ */
+export async function sendWebPushToUsers(
+  userIds: number[],
+  title: string,
+  body: string,
+  actionUrl?: string | null
+): Promise<{ sent: number; gone: number; errors: number; users: number }> {
+  const unique = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))]
+  const acc = { sent: 0, gone: 0, errors: 0, users: unique.length }
+  if (!ensureVapid() || unique.length === 0) return acc
+
+  let cursor = 0
+  async function worker() {
+    while (cursor < unique.length) {
+      const userId = unique[cursor]
+      cursor += 1
+      const result = await sendWebPushToUser(userId, title, body, actionUrl)
+      acc.sent += result.sent
+      acc.gone += result.gone
+      acc.errors += result.errors
+    }
+  }
+
+  const workers = Math.min(PUSH_FANOUT_CONCURRENCY, unique.length)
+  await Promise.all(Array.from({ length: workers }, () => worker()))
+  return acc
 }
