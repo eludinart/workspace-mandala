@@ -58,7 +58,7 @@ function SkillProse({ text }: { text: string }) {
           {block.title && (
             <p className="text-sm font-semibold text-slate-100">{block.title}</p>
           )}
-          <p className="text-[15px] leading-7 text-slate-300 max-w-[68ch]">{block.body}</p>
+          <p className="text-[15px] leading-7 text-slate-300 max-w-[68ch] break-words">{block.body}</p>
         </div>
       ))}
     </div>
@@ -425,8 +425,8 @@ export function SkillsDirectory({
       </p>
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(16rem,22rem)_minmax(0,1fr)] items-start">
-        <ul className={`grid gap-3 ${selected ? 'order-2 lg:order-1' : ''}`}>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
+        <ul className={`grid min-w-0 gap-3 ${selected ? 'order-2 lg:order-1' : ''}`}>
           {!loading && !refreshing && visible.length === 0 && (
             <li className="sm:col-span-2 rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">
               Aucune fiche ne correspond. Les personnes choisissent elles-mêmes d’apparaître ici.
@@ -435,17 +435,17 @@ export function SkillsDirectory({
           {visible.map((card) => {
             const active = selected?.user_id === card.user_id
             return (
-              <li key={card.user_id}>
+              <li key={card.user_id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => setSelectedId(card.user_id)}
-                  className={`w-full text-left rounded-2xl border p-4 space-y-3 transition-colors ${
+                  className={`w-full min-w-0 overflow-hidden text-left rounded-2xl border p-4 space-y-3 transition-colors ${
                     active
                       ? 'border-violet-500/70 bg-violet-950/30'
                       : 'border-slate-800 bg-slate-900/50 hover:border-violet-800/50'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
                     <div className="min-w-0">
                       <p className="font-medium truncate">{card.display_name || card.pseudo}</p>
@@ -459,15 +459,15 @@ export function SkillsDirectory({
                     </div>
                   </div>
                   {card.offer_text && (
-                    <p className="text-sm leading-relaxed text-slate-400 line-clamp-3">
+                    <p className="min-w-0 text-sm leading-relaxed text-slate-400 line-clamp-3 break-words">
                       {card.offer_text.replace(/\s+/g, ' ').trim()}
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5 min-w-0">
                     {card.tags.slice(0, 4).map((t) => (
                       <span
                         key={`${t.label}-${t.register}`}
-                        className="text-[11px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-300"
+                        className="max-w-full text-[11px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-300 break-words"
                       >
                         {t.label}
                       </span>
@@ -480,7 +480,7 @@ export function SkillsDirectory({
         </ul>
 
         <article
-          className={`rounded-3xl border border-slate-800 bg-slate-900/50 p-5 sm:p-7 min-h-[16rem] ${
+          className={`relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] ${
             selected ? 'order-1 lg:order-2' : 'order-2'
           }`}
         >
@@ -527,13 +527,13 @@ export function SkillsDirectory({
               {selected.skills_visible !== false && selected.tags.length > 0 && (
                 <section className="space-y-2">
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-faire</h4>
-                  <ul className="flex flex-wrap gap-2">
+                  <ul className="flex min-w-0 flex-wrap gap-2">
                     {selected.tags.map((t) => (
                       <li
                         key={`${t.label}-${t.register}`}
-                        className="rounded-2xl border border-slate-700 bg-slate-950/40 px-3 py-2"
+                        className="max-w-full rounded-2xl border border-slate-700 bg-slate-950/40 px-3 py-2"
                       >
-                        <p className="text-sm text-slate-100">{t.label}</p>
+                        <p className="text-sm text-slate-100 break-words">{t.label}</p>
                         <p className="text-[11px] text-slate-500">{SKILL_REGISTER_LABELS[t.register]}</p>
                       </li>
                     ))}
