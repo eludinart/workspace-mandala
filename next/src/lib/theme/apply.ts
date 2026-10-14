@@ -2,20 +2,31 @@ import {
   DEFAULT_THEME_MODE,
   DEFAULT_THEME_PALETTE,
   THEME_FORCE_LIGHT_STAMP,
+  type AccentScale,
+  type SlateScale,
   type ThemeMode,
   type ThemePaletteId,
   THEME_PALETTES,
 } from '@/lib/theme/tokens'
 
-export function applyThemeToDocument(mode: ThemeMode, palette: ThemePaletteId): void {
+export type ThemeTokenSet = {
+  accent: AccentScale
+  light: SlateScale
+  dark: SlateScale
+}
+
+export function applyThemeTokens(
+  mode: ThemeMode,
+  tokens: ThemeTokenSet,
+  paletteAttr: string,
+): void {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  const tokens = THEME_PALETTES[palette] ?? THEME_PALETTES[DEFAULT_THEME_PALETTE]
   const slate = mode === 'light' ? tokens.light : tokens.dark
 
   root.classList.remove('light', 'dark')
   root.classList.add(mode)
-  root.setAttribute('data-palette', palette)
+  root.setAttribute('data-palette', paletteAttr)
   root.style.colorScheme = mode
 
   for (const [step, value] of Object.entries(slate)) {
@@ -25,10 +36,15 @@ export function applyThemeToDocument(mode: ThemeMode, palette: ThemePaletteId): 
     root.style.setProperty(`--accent-${step}`, value)
   }
 
-  root.style.setProperty('--foreground-rgb', mode === 'light' ? slate[100] : slate[100])
-  root.style.setProperty('--background-rgb', mode === 'light' ? slate[950] : slate[950])
+  root.style.setProperty('--foreground-rgb', slate[100])
+  root.style.setProperty('--background-rgb', slate[950])
   root.style.setProperty('--scrollbar-thumb', mode === 'light' ? '161 161 170' : '51 65 85')
   root.style.setProperty('--scrollbar-track', mode === 'light' ? slate[900] : slate[950])
+}
+
+export function applyThemeToDocument(mode: ThemeMode, palette: ThemePaletteId): void {
+  const tokens = THEME_PALETTES[palette] ?? THEME_PALETTES[DEFAULT_THEME_PALETTE]
+  applyThemeTokens(mode, tokens, palette)
 }
 
 export function readThemeFromStorage(): { mode: ThemeMode; palette: ThemePaletteId } {

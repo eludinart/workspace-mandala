@@ -13,7 +13,7 @@ import type { MandalaNavigate } from '@/components/MandalaApp'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
-import { formatCommunityRoleLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
+import { formatPlaceMembershipLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
@@ -427,7 +427,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
                 <div className="flex items-center gap-2 shrink-0">
                   {c.role && (
                     <span className="text-[10px] text-slate-500">
-                      {formatCommunityRoleLabel(c.role)}
+                      {formatPlaceMembershipLabel(c.role, c.circle)}
                     </span>
                   )}
                   <button

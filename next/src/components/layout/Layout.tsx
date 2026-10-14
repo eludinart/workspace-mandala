@@ -56,7 +56,7 @@ export function Layout({
 
   if (page === 'messages') {
     return (
-      <div className="h-full min-h-0 flex flex-col bg-slate-950 text-slate-100">
+      <div className="h-full min-h-0 flex flex-col bg-slate-950 text-slate-100 border-t-4 border-accent">
         <main className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">{children}</main>
         <HelpButton page={page} />
       </div>
@@ -64,7 +64,7 @@ export function Layout({
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col md:flex-row bg-slate-950 text-slate-100">
+    <div className="h-full min-h-0 flex flex-col md:flex-row bg-slate-950 text-slate-100 border-t-4 border-accent">
       <aside className="hidden md:flex md:w-56 lg:w-60 border-r border-slate-800 shrink-0 self-stretch">
         <div className="w-full p-3 flex flex-col min-h-0 sticky top-0 max-h-full">
           <AppNavPanel page={page} onNavigate={onNavigate} adminTab={adminTab} />

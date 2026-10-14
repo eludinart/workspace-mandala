@@ -43,10 +43,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     await assertUserCanManageCommunity(uid, communityId, { isAppSiteManager })
 
     const q = req.nextUrl.searchParams.get('q')?.trim() ?? ''
+    const sortRaw = req.nextUrl.searchParams.get('sort')
+    const sort =
+      sortRaw === 'registered_desc' || sortRaw === 'registered_asc' || sortRaw === 'name'
+        ? sortRaw
+        : 'name'
     const candidates = await listUsersNotInCommunity({
       communityId,
       search: q,
       limit: 40,
+      sort,
     })
     const invite = await ensureCommunityInviteAccess(communityId)
     const origin = resolvePublicAppOrigin(req.nextUrl.origin)

@@ -3,7 +3,7 @@ import { requireAuth, resolveCommunityManagerAccess, userCanManageInCommunity } 
 import {
   getCommunityById,
   getCommunityBySlug,
-  requireCommunityMembership,
+  getCommunityMembership,
 } from '@/lib/db-communities'
 import { createPlaceAnnouncement, listPlaceAnnouncements } from '@/lib/db-place-announcements'
 import { isDbConfigured } from '@/lib/db'
@@ -42,10 +42,12 @@ export async function GET(req: NextRequest) {
     const { userId } = await requireAuth(req)
     const uid = parseInt(userId, 10)
     const community = await resolveCommunity(req)
-    const role = await requireCommunityMembership(uid, community.id)
+    const membership = await getCommunityMembership(uid, community.id)
     const limit = parseInt(req.nextUrl.searchParams.get('limit') ?? '20', 10)
-    const announcements = await listPlaceAnnouncements(community.id, limit)
-    const can_manage = await userCanManageInCommunity(uid, role)
+    const can_manage = await userCanManageInCommunity(uid, membership.role)
+    const announcements = await listPlaceAnnouncements(community.id, limit, {
+      includeCore: can_manage || membership.circle === 'core',
+    })
     return NextResponse.json({ community_id: community.id, announcements, can_manage })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
@@ -70,6 +72,7 @@ export async function POST(req: NextRequest) {
       body: String(body.body ?? ''),
       image_data: body.image_data,
       wall_public: body.wall_public,
+      audience: body.audience,
       isAppSiteManager,
     })
     return NextResponse.json({ announcement })

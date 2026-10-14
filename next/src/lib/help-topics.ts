@@ -17,10 +17,13 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   ],
   members: [
     'Annuaire des personnes du lieu actif.',
+    'Le groupe cœur est listé à part. Les gestionnaires le cochent. Ça ne donne pas les droits de gestion.',
     'Ouvrez une fiche pour envoyer un message.',
   ],
   messages: [
     'Conversations du lieu actif. Le badge compte les messages non lus de ce lieu.',
+    'La conversation du groupe cœur est réservée à ce cercle et aux gestionnaires. Les gestionnaires peuvent la renommer. Elle ne se supprime pas.',
+    '« Supprimer » n’apparaît qu’au créateur. L’effacement retire la conversation pour tous les participants, après un avertissement.',
     'Le bouton en haut à droite sert à écrire à un membre.',
     '« Mandala » en haut à gauche ramène à la page précédente.',
   ],
@@ -55,12 +58,14 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   ],
   'place-members': [
     'Membres du lieu : rôles et retraits, pour les gestionnaires.',
+    'Le groupe cœur est un cercle du lieu. Le cocher ne donne pas les droits de gestion.',
   ],
   'place-invites': [
     'Créez un lien ou un code pour inviter quelqu’un dans le lieu.',
   ],
   'place-announcements': [
     'Message important affiché sur l’accueil du lieu.',
+    'Choisissez Tout le lieu, ou seulement le groupe cœur et les gestionnaires.',
   ],
   'managed-places': [
     'Lieux dont vous êtes gestionnaire. Ouvrez-en un pour ses réglages.',

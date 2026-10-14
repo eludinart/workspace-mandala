@@ -6,6 +6,12 @@ import { ensureOnce, exec, getPool, table } from './db'
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
 
+export type AnnouncementAudience = 'all' | 'core'
+
+export function parseAnnouncementAudience(value: unknown): AnnouncementAudience {
+  return String(value ?? '').toLowerCase() === 'core' ? 'core' : 'all'
+}
+
 export type PlaceAnnouncementRow = {
   id: number
   community_id: number
@@ -19,6 +25,7 @@ export type PlaceAnnouncementRow = {
   author_avatar_emoji: string
   author_avatar: string | null
   wall_public: boolean
+  audience: AnnouncementAudience
 }
 
 function normalizeImageData(img: unknown): string | null | undefined {
@@ -34,7 +41,7 @@ function normalizeImageData(img: unknown): string | null | undefined {
 }
 
 export async function ensurePlaceAnnouncementTables(): Promise<void> {
-  return ensureOnce('place-announcements', async () => {
+  await ensureOnce('place-announcements', async () => {
   await ensureCommunitiesTables()
   const pool = getPool()
   const t = table('mandala_place_announcements')
@@ -54,7 +61,25 @@ export async function ensurePlaceAnnouncementTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureWallPublicColumn(pool, t)
+  await ensureAnnouncementAudienceColumn(pool, t)
   })
+  await ensureOnce('place-announcements-audience', async () => {
+    const pool = getPool()
+    await ensureAnnouncementAudienceColumn(pool, table('mandala_place_announcements'))
+  })
+}
+
+async function ensureAnnouncementAudienceColumn(
+  pool: ReturnType<typeof getPool>,
+  tableName: string
+): Promise<void> {
+  const [cols] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tableName}`)
+  const existing = new Set((cols ?? []).map((c) => String(c.Field)))
+  if (existing.has('audience')) return
+  await exec(
+    pool,
+    `ALTER TABLE ${tableName} ADD COLUMN audience VARCHAR(16) NOT NULL DEFAULT 'all'`
+  )
 }
 
 export function canManagePlaceAnnouncements(role: CommunityRole, isAppSiteManager = false): boolean {
@@ -110,11 +135,12 @@ function mapAnnouncementRow(r: RowDataPacket): PlaceAnnouncementRow {
     author_avatar_emoji: String(r.author_avatar_emoji || '🌸'),
     author_avatar: r.author_avatar ? String(r.author_avatar) : null,
     wall_public: wallPublicFromRow(r as Record<string, unknown>),
+    audience: parseAnnouncementAudience(r.audience),
   }
 }
 
 const ANNOUNCEMENT_SELECT = `
-  SELECT a.id, a.community_id, a.author_id, a.title, a.body, a.image_data, a.created_at, a.updated_at, a.wall_public,
+  SELECT a.id, a.community_id, a.author_id, a.title, a.body, a.image_data, a.created_at, a.updated_at, a.wall_public, a.audience,
          COALESCE(pm.meta_value, u.display_name, CONCAT('user_', a.author_id)) AS author_pseudo,
          COALESCE(em.meta_value, '🌸') AS author_avatar_emoji,
          COALESCE(am.meta_value, '') AS author_avatar
@@ -127,15 +153,19 @@ const ANNOUNCEMENT_SELECT = `
 
 export async function listPlaceAnnouncements(
   communityId: number,
-  limit = 20
+  limit = 20,
+  options?: { includeCore?: boolean }
 ): Promise<PlaceAnnouncementRow[]> {
   await ensurePlaceAnnouncementTables()
   const pool = getPool()
   const t = table('mandala_place_announcements')
   const safeLimit = Math.min(Math.max(1, limit), 50)
-  const sql = ANNOUNCEMENT_SELECT.replace('%TABLE%', t) + ` WHERE a.community_id = ? ORDER BY a.created_at DESC LIMIT ${safeLimit}`
+  const includeCore = options?.includeCore ? 1 : 0
+  const sql =
+    ANNOUNCEMENT_SELECT.replace('%TABLE%', t) +
+    ` WHERE a.community_id = ? AND (? = 1 OR COALESCE(a.audience, 'all') = 'all') ORDER BY a.created_at DESC LIMIT ${safeLimit}`
 
-  const [rows] = await pool.execute<RowDataPacket[]>(sql, [communityId])
+  const [rows] = await pool.execute<RowDataPacket[]>(sql, [communityId, includeCore])
   return (rows ?? []).map(mapAnnouncementRow)
 }
 
@@ -156,6 +186,7 @@ export async function createPlaceAnnouncement(params: {
   body: string
   image_data?: string | null
   wall_public?: boolean
+  audience?: AnnouncementAudience
   isAppSiteManager: boolean
 }): Promise<PlaceAnnouncementRow> {
   await requireManageAnnouncements(params.authorId, params.communityId, params.isAppSiteManager)
@@ -167,13 +198,14 @@ export async function createPlaceAnnouncement(params: {
   if (body.length > 8000) throw Object.assign(new Error('Message trop long'), { status: 400 })
 
   const image = normalizeImageData(params.image_data ?? null)
-  const wallPublic = parseWallPublic(params.wall_public) ? 1 : 0
+  const audience = parseAnnouncementAudience(params.audience)
+  const wallPublic = audience === 'core' ? 0 : parseWallPublic(params.wall_public) ? 1 : 0
   await ensurePlaceAnnouncementTables()
   const pool = getPool()
   const t = table('mandala_place_announcements')
   const [result] = await pool.execute(
-    `INSERT INTO ${t} (community_id, author_id, title, body, image_data, wall_public) VALUES (?, ?, ?, ?, ?, ?)`,
-    [params.communityId, params.authorId, title, body, image ?? null, wallPublic]
+    `INSERT INTO ${t} (community_id, author_id, title, body, image_data, wall_public, audience) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [params.communityId, params.authorId, title, body, image ?? null, wallPublic, audience]
   )
   const id = Number((result as { insertId?: number }).insertId)
   const created = await getPlaceAnnouncementById(id)
@@ -189,6 +221,7 @@ export async function updatePlaceAnnouncement(params: {
   body?: string
   image_data?: string | null
   wall_public?: boolean
+  audience?: AnnouncementAudience | string
 }): Promise<PlaceAnnouncementRow> {
   const meta = await getAnnouncementMeta(params.announcementId)
   if (!meta) throw Object.assign(new Error('Annonce introuvable'), { status: 404 })
@@ -213,9 +246,20 @@ export async function updatePlaceAnnouncement(params: {
     fields.push('image_data = ?')
     values.push(image)
   }
-  if (params.wall_public !== undefined) {
-    fields.push('wall_public = ?')
-    values.push(parseWallPublic(params.wall_public) ? 1 : 0)
+  const current = await getPlaceAnnouncementById(params.announcementId)
+  if (!current) throw Object.assign(new Error('Annonce introuvable'), { status: 404 })
+  const nextAudience =
+    params.audience !== undefined ? parseAnnouncementAudience(params.audience) : current.audience
+  if (params.audience !== undefined) {
+    fields.push('audience = ?')
+    values.push(nextAudience)
+  }
+  if (params.wall_public !== undefined || nextAudience === 'core') {
+    const wallPublic = nextAudience === 'core' ? 0 : parseWallPublic(params.wall_public ?? current.wall_public) ? 1 : 0
+    if (params.wall_public !== undefined || wallPublic !== (current.wall_public ? 1 : 0)) {
+      fields.push('wall_public = ?')
+      values.push(wallPublic)
+    }
   }
   if (!fields.length) {
     const row = await getPlaceAnnouncementById(params.announcementId)

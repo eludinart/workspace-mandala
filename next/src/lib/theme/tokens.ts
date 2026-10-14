@@ -40,7 +40,7 @@ export type PaletteTokens = {
   label: string
 }
 
-const darkBase: SlateScale = {
+export const darkBase: SlateScale = {
   50: '248 250 252',
   100: '241 245 249',
   200: '226 232 240',
@@ -55,7 +55,7 @@ const darkBase: SlateScale = {
 }
 
 /** Échelle inversée sémantiquement : bg-slate-950 → fond clair, text-slate-100 → texte foncé */
-const lightBase: SlateScale = {
+export const lightBase: SlateScale = {
   50: '9 9 11',
   100: '24 24 27',
   200: '39 39 42',

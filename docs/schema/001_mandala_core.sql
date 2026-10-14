@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS mdl_mandala_community_members (
   community_id INT NOT NULL,
   user_id INT NOT NULL,
   role VARCHAR(24) NOT NULL DEFAULT 'member',
+  circle VARCHAR(16) NOT NULL DEFAULT 'member',
   joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uk_community_user (community_id, user_id),
   KEY idx_user (user_id)

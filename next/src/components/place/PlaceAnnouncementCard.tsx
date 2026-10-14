@@ -1,7 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { PlaceAnnouncement } from '@/api/place-announcements'
+import type { PlaceAnnouncement, PlaceAnnouncementDraft } from '@/api/place-announcements'
+import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
@@ -49,6 +50,11 @@ export function PlaceAnnouncementCard({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1 shrink-0 justify-end">
+          {announcement.audience === 'core' && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full border border-amber-700/60 bg-amber-950/50 text-amber-200">
+              {CORE_CIRCLE_LABEL}
+            </span>
+          )}
           <WallPublicBadge public={announcement.wall_public} />
           {canManage && (onEdit || onDelete) && (
             <>
@@ -130,6 +136,7 @@ export function AnnouncementEditorForm({
   initialBody = '',
   initialImage = null as string | null,
   initialWallPublic = false,
+  initialAudience = 'all' as PlaceAnnouncementDraft['audience'],
   showWallPublic = true,
   submitLabel,
   busy,
@@ -140,21 +147,18 @@ export function AnnouncementEditorForm({
   initialBody?: string
   initialImage?: string | null
   initialWallPublic?: boolean
+  initialAudience?: PlaceAnnouncementDraft['audience']
   showWallPublic?: boolean
   submitLabel: string
   busy?: boolean
-  onSubmit: (data: {
-    title: string
-    body: string
-    image_data: string | null
-    wall_public: boolean
-  }) => void | Promise<void>
+  onSubmit: (data: PlaceAnnouncementDraft) => void | Promise<void>
   onCancel?: () => void
 }) {
   const [title, setTitle] = useState(initialTitle)
   const [body, setBody] = useState(initialBody)
   const [image, setImage] = useState<string | null>(initialImage)
-  const [wallPublic, setWallPublic] = useState(initialWallPublic)
+  const [audience, setAudience] = useState<PlaceAnnouncementDraft['audience']>(initialAudience)
+  const [wallPublic, setWallPublic] = useState(initialAudience === 'core' ? false : initialWallPublic)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const pickImage = (file: File | null) => {
@@ -172,7 +176,13 @@ export function AnnouncementEditorForm({
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault()
-        void onSubmit({ title: title.trim(), body: body.trim(), image_data: image, wall_public: wallPublic })
+        void onSubmit({
+          title: title.trim(),
+          body: body.trim(),
+          image_data: image,
+          wall_public: audience === 'core' ? false : wallPublic,
+          audience,
+        })
       }}
     >
       <input
@@ -221,7 +231,38 @@ export function AnnouncementEditorForm({
       {image && (
         <img src={image} alt="" className="max-h-40 rounded-lg border border-slate-800 object-cover" />
       )}
-      {showWallPublic && (
+      <fieldset className="space-y-1">
+        <legend className="text-[11px] text-slate-400">Qui lit cette annonce</legend>
+        <div className="flex flex-wrap gap-2">
+          {([
+            ['all', 'Tout le lieu'],
+            ['core', CORE_CIRCLE_LABEL],
+          ] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setAudience(value)
+                if (value === 'core') setWallPublic(false)
+              }}
+              className={`text-xs px-3 py-1.5 rounded-lg border ${
+                audience === value
+                  ? 'border-amber-500 bg-amber-950/40 text-amber-100'
+                  : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {audience === 'core' && (
+          <p className="text-[11px] text-slate-500">
+            Visible par le groupe cœur et les gestionnaires. Pas sur le mur public.
+          </p>
+        )}
+      </fieldset>
+      {showWallPublic && audience !== 'core' && (
         <WallPublicToggle
           id="wall-public-announcement-editor"
           checked={wallPublic}

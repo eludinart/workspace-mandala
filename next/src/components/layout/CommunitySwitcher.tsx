@@ -6,7 +6,7 @@ import { communitiesApi } from '@/api/communities'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
-import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
+import { formatPlaceMembershipLabel } from '@/lib/community-role-labels'
 import { useSocialStore } from '@/store/useSocialStore'
 
 type CatalogItem = {
@@ -89,7 +89,7 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                       <p className="font-medium truncate">{c.name}</p>
                       {c.tagline && <p className="text-xs text-slate-500 truncate">{c.tagline}</p>}
                     </div>
-                    <span className="text-[10px] text-slate-500 shrink-0">{formatCommunityRoleLabel(c.role)}</span>
+                    <span className="text-[10px] text-slate-500 shrink-0">{formatPlaceMembershipLabel(c.role, c.circle)}</span>
                     {unread > 0 && (
                       <span className="shrink-0 min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-600 text-[11px] font-semibold text-white inline-flex items-center justify-center">
                         {unread > 99 ? '99+' : unread}

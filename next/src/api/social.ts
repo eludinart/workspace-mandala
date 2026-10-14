@@ -43,6 +43,8 @@ export const socialApi = {
       channelId: number
       name: string
     }>,
+  deleteChannel: (channelId: number) =>
+    api.post('/api/social/delete_channel', { channelId }) as Promise<{ channelId: number }>,
   addGroupMembers: (channelId: number, memberUserIds: number[]) =>
     api.post('/api/social/add_group_members', {
       channelId,

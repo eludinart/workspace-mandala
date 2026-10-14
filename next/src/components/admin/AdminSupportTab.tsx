@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { supportApi, type SupportReportItem, type SupportStatus } from '@/api/support'
 import { ApiError } from '@/lib/api-client'
 import { PAGE_LABELS } from '@/lib/nav'
@@ -67,11 +67,15 @@ export function AdminSupportTab() {
     }
   }
 
+  const openItems = items.filter((item) => item.status !== 'done')
+  const doneItems = items.filter((item) => item.status === 'done')
+
   return (
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Retours</h2>
       <p className="text-sm text-slate-400">
-        Questions et bugs envoyés depuis le bouton ? de l’application.
+        Questions et bugs envoyés depuis le bouton ? de l’application. Une fois traités, ils
+        quittent cette liste et restent dans l’historique.
       </p>
       <button
         type="button"
@@ -82,54 +86,64 @@ export function AdminSupportTab() {
       </button>
       {error && <p className="text-sm text-red-400">{error}</p>}
       {loading && <p className="text-slate-500 text-sm">Chargement…</p>}
-      {!loading && items.length === 0 && (
-        <p className="text-slate-500 text-sm italic">Aucun retour pour le moment.</p>
+      {!loading && openItems.length === 0 && (
+        <p className="text-slate-500 text-sm italic">Aucun retour en cours.</p>
       )}
       <ul className="space-y-3">
-        {items.map((item) => (
-          <li key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span
-                className={`px-2 py-0.5 rounded-full ${
-                  item.kind === 'bug' ? 'bg-red-950 text-red-300' : 'bg-violet-950 text-violet-200'
-                }`}
+        {openItems.map((item) => (
+          <ReportCard key={item.id} item={item}>
+            {item.status !== 'read' && (
+              <button
+                type="button"
+                disabled={busyId === item.id}
+                onClick={() => void setStatus(item.id, 'read')}
+                className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
               >
-                {item.kind === 'bug' ? 'Bug' : 'Question'}
-              </span>
-              <span className="text-slate-400">{STATUS_LABEL[item.status]}</span>
-              <span className="text-slate-500">#{item.id}</span>
+                Marquer lu
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busyId === item.id}
+              onClick={() => void setStatus(item.id, 'done')}
+              className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
+            >
+              Traité
+            </button>
+            {item.status !== 'new' && (
+              <button
+                type="button"
+                disabled={busyId === item.id}
+                onClick={() => void setStatus(item.id, 'new')}
+                className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
+              >
+                Remettre en nouveau
+              </button>
+            )}
+          </ReportCard>
+        ))}
+      </ul>
+
+      {!loading && doneItems.length > 0 && (
+        <details className="group rounded-xl border border-slate-800 bg-slate-950/20">
+          <summary className="cursor-pointer list-none px-3 py-2.5 text-sm text-slate-300 flex items-center gap-2 [&::-webkit-details-marker]:hidden">
+            <span className="text-slate-500 group-open:hidden" aria-hidden>
+              ▸
+            </span>
+            <span className="text-slate-500 hidden group-open:inline" aria-hidden>
+              ▾
+            </span>
+            <span>
+              Historique
               <span className="text-slate-500">
-                {item.created_at ? new Date(item.created_at).toLocaleString('fr-FR') : ''}
+                {' '}
+                · {doneItems.length} traité{doneItems.length > 1 ? 's' : ''}
               </span>
-            </div>
-            <p className="text-sm text-slate-200 whitespace-pre-wrap">{item.message}</p>
-            <p className="text-xs text-slate-500">
-              {item.author_name}
-              {item.author_email ? ` · ${item.author_email}` : ''} · {pageLabel(item.page)}
-              {item.community_slug ? ` · ${item.community_slug}` : ''}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {item.status !== 'read' && (
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void setStatus(item.id, 'read')}
-                  className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
-                >
-                  Marquer lu
-                </button>
-              )}
-              {item.status !== 'done' && (
-                <button
-                  type="button"
-                  disabled={busyId === item.id}
-                  onClick={() => void setStatus(item.id, 'done')}
-                  className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
-                >
-                  Traité
-                </button>
-              )}
-              {item.status !== 'new' && (
+            </span>
+          </summary>
+          <ul className="space-y-3 px-3 pb-3">
+            {doneItems.map((item) => (
+              <ReportCard key={item.id} item={item} muted>
                 <button
                   type="button"
                   disabled={busyId === item.id}
@@ -138,8 +152,6 @@ export function AdminSupportTab() {
                 >
                   Remettre en nouveau
                 </button>
-              )}
-              {item.status === 'done' && (
                 <button
                   type="button"
                   disabled={busyId === item.id}
@@ -148,11 +160,47 @@ export function AdminSupportTab() {
                 >
                   Supprimer
                 </button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+              </ReportCard>
+            ))}
+          </ul>
+        </details>
+      )}
     </section>
+  )
+}
+
+function ReportCard({
+  item,
+  muted = false,
+  children,
+}: {
+  item: SupportReportItem
+  muted?: boolean
+  children: ReactNode
+}) {
+  return (
+    <li className={`rounded-xl border border-slate-800 p-3 space-y-2 ${muted ? 'bg-slate-950/20' : 'bg-slate-950/40'}`}>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span
+          className={`px-2 py-0.5 rounded-full ${
+            item.kind === 'bug' ? 'bg-red-950 text-red-300' : 'bg-violet-950 text-violet-200'
+          }`}
+        >
+          {item.kind === 'bug' ? 'Bug' : 'Question'}
+        </span>
+        <span className="text-slate-400">{STATUS_LABEL[item.status]}</span>
+        <span className="text-slate-500">#{item.id}</span>
+        <span className="text-slate-500">
+          {item.created_at ? new Date(item.created_at).toLocaleString('fr-FR') : ''}
+        </span>
+      </div>
+      <p className={`text-sm whitespace-pre-wrap ${muted ? 'text-slate-400' : 'text-slate-200'}`}>{item.message}</p>
+      <p className="text-xs text-slate-500">
+        {item.author_name}
+        {item.author_email ? ` · ${item.author_email}` : ''} · {pageLabel(item.page)}
+        {item.community_slug ? ` · ${item.community_slug}` : ''}
+      </p>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </li>
   )
 }

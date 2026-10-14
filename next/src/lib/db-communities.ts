@@ -10,7 +10,12 @@ import {
   serializeCharterBlocks,
   type CharterBlock,
 } from './community-charter'
-import { isCommunityManagerRole, LAST_COMMUNITY_MANAGER_MESSAGE } from './community-role-labels'
+import {
+  isCommunityManagerRole,
+  LAST_COMMUNITY_MANAGER_MESSAGE,
+  parseCommunityCircle,
+  type CommunityCircle,
+} from './community-role-labels'
 import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
 import { geocodeAddress } from './geocode'
@@ -174,7 +179,25 @@ export function composeCommunityAddress(parts: {
     .join(', ')
 }
 
-/** Ajoute les colonnes profil si absentes (compatible MariaDB sans IF NOT EXISTS). */
+async function ensureCommunityMemberCircleColumn(
+  pool: ReturnType<typeof getPool>,
+  tM: string
+): Promise<void> {
+  const [cols] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tM}`)
+  const existing = new Set((cols ?? []).map((c) => String(c.Field)))
+  if (existing.has('circle')) return
+  await exec(pool, `ALTER TABLE ${tM} ADD COLUMN circle VARCHAR(16) NOT NULL DEFAULT 'member'`)
+}
+
+async function refreshCoreConversation(communityId: number): Promise<void> {
+  try {
+    const { syncPlaceCoreChannel } = await import('./db-social')
+    await syncPlaceCoreChannel(communityId)
+  } catch (err) {
+    console.error('sync groupe cœur', err)
+  }
+}
+
 async function ensureCommunityProfileColumns(pool: ReturnType<typeof getPool>, tC: string): Promise<void> {
   const [cols] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tC}`)
   const existing = new Set((cols ?? []).map((c) => String(c.Field)))
@@ -289,7 +312,7 @@ async function seedDefaultCommunityGeoHints(
 }
 
 export async function ensureCommunitiesTables(): Promise<void> {
-  return ensureOnce('communities', async () => {
+  await ensureOnce('communities', async () => {
   const pool = getPool()
   const tC = table('mandala_communities')
   const tM = table('mandala_community_members')
@@ -320,6 +343,7 @@ export async function ensureCommunitiesTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureCommunityProfileColumns(pool, tC)
+  await ensureCommunityMemberCircleColumn(pool, tM)
   await migrateJoinModeDefaultToOpen(pool, tC)
   await ensureCommunityInviteCodes(pool, tC)
   await seedDefaultCommunityGeoHints(pool, tC)
@@ -336,6 +360,11 @@ export async function ensureCommunitiesTables(): Promise<void> {
       KEY idx_community (community_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
+  })
+  // Clé séparée : le schéma déjà mémorisé (serveur chaud) ne relance pas le bloc ci-dessus.
+  await ensureOnce('communities-member-circle', async () => {
+    const pool = getPool()
+    await ensureCommunityMemberCircleColumn(pool, table('mandala_community_members'))
   })
 }
 
@@ -376,7 +405,9 @@ export async function getCommunityBySlug(slug: string): Promise<CommunityRecord 
   return mapCommunityRow(r)
 }
 
-export async function listCommunitiesForUser(userId: number): Promise<Array<CommunityRecord & { role: CommunityRole }>> {
+export async function listCommunitiesForUser(
+  userId: number
+): Promise<Array<CommunityRecord & { role: CommunityRole; circle: CommunityCircle }>> {
   if (!userId) return []
   await ensureCommunitiesTables()
   await seedDefaultCommunitiesIfEmpty()
@@ -385,7 +416,7 @@ export async function listCommunitiesForUser(userId: number): Promise<Array<Comm
   const tM = table('mandala_community_members')
   const [memberRows] = await pool.execute<RowDataPacket[]>(
     `SELECT c.id, c.slug, c.name, c.tagline, c.description, c.location, c.website, c.contact_email,
-            c.accent_color, c.logo_emoji, c.avatar, m.role
+            c.accent_color, c.logo_emoji, c.avatar, m.role, m.circle
      FROM ${tM} m
      JOIN ${tC} c ON c.id = m.community_id
      WHERE m.user_id = ? AND c.is_active = 1
@@ -396,6 +427,7 @@ export async function listCommunitiesForUser(userId: number): Promise<Array<Comm
   return memberRows.map((r) => ({
     ...mapCommunityRow(r),
     role: String(r.role) as CommunityRole,
+    circle: parseCommunityCircle(r.circle),
   }))
 }
 
@@ -408,6 +440,7 @@ export type CommunityMemberDisplay = {
   profile_public: boolean
   is_me: boolean
   role: CommunityRole
+  circle: CommunityCircle
   weather_status: string | null
   weather_note: string | null
 }
@@ -424,7 +457,7 @@ export async function listCommunityMembersDisplay(
   const tMeta = table('usermeta')
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT m.user_id, m.role,
+    `SELECT m.user_id, m.role, m.circle,
             COALESCE(u.display_name, '') AS display_name,
             COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.user_id)) AS pseudo,
             COALESCE(e.meta_value, '🌸') AS avatar_emoji,
@@ -458,6 +491,7 @@ export async function listCommunityMembersDisplay(
         profile_public: String(r.profile_public) === '1',
         is_me: Number(r.user_id) === viewerUserId,
         role: String(r.role) as CommunityRole,
+        circle: parseCommunityCircle(r.circle),
         weather_status,
         weather_note,
       }
@@ -792,6 +826,7 @@ export type CommunityMemberAdmin = {
   pseudo: string
   display_name: string
   role: CommunityRole
+  circle: CommunityCircle
   joined_at: string | null
 }
 
@@ -1065,7 +1100,7 @@ export async function listCommunityMembersAdmin(communityId: number): Promise<Co
   const tUsers = table('users')
   const tMeta = table('usermeta')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT m.user_id, m.role, m.joined_at,
+    `SELECT m.user_id, m.role, m.circle, m.joined_at,
             u.user_email AS email,
             COALESCE(u.display_name, '') AS display_name,
             COALESCE(p.meta_value, u.display_name, CONCAT('user_', m.user_id)) AS pseudo
@@ -1082,6 +1117,7 @@ export async function listCommunityMembersAdmin(communityId: number): Promise<Co
     pseudo: String(r.pseudo || r.display_name || `user_${r.user_id}`),
     display_name: String(r.display_name || ''),
     role: String(r.role) as CommunityRole,
+    circle: parseCommunityCircle(r.circle),
     joined_at: r.joined_at ? String(r.joined_at) : null,
   }))
 }
@@ -1163,6 +1199,30 @@ export async function setCommunityMemberRole(
   if (Number((res as { affectedRows?: number }).affectedRows ?? 0) === 0) {
     throw new Error('Membre introuvable dans cette communauté')
   }
+  await refreshCoreConversation(communityId)
+}
+
+/** Cercle du lieu. N’accorde aucun droit de gestion. */
+export async function setCommunityMemberCircle(
+  communityId: number,
+  targetUserId: number,
+  circle: CommunityCircle
+): Promise<void> {
+  const next = parseCommunityCircle(circle)
+  if (next !== circle) {
+    throw Object.assign(new Error('Cercle invalide'), { status: 400 })
+  }
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [res] = await pool.execute(
+    `UPDATE ${tM} SET circle = ? WHERE community_id = ? AND user_id = ?`,
+    [next, communityId, targetUserId]
+  )
+  if (Number((res as { affectedRows?: number }).affectedRows ?? 0) === 0) {
+    throw Object.assign(new Error('Membre introuvable dans cette communauté'), { status: 404 })
+  }
+  await refreshCoreConversation(communityId)
 }
 
 /** Ajoute un compte Mandala déjà existant au lieu (gestionnaire), sans code d’invitation. */
@@ -1197,6 +1257,21 @@ export type InviteCandidate = {
   name: string
   pseudo: string
   avatar_emoji: string
+  /** ISO 8601, ou null si la date d’inscription est absente. */
+  registered: string | null
+}
+
+export type InviteCandidateSort = 'name' | 'registered_desc' | 'registered_asc'
+
+function registeredIso(value: unknown): string | null {
+  if (value == null) return null
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString()
+  }
+  const s = String(value).trim()
+  if (!s || s.startsWith('0000-00-00')) return null
+  const d = new Date(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s) ? s.replace(' ', 'T') + 'Z' : s)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
 /** Comptes Mandala qui ne sont pas encore membres de ce lieu. */
@@ -1204,6 +1279,7 @@ export async function listUsersNotInCommunity(params: {
   communityId: number
   search?: string
   limit?: number
+  sort?: InviteCandidateSort
 }): Promise<InviteCandidate[]> {
   await ensureCommunitiesTables()
   const pool = getPool()
@@ -1223,8 +1299,16 @@ export async function listUsersNotInCommunity(params: {
     values.push(q, q, q, q)
   }
   values.push(limit)
+  const sort = params.sort ?? 'name'
+  const orderBy =
+    sort === 'registered_desc'
+      ? 'u.user_registered DESC, u.ID DESC'
+      : sort === 'registered_asc'
+        ? 'u.user_registered ASC, u.ID ASC'
+        : 'u.display_name ASC, u.user_email ASC'
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT u.ID AS id, u.user_email AS email, u.display_name AS name,
+            u.user_registered AS registered,
             COALESCE(p.meta_value, u.display_name, CONCAT('user_', u.ID)) AS pseudo,
             COALESCE(e.meta_value, '🌸') AS avatar_emoji
      FROM ${tUsers} u
@@ -1234,7 +1318,7 @@ export async function listUsersNotInCommunity(params: {
        SELECT 1 FROM ${tM} m WHERE m.community_id = ? AND m.user_id = u.ID
      )
      ${searchSql}
-     ORDER BY u.display_name ASC, u.user_email ASC
+     ORDER BY ${orderBy}
      LIMIT ${limit}`,
     values.slice(0, -1)
   )
@@ -1244,6 +1328,7 @@ export async function listUsersNotInCommunity(params: {
     name: String(r.name ?? ''),
     pseudo: String(r.pseudo ?? `user_${r.id}`),
     avatar_emoji: String(r.avatar_emoji || '🌸'),
+    registered: registeredIso(r.registered),
   }))
 }
 
@@ -1371,6 +1456,7 @@ export async function removeUserFromCommunity(
 
   const remaining = await listCommunitiesForUser(targetUserId)
   if (remaining.length === 0) await markContinueWithoutPlace(targetUserId)
+  await refreshCoreConversation(communityId)
 }
 
 export async function requireCommunityMembership(
@@ -1386,6 +1472,24 @@ export async function requireCommunityMembership(
   )
   if (!rows.length) throw new Error('Accès communauté refusé')
   return String(rows[0].role) as CommunityRole
+}
+
+export async function getCommunityMembership(
+  userId: number,
+  communityId: number
+): Promise<{ role: CommunityRole; circle: CommunityCircle }> {
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT role, circle FROM ${tM} WHERE user_id = ? AND community_id = ? LIMIT 1`,
+    [userId, communityId]
+  )
+  if (!rows.length) throw new Error('Accès communauté refusé')
+  return {
+    role: String(rows[0].role) as CommunityRole,
+    circle: parseCommunityCircle(rows[0].circle),
+  }
 }
 
 export function canManageCommunitySettings(

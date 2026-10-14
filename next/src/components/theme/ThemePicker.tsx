@@ -6,7 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { THEME_PALETTES, THEME_PALETTE_IDS, type ThemePaletteId } from '@/lib/theme/tokens'
 
 export function ThemePicker() {
-  const { mode, palette, setMode, setPalette } = useTheme()
+  const { mode, palette, placeBound, placeSwatch, customPlaceColor, setMode, setPalette } = useTheme()
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -60,7 +60,10 @@ export function ThemePicker() {
       >
         <span
           className="w-6 h-6 rounded-full border-2 border-slate-600 shadow-inner"
-          style={{ backgroundColor: THEME_PALETTES[palette].swatch }}
+          style={{
+            backgroundColor:
+              placeBound && placeSwatch ? placeSwatch : THEME_PALETTES[palette].swatch,
+          }}
         />
       </button>
 
@@ -105,13 +108,24 @@ export function ThemePicker() {
             </div>
 
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Palette</p>
+              <p
+                className={`text-[10px] uppercase tracking-wider text-slate-500 ${
+                  placeBound ? 'mb-1' : 'mb-2'
+                }`}
+              >
+                {placeBound ? 'Couleur de ce lieu' : 'Palette'}
+              </p>
+              {placeBound && (
+                <p className="text-[10px] text-slate-500 mb-2">
+                  Elle change avec le lieu, pour les reconnaître d’un coup d’œil.
+                </p>
+              )}
               <div className="grid grid-cols-4 gap-2">
                 {THEME_PALETTE_IDS.map((id) => (
                   <PaletteSwatch
                     key={id}
                     id={id}
-                    selected={palette === id}
+                    selected={placeBound ? !customPlaceColor && palette === id : palette === id}
                     onSelect={() => {
                       setPalette(id)
                       setOpen(false)

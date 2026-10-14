@@ -9,7 +9,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
-import { COMMUNITY_ROLE_SELECT_OPTIONS, isCommunityManagerRole } from '@/lib/community-role-labels'
+import { COMMUNITY_ROLE_SELECT_OPTIONS, CORE_CIRCLE_LABEL, isCommunityManagerRole } from '@/lib/community-role-labels'
 
 export function AdminCommunitiesTab({
   onMessage,
@@ -185,6 +185,18 @@ export function AdminCommunitiesTab({
       setGeoMsg(typeof err === 'string' ? err : 'Adresse introuvable')
     } finally {
       setGeoBusy(false)
+    }
+  }
+
+  const setMemberCircle = async (userId: number, circle: 'member' | 'core') => {
+    if (!selectedId) return
+    onMessage(null)
+    try {
+      await communitiesApiClient.setMemberCircle(selectedId, userId, circle)
+      onMessage(circle === 'core' ? 'Ajouté au groupe cœur' : 'Retiré du groupe cœur')
+      void loadDetail(selectedId)
+    } catch (e: unknown) {
+      onMessage(e instanceof ApiError ? e.detail : 'Erreur', false)
     }
   }
 
@@ -603,6 +615,7 @@ export function AdminCommunitiesTab({
                       <th className="text-left p-2">Pseudo</th>
                       <th className="text-left p-2">Email</th>
                       <th className="text-left p-2">Rôle</th>
+                      <th className="text-left p-2">{CORE_CIRCLE_LABEL}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -630,6 +643,19 @@ export function AdminCommunitiesTab({
                               </option>
                             ))}
                           </select>
+                        </td>
+                        <td className="p-2">
+                          <label className="inline-flex items-center gap-1.5 text-slate-300">
+                            <input
+                              type="checkbox"
+                              checked={m.circle === 'core'}
+                              onChange={(e) =>
+                                void setMemberCircle(m.user_id, e.target.checked ? 'core' : 'member')
+                              }
+                              className="rounded"
+                            />
+                            Cœur
+                          </label>
                         </td>
                       </tr>
                     ))}

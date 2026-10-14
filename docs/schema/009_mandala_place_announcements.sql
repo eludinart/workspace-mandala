@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS mdl_mandala_place_announcements (
   title VARCHAR(255) NOT NULL,
   body TEXT NOT NULL,
   image_data MEDIUMTEXT NULL,
+  audience VARCHAR(16) NOT NULL DEFAULT 'all',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_community_created (community_id, created_at DESC),

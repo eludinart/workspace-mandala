@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { PlaceOrgBackLink } from '@/components/place/PlaceOrgBackLink'
 import { UserAvatar } from '@/components/UserAvatar'
-import { managerApi, type InviteCandidate, type PlaceInviteInfo } from '@/api/manager'
+import {
+  managerApi,
+  type InviteCandidate,
+  type InviteCandidateSort,
+  type PlaceInviteInfo,
+} from '@/api/manager'
+import { formatMandalaDate } from '@/lib/format-datetime'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useManagedPlaces } from '@/hooks/useManagedPlaces'
 import { useNavAccess } from '@/hooks/useNavAccess'
@@ -18,6 +24,7 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
     active?.id ?? managedPlaces.find((p) => p.slug === active?.slug)?.id ?? null
 
   const [query, setQuery] = useState('')
+  const [sort, setSort] = useState<InviteCandidateSort>('name')
   const [candidates, setCandidates] = useState<InviteCandidate[]>([])
   const [invite, setInvite] = useState<PlaceInviteInfo | null>(null)
   const [emailConfigured, setEmailConfigured] = useState(false)
@@ -29,11 +36,11 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
   const [msgOk, setMsgOk] = useState(true)
   const [copied, setCopied] = useState(false)
 
-  const load = useCallback(async (q?: string) => {
+  const load = useCallback(async (q?: string, nextSort?: InviteCandidateSort) => {
     if (!communityId) return
     setLoading(true)
     try {
-      const res = await managerApi.communities.invites(communityId, q)
+      const res = await managerApi.communities.invites(communityId, q, nextSort ?? sort)
       setCandidates(res.candidates ?? [])
       setInvite(res.invite)
       setEmailConfigured(!!res.email_configured)
@@ -49,12 +56,12 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
     } finally {
       setLoading(false)
     }
-  }, [communityId])
+  }, [communityId, sort])
 
   useEffect(() => {
-    const handle = window.setTimeout(() => void load(query), query ? 250 : 0)
+    const handle = window.setTimeout(() => void load(query, sort), query ? 250 : 0)
     return () => window.clearTimeout(handle)
-  }, [query, load])
+  }, [query, sort, load])
 
   if (loadingManagedPlaces) {
     return <p className="text-sm text-slate-400">Chargement…</p>
@@ -232,6 +239,18 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
           placeholder="Rechercher un nom, un pseudo ou un e-mail…"
           className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
         />
+        <label className="flex items-center gap-2 text-xs text-slate-500">
+          <span className="shrink-0">Trier par</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as InviteCandidateSort)}
+            className="min-w-0 flex-1 rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-200"
+          >
+            <option value="name">Nom (A → Z)</option>
+            <option value="registered_desc">Date d’inscription — plus récentes</option>
+            <option value="registered_asc">Date d’inscription — plus anciennes</option>
+          </select>
+        </label>
         {loading && candidates.length === 0 && <p className="text-sm text-slate-500">Chargement…</p>}
         {!loading && candidates.length === 0 && (
           <p className="text-sm text-slate-500">
@@ -246,7 +265,10 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
               <UserAvatar avatar={null} avatarEmoji={user.avatar_emoji} size="sm" alt={user.pseudo} />
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-slate-100 truncate">{user.pseudo || user.name}</p>
-                <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                <p className="text-xs text-slate-500 truncate">
+                  {user.email}
+                  {user.registered ? ` · ${formatMandalaDate(user.registered)}` : ''}
+                </p>
               </div>
               <button
                 type="button"

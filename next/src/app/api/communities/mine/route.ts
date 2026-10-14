@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
-    return NextResponse.json({ error: e.message ?? 'Erreur' }, { status: e.status ?? 401 })
+    const status = e.status ?? (e.message?.toLowerCase().includes('auth') ? 401 : 500)
+    return NextResponse.json({ error: e.message ?? 'Erreur' }, { status })
   }
 }

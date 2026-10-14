@@ -5,7 +5,7 @@ import type { MandalaPage } from '@/components/MandalaApp'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
-import { formatCommunityRoleLabel } from '@/lib/community-role-labels'
+import { formatPlaceMembershipLabel } from '@/lib/community-role-labels'
 import { PAGE_LABELS } from '@/lib/nav'
 import { useSocialStore } from '@/store/useSocialStore'
 
@@ -23,7 +23,7 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
   const otherUnread = unreadPlaces.some((place) => place.slug !== active?.slug && place.count > 0)
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const accent = active?.accent_color ?? '#7c3aed'
-  const placeRole = formatCommunityRoleLabel(active?.role)
+  const placeRole = formatPlaceMembershipLabel(active?.role, active?.circle)
 
   useEffect(() => {
     if (typeof document === 'undefined') return

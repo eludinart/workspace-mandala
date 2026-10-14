@@ -141,7 +141,7 @@ async function fetchPublicAnnouncements(limit: number): Promise<WallFeedItem[]> 
      JOIN ${table('users')} u ON u.ID = a.author_id
      LEFT JOIN ${table('usermeta')} pm ON pm.user_id = a.author_id AND pm.meta_key = 'mdl_pseudo'
      LEFT JOIN ${table('usermeta')} em ON em.user_id = a.author_id AND em.meta_key = 'mdl_avatar_emoji'
-     WHERE a.wall_public = 1
+     WHERE a.wall_public = 1 AND COALESCE(a.audience, 'all') = 'all'
      ORDER BY a.created_at DESC
      LIMIT ?`,
     [limit]

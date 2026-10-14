@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { CommunityProvider } from '@/contexts/CommunityContext'
+import { PlaceChromeTheme } from '@/components/theme/PlaceChromeTheme'
 import { Layout } from '@/components/layout/Layout'
 import { LoginPage } from '@/views/LoginPage'
 import { HomePage } from '@/views/HomePage'
@@ -564,6 +565,7 @@ export function MandalaApp() {
 
   return (
     <CommunityProvider>
+      <PlaceChromeTheme />
       <OnboardingGate>
         <TelemetryTracker page={page} />
         <Layout

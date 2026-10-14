@@ -7,6 +7,8 @@ import { cacheDelPrefix } from './server-cache'
 import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
 import { messageReplyExcerpt, type MessageReplyQuote } from './chat-attachments'
 import { isAvatarImageUrl } from './user-avatar'
+import { removeUpload } from './resource-files'
+import { invalidateNotifUnreadCache } from './db-notifications'
 
 const PRESENCE_ONLINE_SECONDS = 300
 
@@ -104,6 +106,8 @@ export type MyChannelRecord = {
   channelKind?: 'core' | null
   lastMessage?: string | null
   lastMessageAt?: string | null
+  /** Conversation visible ici grâce à une rencontre acceptée, pas à l'appartenance au lieu. */
+  viaMeet?: boolean
 }
 
 async function dropChatChannelsCheckConstraints(
@@ -226,6 +230,220 @@ function memberFingerprint(userIds: number[]): string {
   return [...new Set(userIds.filter((id) => id > 0))].sort((a, b) => a - b).join(',')
 }
 
+/** Empreinte stable : une conversation « Groupe cœur » par lieu, indépendante des participants. */
+export const CORE_CHANNEL_FINGERPRINT = 'core'
+export const CORE_CHANNEL_NAME = 'Groupe cœur'
+
+export function isCoreChannelFingerprint(fingerprint: unknown): boolean {
+  return String(fingerprint ?? '') === CORE_CHANNEL_FINGERPRINT
+}
+
+function assertNotCoreChannel(ch: RowDataPacket): void {
+  if (isCoreChannelFingerprint(ch.member_fingerprint)) {
+    throw Object.assign(
+      new Error('Cette conversation suit le groupe cœur du lieu'),
+      { status: 403 }
+    )
+  }
+}
+
+function normalizeGroupName(name: string): string {
+  return name
+    .replace(/œ/gi, 'oe')
+    .replace(/æ/gi, 'ae')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+/** Groupe cœur déjà nommé à la main (ex. « Le Coeur de Shambala »), sans empreinte `core`. */
+function isHeartGroupName(name: string): boolean {
+  return normalizeGroupName(name).includes('coeur')
+}
+
+/** Groupe cœur, puis les autres groupes, puis les conversations à deux. */
+function conversationListTier(ch: MyChannelRecord): number {
+  if (ch.channelType !== 'group') return 2
+  if (ch.channelKind === 'core' || isHeartGroupName(ch.otherPseudo) || isLegacyCoreGroupName(ch.otherPseudo)) return 0
+  return 1
+}
+
+/** Conversation créée à la main avant le cercle, pour Sivanà. */
+function isLegacyCoreGroupName(name: string): boolean {
+  const n = normalizeGroupName(name)
+  return n.includes('noyau') && n.includes('abricot')
+}
+
+async function countChannelMessages(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number
+): Promise<number> {
+  const t = table(P2P_MESSAGES_TABLE)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM ${t} WHERE channel_id = ?`,
+    [channelId]
+  )
+  return Number(rows[0]?.n ?? 0)
+}
+
+/**
+ * Reprend la conversation déjà nommée (Noyau d'Abricots) comme groupe cœur.
+ * Le fil automatique « Groupe cœur », s'il est vide, est retiré.
+ */
+async function adoptLegacyCoreChannel(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  communityId: number,
+  currentCoreId: number
+): Promise<number> {
+  const tChannels = table('chat_channels')
+  const tMembers = table('chat_channel_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id, channel_name, created_by, member_fingerprint
+     FROM ${tChannels}
+     WHERE channel_type = 'group' AND community_id = ?`,
+    [communityId]
+  )
+  const legacy = (rows ?? []).find(
+    (r) =>
+      !isCoreChannelFingerprint(r.member_fingerprint) &&
+      isLegacyCoreGroupName(String(r.channel_name ?? ''))
+  )
+  if (!legacy) return currentCoreId
+  const legacyId = Number(legacy.id)
+  if (!legacyId || legacyId === currentCoreId) return currentCoreId || legacyId
+
+  if (currentCoreId) {
+    const messages = await countChannelMessages(pool, currentCoreId)
+    const current = (rows ?? []).find((r) => Number(r.id) === currentCoreId)
+    const disposable =
+      messages === 0 && Number(current?.created_by ?? 0) === 0
+    if (!disposable) return currentCoreId
+    await pool.execute(`DELETE FROM ${tMembers} WHERE channel_id = ?`, [currentCoreId])
+    await pool.execute(`DELETE FROM ${tChannels} WHERE id = ? AND channel_type = 'group'`, [
+      currentCoreId,
+    ])
+  }
+
+  await pool.execute(
+    `UPDATE ${tChannels} SET member_fingerprint = ? WHERE id = ? AND channel_type = 'group'`,
+    [CORE_CHANNEL_FINGERPRINT, legacyId]
+  )
+  return legacyId
+}
+
+async function assertPlaceManagerCanRename(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  communityId: number,
+  userId: number
+): Promise<void> {
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT role FROM ${tM} WHERE community_id = ? AND user_id = ? LIMIT 1`,
+    [communityId, userId]
+  )
+  const role = String(rows[0]?.role ?? '')
+  if (role !== 'organizer' && role !== 'admin') {
+    throw Object.assign(
+      new Error('Seuls les gestionnaires du lieu peuvent renommer cette conversation'),
+      { status: 403 }
+    )
+  }
+}
+
+/**
+ * Crée ou met à jour la conversation du groupe cœur.
+ * Participants : personnes cochées et gestionnaires du lieu.
+ * Pas de conversation tant que personne n’est dans le cercle.
+ */
+export async function syncPlaceCoreChannel(communityId: number): Promise<void> {
+  if (!communityId) return
+  const { ensureCommunitiesTables } = await import('./db-communities')
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  await ensureGroupChannelSupport(pool)
+  const tMembersCommunity = table('mandala_community_members')
+  const tChannels = table('chat_channels')
+  const tMembers = table('chat_channel_members')
+
+  const [people] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id, role, circle FROM ${tMembersCommunity} WHERE community_id = ?`,
+    [communityId]
+  )
+  const coreIds = (people ?? [])
+    .filter((r) => String(r.circle ?? '') === 'core')
+    .map((r) => Number(r.user_id))
+    .filter((id) => id > 0)
+  const managerIds = (people ?? [])
+    .filter((r) => {
+      const role = String(r.role ?? '')
+      return role === 'organizer' || role === 'admin'
+    })
+    .map((r) => Number(r.user_id))
+    .filter((id) => id > 0)
+  const participantIds = [...new Set([...coreIds, ...managerIds])]
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${tChannels}
+     WHERE channel_type = 'group' AND community_id = ? AND member_fingerprint = ? LIMIT 1`,
+    [communityId, CORE_CHANNEL_FINGERPRINT]
+  )
+  let channelId = await adoptLegacyCoreChannel(
+    pool,
+    communityId,
+    existing?.[0] ? Number(existing[0].id) : 0
+  )
+  if (!channelId && coreIds.length === 0) return
+
+  if (!channelId) {
+    try {
+      const [insertRes] = await pool.execute(
+        `INSERT INTO ${tChannels}
+          (user_a, user_b, channel_type, community_id, channel_name, channel_icon_emoji, member_fingerprint, created_by)
+         VALUES (0, 1, 'group', ?, ?, '◎', ?, 0)`,
+        [communityId, CORE_CHANNEL_NAME, CORE_CHANNEL_FINGERPRINT]
+      )
+      channelId = Number((insertRes as { insertId?: number })?.insertId ?? 0)
+      if (channelId) {
+        await pool.execute(
+          `UPDATE ${tChannels} SET user_b = ? WHERE id = ? AND channel_type = 'group'`,
+          [channelId, channelId]
+        )
+      }
+    } catch {
+      const [again] = await pool.execute<RowDataPacket[]>(
+        `SELECT id FROM ${tChannels}
+         WHERE channel_type = 'group' AND community_id = ? AND member_fingerprint = ? LIMIT 1`,
+        [communityId, CORE_CHANNEL_FINGERPRINT]
+      )
+      channelId = again?.[0] ? Number(again[0].id) : 0
+    }
+  }
+  if (!channelId) return
+
+  const [memberRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${tMembers} WHERE channel_id = ?`,
+    [channelId]
+  )
+  const current = new Set((memberRows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0))
+  const desired = new Set(participantIds)
+  for (const uid of desired) {
+    if (!current.has(uid)) {
+      await pool.execute(`INSERT IGNORE INTO ${tMembers} (channel_id, user_id) VALUES (?, ?)`, [
+        channelId,
+        uid,
+      ])
+    }
+  }
+  for (const uid of current) {
+    if (!desired.has(uid)) {
+      await pool.execute(`DELETE FROM ${tMembers} WHERE channel_id = ? AND user_id = ?`, [
+        channelId,
+        uid,
+      ])
+    }
+  }
+}
+
 async function assertChannelAccess(
   pool: Awaited<ReturnType<typeof getPool>>,
   channelId: number,
@@ -320,8 +538,8 @@ export async function openDirectChannel(
   const ub = Math.max(userId, targetUserId)
   await pool.execute(`INSERT IGNORE INTO ${tLinks} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
   await pool.execute(
-    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type) VALUES (?, ?, 'direct')`,
-    [ua, ub]
+    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type, created_by) VALUES (?, ?, 'direct', ?)`,
+    [ua, ub, userId]
   )
   const [chanRows] = await pool.execute<RowDataPacket[]>(
     `SELECT id FROM ${tChannels} WHERE user_a = ? AND user_b = ? AND COALESCE(channel_type, 'direct') = 'direct' LIMIT 1`,
@@ -411,6 +629,7 @@ export async function addMembersToGroupChannel(params: {
   if (!channelId || !userId) throw Object.assign(new Error('Paramètres requis'), { status: 400 })
 
   const ch = await assertChannelAccess(pool, channelId, userId)
+  assertNotCoreChannel(ch)
   if (String(ch.channel_type ?? 'direct') !== 'group') {
     throw Object.assign(new Error('Ce canal n\'est pas un groupe'), { status: 400 })
   }
@@ -516,6 +735,13 @@ export async function getMyChannels(
 
   await touchSocialPresence(pool, uid)
   await ensureGroupChannelSupport(pool)
+  if (communityId) {
+    try {
+      await syncPlaceCoreChannel(communityId)
+    } catch (err) {
+      console.error('sync groupe cœur', err)
+    }
+  }
 
   const tChannels = table('chat_channels')
   const tLinks = table('prairie_links')
@@ -549,7 +775,7 @@ export async function getMyChannels(
   }
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, user_a, user_b FROM ${tChannels}
+    `SELECT id, user_a, user_b, created_by FROM ${tChannels}
      WHERE (user_a = ? OR user_b = ?) AND COALESCE(channel_type, 'direct') = 'direct'`,
     [uid, uid]
   )
@@ -557,6 +783,7 @@ export async function getMyChannels(
   await ensureMessagesTable(pool)
 
   const list: MyChannelRecord[] = []
+  const meetOnlyIds = new Set<number>()
 
   let directRows = rows
   if (communityId) {
@@ -571,7 +798,8 @@ export async function getMyChannels(
         `SELECT user_id FROM ${tCommMembers} WHERE community_id = ? AND user_id IN (${placeholders})`,
         [communityId, ...otherIds]
       )
-      const allowed = new Set((memberRows ?? []).map((r) => Number(r.user_id)))
+      const placeMembers = new Set((memberRows ?? []).map((r) => Number(r.user_id)))
+      const meetPartners = new Set<number>()
       try {
         const [meetRows] = await pool.execute<RowDataPacket[]>(
           `SELECT from_user_id, to_user_id FROM ${table('mandala_meet_requests')}
@@ -581,11 +809,15 @@ export async function getMyChannels(
         for (const meet of meetRows ?? []) {
           const other =
             Number(meet.from_user_id) === uid ? Number(meet.to_user_id) : Number(meet.from_user_id)
-          if (other > 0) allowed.add(other)
+          if (other > 0) meetPartners.add(other)
         }
       } catch {
         /* table absente tant qu’aucune rencontre n’a été demandée */
       }
+      for (const id of meetPartners) {
+        if (!placeMembers.has(id)) meetOnlyIds.add(id)
+      }
+      const allowed = new Set<number>([...placeMembers, ...meetPartners])
       directRows = directRows.filter((r) => {
         const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
         return allowed.has(otherId)
@@ -597,6 +829,7 @@ export async function getMyChannels(
     Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
   )
   const avatarMap = await fetchUsersAvatarMap(pool, otherIds)
+  const directCreators = await creatorsForDirectChannels(pool, directRows)
 
   for (const r of directRows) {
     const otherId = Number(r.user_a) === uid ? Number(r.user_b) : Number(r.user_a)
@@ -629,6 +862,8 @@ export async function getMyChannels(
       otherIsOnline: lastSeenAt ? isOnlineFromLastSeen(lastSeenAt) : false,
       otherLastSeenAt: lastSeenAt || null,
       unreadCount,
+      viaMeet: meetOnlyIds.has(otherId),
+      createdBy: directCreators.get(channelId) ?? null,
     })
   }
 
@@ -653,8 +888,8 @@ export async function getMyChannels(
     )
     const memberIds = (memberIdRows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
     const unreadCount = await countUnreadForChannel(pool, channelId, uid, 'group')
-    const groupName = String(gr.channel_name ?? '').trim() || `Groupe (${memberIds.length})`
-    const coreChannel = String(gr.member_fingerprint ?? '') === 'core'
+    const coreChannel = isCoreChannelFingerprint(gr.member_fingerprint)
+    const groupName = String(gr.channel_name ?? '').trim() || (coreChannel ? CORE_CHANNEL_NAME : `Groupe (${memberIds.length})`)
     list.push({
       channelId,
       channelType: 'group',
@@ -663,7 +898,7 @@ export async function getMyChannels(
       createdBy: gr.created_by != null ? Number(gr.created_by) : null,
       otherPseudo: groupName,
       otherAvatar: gr.channel_icon_image ? String(gr.channel_icon_image) : null,
-      otherAvatarEmoji: String(gr.channel_icon_emoji ?? '').trim() || '👥',
+      otherAvatarEmoji: String(gr.channel_icon_emoji ?? '').trim() || (coreChannel ? '◎' : '👥'),
       otherIsOnline: false,
       otherLastSeenAt: null,
       unreadCount,
@@ -685,32 +920,6 @@ function sqlDateToSortable(value: unknown): string | null {
   const s = String(value).trim()
   if (!s || s.startsWith('0000-00-00')) return null
   return s.slice(0, 19)
-}
-
-function plainGroupName(name: string): string {
-  return name
-    .replace(/œ/gi, 'oe')
-    .replace(/æ/gi, 'ae')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-}
-
-function isCoreConversation(ch: MyChannelRecord): boolean {
-  if (ch.channelKind === 'core') return true
-  const name = plainGroupName(ch.otherPseudo)
-  return name.includes('coeur') || (name.includes('noyau') && name.includes('abricot'))
-}
-
-/** Groupe cœur, puis les autres groupes, puis les conversations à deux. */
-function compareConversationRecords(a: MyChannelRecord, b: MyChannelRecord): number {
-  const tier = (ch: MyChannelRecord) => (ch.channelType !== 'group' ? 2 : isCoreConversation(ch) ? 0 : 1)
-  const byTier = tier(a) - tier(b)
-  if (byTier !== 0) return byTier
-  const ta = a.lastMessageAt ?? ''
-  const tb = b.lastMessageAt ?? ''
-  if (ta !== tb) return ta < tb ? 1 : -1
-  return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
 }
 
 async function attachLastMessages(
@@ -750,7 +959,15 @@ async function attachLastMessages(
   } catch {
     /* table absente ou pas encore migrée */
   }
-  list.sort(compareConversationRecords)
+  list.sort((a, b) => {
+    const aTier = conversationListTier(a)
+    const bTier = conversationListTier(b)
+    if (aTier !== bTier) return aTier - bTier
+    const ta = a.lastMessageAt ?? ''
+    const tb = b.lastMessageAt ?? ''
+    if (ta !== tb) return ta < tb ? 1 : -1
+    return a.otherPseudo.localeCompare(b.otherPseudo, 'fr')
+  })
 }
 
 export async function renameGroupChannel(params: {
@@ -768,10 +985,19 @@ export async function renameGroupChannel(params: {
   if (!name) throw Object.assign(new Error('Nom requis'), { status: 400 })
   if (name.length > 60) throw Object.assign(new Error('Nom trop long (60 caractères max)'), { status: 400 })
 
-  // Must be a member to access at all.
-  await assertChannelAccess(pool, channelId, userId)
-
+  const ch = await assertChannelAccess(pool, channelId, userId)
   const tCh = table('chat_channels')
+
+  if (isCoreChannelFingerprint(ch.member_fingerprint)) {
+    const communityId = ch.community_id ? Number(ch.community_id) : 0
+    await assertPlaceManagerCanRename(pool, communityId, userId)
+    await pool.execute(
+      `UPDATE ${tCh} SET channel_name = ? WHERE id = ? AND channel_type = 'group'`,
+      [name, channelId]
+    )
+    return { channelId, name }
+  }
+
   const [res] = await pool.execute(
     `UPDATE ${tCh}
      SET channel_name = ?
@@ -783,6 +1009,189 @@ export async function renameGroupChannel(params: {
     throw Object.assign(new Error('Seul le créateur peut renommer ce groupe'), { status: 403 })
   }
   return { channelId, name }
+}
+
+async function removeConversationNotifications(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number,
+  userIds: number[]
+): Promise<void> {
+  try {
+    const tN = table('notifications')
+    const tD = table('notification_deliveries')
+    await pool.execute(
+      `DELETE d FROM ${tD} d
+       INNER JOIN ${tN} n ON n.id = d.notification_id
+       WHERE n.channel_id = ?`,
+      [channelId]
+    )
+    await pool.execute(`DELETE FROM ${tD} WHERE channel_id = ?`, [channelId])
+    await pool.execute(`DELETE FROM ${tN} WHERE channel_id = ?`, [channelId])
+    invalidateNotifUnreadCache(userIds.filter((id) => id > 0))
+  } catch {
+    /* la conversation est déjà effacée */
+  }
+}
+
+async function creatorsForDirectChannels(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  rows: RowDataPacket[]
+): Promise<Map<number, number>> {
+  const creators = new Map<number, number>()
+  const missing: number[] = []
+  for (const row of rows) {
+    const channelId = Number(row.id)
+    const stored = row.created_by != null ? Number(row.created_by) : 0
+    if (stored > 0) creators.set(channelId, stored)
+    else if (channelId) missing.push(channelId)
+  }
+  if (!missing.length) return creators
+
+  await ensureMessagesTable(pool)
+  const tMsg = table(P2P_MESSAGES_TABLE)
+  const tChannels = table('chat_channels')
+  const placeholders = missing.map(() => '?').join(',')
+  const [firstRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT m.channel_id, m.sender_id
+     FROM ${tMsg} m
+     INNER JOIN (
+       SELECT channel_id, MIN(id) AS mid
+       FROM ${tMsg}
+       WHERE channel_id IN (${placeholders})
+       GROUP BY channel_id
+     ) first ON first.mid = m.id`,
+    missing
+  )
+  for (const row of firstRows ?? []) {
+    const channelId = Number(row.channel_id)
+    const senderId = Number(row.sender_id)
+    if (!channelId || !senderId) continue
+    creators.set(channelId, senderId)
+    await pool.execute(
+      `UPDATE ${tChannels} SET created_by = ? WHERE id = ? AND (created_by IS NULL OR created_by = 0)`,
+      [senderId, channelId]
+    )
+  }
+  return creators
+}
+
+async function directChannelCreatorId(
+  pool: Awaited<ReturnType<typeof getPool>>,
+  channelId: number,
+  stored: unknown
+): Promise<number> {
+  const found = await creatorsForDirectChannels(pool, [
+    { id: channelId, created_by: stored } as RowDataPacket,
+  ])
+  return found.get(channelId) ?? 0
+}
+
+/**
+ * Efface une conversation pour tous ses participants.
+ * Seul le créateur peut le faire. Le groupe cœur ne se supprime pas.
+ */
+export async function deleteChannelConversation(params: {
+  channelId: number
+  userId: number
+}): Promise<{ channelId: number }> {
+  const pool = getPool()
+  await ensureGroupChannelSupport(pool)
+  await ensureMessagesTable(pool)
+  await ensureReactionsTable(pool)
+
+  const channelId = Number(params.channelId)
+  const userId = Number(params.userId)
+  if (!channelId || !userId) throw new Error('Paramètres requis')
+
+  const ch = await assertChannelAccess(pool, channelId, userId)
+  if (isCoreChannelFingerprint(ch.member_fingerprint)) {
+    throw Object.assign(
+      new Error('La conversation du groupe cœur suit le cercle du lieu. Elle ne se supprime pas.'),
+      { status: 403 }
+    )
+  }
+
+  const channelType = String(ch.channel_type ?? 'direct')
+  const createdBy =
+    channelType === 'direct'
+      ? await directChannelCreatorId(pool, channelId, ch.created_by)
+      : ch.created_by != null
+        ? Number(ch.created_by)
+        : 0
+  if (!createdBy || createdBy !== userId) {
+    throw Object.assign(
+      new Error('Seul le créateur peut supprimer cette conversation'),
+      { status: 403 }
+    )
+  }
+
+  const tMsg = table(P2P_MESSAGES_TABLE)
+  const tReact = table(MESSAGE_REACTIONS_TABLE)
+  const tMembers = table('chat_channel_members')
+  const tCh = table('chat_channels')
+  const tMeta = table('usermeta')
+
+  const [fileRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT attachment_path FROM ${tMsg}
+     WHERE channel_id = ? AND attachment_path IS NOT NULL AND attachment_path != ''`,
+    [channelId]
+  )
+  const attachmentPaths = (fileRows ?? []).map((row) => String(row.attachment_path))
+
+  const recipientIds = new Set<number>([userId])
+  if (channelType === 'group') {
+    const [memberRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT user_id FROM ${tMembers} WHERE channel_id = ?`,
+      [channelId]
+    )
+    for (const row of memberRows ?? []) recipientIds.add(Number(row.user_id))
+  } else {
+    recipientIds.add(Number(ch.user_a))
+    recipientIds.add(Number(ch.user_b))
+  }
+
+  const [reactTables] = await pool.execute<RowDataPacket[]>(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1`,
+    [tReact]
+  )
+  const hasReactions = (reactTables?.length ?? 0) > 0
+
+  const conn = await pool.getConnection()
+  try {
+    await conn.beginTransaction()
+    if (hasReactions) {
+      await conn.execute(
+        `DELETE r FROM ${tReact} r
+         INNER JOIN ${tMsg} m ON m.id = r.message_id
+         WHERE m.channel_id = ?`,
+        [channelId]
+      )
+    }
+    await conn.execute(`DELETE FROM ${tMsg} WHERE channel_id = ?`, [channelId])
+    await conn.execute(`DELETE FROM ${tMembers} WHERE channel_id = ?`, [channelId])
+    await conn.execute(`DELETE FROM ${tMeta} WHERE meta_key = ?`, [
+      `${CHANNEL_READ_META_PREFIX}${channelId}_last_read_at`,
+    ])
+    const [res] = await conn.execute(`DELETE FROM ${tCh} WHERE id = ?`, [channelId])
+    const affected = Number((res as { affectedRows?: number })?.affectedRows ?? 0)
+    if (!affected) {
+      throw Object.assign(new Error('Conversation introuvable'), { status: 404 })
+    }
+    await conn.commit()
+  } catch (err) {
+    await conn.rollback()
+    throw err
+  } finally {
+    conn.release()
+  }
+
+  await removeConversationNotifications(pool, channelId, [...recipientIds])
+  for (const relative of attachmentPaths) {
+    await removeUpload(relative)
+  }
+
+  return { channelId }
 }
 
 export async function updateGroupChannelIcon(params: {
@@ -805,8 +1214,8 @@ export async function updateGroupChannelIcon(params: {
   if (emoji && emoji.length > 16) throw Object.assign(new Error('Emoji trop long (16 max)'), { status: 400 })
   if (image && !isAvatarImageUrl(image)) throw Object.assign(new Error('Image invalide'), { status: 400 })
 
-  // Must have access (member).
-  await assertChannelAccess(pool, channelId, userId)
+  const iconChannel = await assertChannelAccess(pool, channelId, userId)
+  assertNotCoreChannel(iconChannel)
 
   const tCh = table('chat_channels')
   const [res] = await pool.execute(
@@ -1814,9 +2223,10 @@ export async function acceptSeedConnection(
 
   await pool.execute(`UPDATE ${tSeeds} SET status = 'accepted', updated_at = NOW() WHERE id = ?`, [seedId])
   await pool.execute(`INSERT IGNORE INTO ${tLinks} (user_a, user_b) VALUES (?, ?)`, [ua, ub])
+  await ensureGroupChannelSupport(pool)
   await pool.execute(
-    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type) VALUES (?, ?, 'direct')`,
-    [ua, ub]
+    `INSERT IGNORE INTO ${tChannels} (user_a, user_b, channel_type, created_by) VALUES (?, ?, 'direct', ?)`,
+    [ua, ub, fromUserId]
   )
 
   const [chanRows] = await pool.execute<RowDataPacket[]>(

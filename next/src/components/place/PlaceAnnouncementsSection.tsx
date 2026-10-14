@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
-import { placeAnnouncementsApi, type PlaceAnnouncement } from '@/api/place-announcements'
+import { placeAnnouncementsApi, type PlaceAnnouncement, type PlaceAnnouncementDraft } from '@/api/place-announcements'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import { FeedSection } from '@/components/community/FeedSection'
@@ -50,12 +50,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
     void load()
   }, [load])
 
-  const handleCreate = async (data: {
-    title: string
-    body: string
-    image_data: string | null
-    wall_public: boolean
-  }) => {
+  const handleCreate = async (data: PlaceAnnouncementDraft) => {
     if (!active?.slug) return
     setSubmitting(true)
     setError(null)
@@ -70,12 +65,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
     }
   }
 
-  const handleUpdate = async (data: {
-    title: string
-    body: string
-    image_data: string | null
-    wall_public: boolean
-  }) => {
+  const handleUpdate = async (data: PlaceAnnouncementDraft) => {
     if (!editing) return
     setSubmitting(true)
     setError(null)
@@ -163,6 +153,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
                 initialBody={a.body}
                 initialImage={a.image_data}
                 initialWallPublic={a.wall_public}
+                initialAudience={a.audience === 'core' ? 'core' : 'all'}
                 submitLabel="Enregistrer"
                 busy={submitting}
                 onSubmit={handleUpdate}

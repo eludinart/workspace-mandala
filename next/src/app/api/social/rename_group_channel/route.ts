@@ -1,5 +1,6 @@
 /**
- * POST /api/social/rename_group_channel — renomme un dialogue de groupe (créateur uniquement).
+ * POST /api/social/rename_group_channel — renomme un dialogue de groupe.
+ * Groupe ordinaire : le créateur. Groupe cœur : un gestionnaire du lieu.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'

@@ -1,12 +1,15 @@
 import { api } from '@/lib/api-client'
 import type { CommunityAdmin, CommunityMemberAdmin } from '@/api/admin'
 
+export type InviteCandidateSort = 'name' | 'registered_desc' | 'registered_asc'
+
 export type InviteCandidate = {
   id: number
   email: string
   name: string
   pseudo: string
   avatar_emoji: string
+  registered?: string | null
 }
 
 export type PlaceInviteInfo = {
@@ -31,6 +34,8 @@ export const managerApi = {
       api.patch(`/api/manager/communities/${id}`, body) as Promise<{ community: CommunityAdmin }>,
     setMemberRole: (communityId: number, userId: number, role: string) =>
       api.patch(`/api/manager/communities/${communityId}/members`, { user_id: userId, role }),
+    setMemberCircle: (communityId: number, userId: number, circle: 'member' | 'core') =>
+      api.patch(`/api/manager/communities/${communityId}/members`, { user_id: userId, circle }),
     addMember: (communityId: number, userId: number) =>
       api.post(`/api/manager/communities/${communityId}/members`, { user_id: userId }) as Promise<{
         ok: boolean
@@ -41,8 +46,11 @@ export const managerApi = {
         user_id: userId,
         community_slug: communitySlug,
       }),
-    invites: (communityId: number, q?: string) => {
-      const qs = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+    invites: (communityId: number, q?: string, sort?: InviteCandidateSort) => {
+      const params = new URLSearchParams()
+      if (q?.trim()) params.set('q', q.trim())
+      if (sort) params.set('sort', sort)
+      const qs = params.toString() ? `?${params.toString()}` : ''
       return api.get(`/api/manager/communities/${communityId}/invites${qs}`) as Promise<{
         candidates: InviteCandidate[]
         invite: PlaceInviteInfo

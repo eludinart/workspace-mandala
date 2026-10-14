@@ -15,7 +15,7 @@ import {
 type GatePhase = 'loading' | 'place' | 'charter' | 'ready'
 
 export function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const { communities, loading: communitiesLoading, joinCommunity, setActiveSlug, active, refresh } =
+  const { communities, loading: communitiesLoading, loadError, joinCommunity, setActiveSlug, active, refresh } =
     useCommunity()
   const [phase, setPhase] = useState<GatePhase>('loading')
   const [pendingCharterSlugs, setPendingCharterSlugs] = useState<string[]>([])
@@ -48,11 +48,15 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const refreshStatus = useCallback(async () => {
     if (communitiesLoading) return
     if (communities.length === 0) {
+      if (loadError) {
+        setPhase('ready')
+        return
+      }
       try {
         const status = await communitiesApi.onboardingStatus()
         setPhase(status.needs_place_selection ? 'place' : 'ready')
       } catch {
-        setPhase('place')
+        setPhase('ready')
       }
       return
     }
@@ -71,7 +75,7 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     } catch {
       setPhase('ready')
     }
-  }, [active?.slug, communities.length, communitiesLoading])
+  }, [active?.slug, communities.length, communitiesLoading, loadError])
 
   useEffect(() => {
     capturePlaceInviteFromUrl()
@@ -131,6 +135,23 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     setCharterSlug(null)
     setPhase('ready')
   }, [charterSlug, pendingCharterSlugs])
+
+  if (loadError && communities.length === 0 && !communitiesLoading) {
+    return (
+      <div className="flex-1 min-h-0 flex items-center justify-center px-6">
+        <div className="max-w-sm text-center space-y-3">
+          <p className="text-sm text-slate-300">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="text-sm px-4 py-2 rounded-xl border border-slate-600 text-slate-200 hover:bg-slate-800"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (phase === 'ready') {
     return <>{children}</>

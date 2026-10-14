@@ -13,6 +13,15 @@ export type PlaceAnnouncement = {
   author_avatar_emoji: string
   author_avatar: string | null
   wall_public: boolean
+  audience: 'all' | 'core'
+}
+
+export type PlaceAnnouncementDraft = {
+  title: string
+  body: string
+  image_data: string | null
+  wall_public: boolean
+  audience: 'all' | 'core'
 }
 
 export const placeAnnouncementsApi = {
@@ -29,10 +38,17 @@ export const placeAnnouncementsApi = {
     body: string
     image_data?: string | null
     wall_public?: boolean
+    audience?: 'all' | 'core'
   }) => api.post('/api/place-announcements', body) as Promise<{ announcement: PlaceAnnouncement }>,
   update: (
     id: number,
-    body: { title?: string; body?: string; image_data?: string | null; wall_public?: boolean }
+    body: {
+      title?: string
+      body?: string
+      image_data?: string | null
+      wall_public?: boolean
+      audience?: 'all' | 'core'
+    }
   ) =>
     api.patch(`/api/place-announcements/${id}`, body) as Promise<{ announcement: PlaceAnnouncement }>,
   remove: (id: number) => api.delete(`/api/place-announcements/${id}`) as Promise<{ ok: boolean }>,

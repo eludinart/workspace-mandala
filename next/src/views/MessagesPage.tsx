@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { socialApi } from '@/api/social'
 import { DialogueStream } from '@/components/social/DialogueStream'
+import { DeleteConversationDialog } from '@/components/social/DeleteConversationDialog'
 import { ConversationMemberSidebar } from '@/components/social/ConversationMemberSidebar'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -11,6 +12,7 @@ import { ApiError } from '@/lib/api-client'
 import { UserAvatar } from '@/components/UserAvatar'
 import { membersApi, type CommunityMember } from '@/api/members'
 import { formatChatListTime } from '@/lib/format-datetime'
+import { isCommunityManagerRole } from '@/lib/community-role-labels'
 
 type Channel = {
   channelId: number
@@ -27,6 +29,7 @@ type Channel = {
   channelKind?: 'core' | null
   lastMessage?: string | null
   lastMessageAt?: string | null
+  viaMeet?: boolean
 }
 
 type PendingSeed = {
@@ -92,6 +95,9 @@ export function MessagesPage({
   const [msg, setMsg] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [listTab, setListTab] = useState<'dialogues' | 'members'>('dialogues')
+  const [pendingDelete, setPendingDelete] = useState<Channel | null>(null)
+  const [deletingConversation, setDeletingConversation] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const openedForRef = useRef<string | null>(null)
   const openedChannelRef = useRef<string | null>(null)
   const selectedIdRef = useRef<number | null>(null)
@@ -296,6 +302,46 @@ export function MessagesPage({
     onOpenChannel?.(null)
   }
 
+  const meId = Number((user as { id?: number } | null)?.id) || 0
+  const canDeleteChannel = (ch: Channel) => {
+    if (ch.channelKind === 'core') return false
+    return meId > 0 && ch.createdBy != null && Number(ch.createdBy) === meId
+  }
+
+  const askDeleteChannel = (ch: Channel) => {
+    setDeleteError(null)
+    setPendingDelete(ch)
+  }
+
+  const confirmDeleteChannel = async () => {
+    if (!pendingDelete || deletingConversation) return
+    const channelId = pendingDelete.channelId
+    setDeletingConversation(true)
+    setDeleteError(null)
+    try {
+      await socialApi.deleteChannel(channelId)
+      useSocialStore.setState((state) => {
+        const key = String(channelId)
+        const messagesByChannel = { ...state.messagesByChannel }
+        const peerLastReadAtByChannel = { ...state.peerLastReadAtByChannel }
+        delete messagesByChannel[key]
+        delete peerLastReadAtByChannel[key]
+        return { messagesByChannel, peerLastReadAtByChannel }
+      })
+      setChannels((prev) => prev.filter((c) => c.channelId !== channelId))
+      setPendingDelete(null)
+      if (selectedIdRef.current === channelId) closeDialogue()
+      void loadChannels()
+      void fetchClairiereUnread()
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiError ? err.message : 'Impossible de supprimer cette conversation.'
+      )
+    } finally {
+      setDeletingConversation(false)
+    }
+  }
+
   const visibleChannels = useMemo(() => {
     const q = query.trim().toLowerCase()
     const list = q ? channels.filter((c) => c.otherPseudo.toLowerCase().includes(q)) : channels
@@ -473,9 +519,15 @@ export function MessagesPage({
                   : ch.otherIsOnline
                     ? 'En ligne'
                     : 'Aucun message')
+              const deletable = canDeleteChannel(ch)
               return (
-                <button
+                <div
                   key={ch.channelId}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/70 ${
+                    activeRow ? 'bg-slate-800/80' : 'hover:bg-slate-900/80'
+                  }`}
+                >
+                <button
                   type="button"
                   onClick={() => {
                     selectedIdRef.current = ch.channelId
@@ -489,9 +541,7 @@ export function MessagesPage({
                       )
                     }
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left border-b border-slate-800/70 ${
-                    activeRow ? 'bg-slate-800/80' : 'hover:bg-slate-900/80'
-                  }`}
+                  className="min-w-0 flex-1 flex items-center gap-3 text-left"
                 >
                   <span className="relative shrink-0">
                     <UserAvatar
@@ -506,12 +556,15 @@ export function MessagesPage({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
-                      <span
-                        className={`truncate text-[15px] ${
-                          ch.unreadCount > 0 ? 'font-semibold text-slate-50' : 'font-medium text-slate-100'
-                        }`}
-                      >
-                        {ch.otherPseudo}
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`truncate text-[15px] ${
+                            ch.unreadCount > 0 ? 'font-semibold text-slate-50' : 'font-medium text-slate-100'
+                          }`}
+                        >
+                          {ch.otherPseudo}
+                        </span>
+                        {ch.viaMeet && <MeetBadge />}
                       </span>
                       {ch.lastMessageAt && (
                         <span
@@ -539,6 +592,17 @@ export function MessagesPage({
                     </span>
                   </span>
                 </button>
+                {deletable && (
+                  <button
+                    type="button"
+                    onClick={() => askDeleteChannel(ch)}
+                    className="shrink-0 self-center rounded-full border border-red-300 bg-red-50 px-2.5 py-1 text-[11px] font-medium text-red-800 hover:bg-red-100"
+                    aria-label={`Supprimer la conversation ${ch.otherPseudo}`}
+                  >
+                    Supprimer
+                  </button>
+                )}
+                </div>
               )
             })}
           </div>
@@ -563,11 +627,16 @@ export function MessagesPage({
               memberIds={selected.memberIds ?? []}
               participantsById={participantsById}
               createdBy={selected.createdBy ?? null}
+              lockedGroup={selected.channelKind === 'core'}
+              canManageCore={isCommunityManagerRole(active?.role)}
+              canDelete={canDeleteChannel(selected)}
+              onRequestDelete={() => askDeleteChannel(selected)}
               communityMembers={members}
               onGroupRenamed={() => void loadChannels()}
               onGroupMembersChanged={() => void loadChannels()}
               onBack={closeDialogue}
               otherUserId={selected.otherUserId ?? null}
+              viaMeet={selected.viaMeet}
               onOpenProfile={onOpenProfile}
             />
           ) : (
@@ -580,7 +649,31 @@ export function MessagesPage({
           )}
         </section>
       </div>
+      {pendingDelete && (
+        <DeleteConversationDialog
+          name={pendingDelete.otherPseudo}
+          loading={deletingConversation}
+          error={deleteError}
+          onCancel={() => {
+            if (deletingConversation) return
+            setPendingDelete(null)
+            setDeleteError(null)
+          }}
+          onConfirm={() => void confirmDeleteChannel()}
+        />
+      )}
     </div>
+  )
+}
+
+function MeetBadge() {
+  return (
+    <span
+      className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-700/60 text-amber-200"
+      title="Cette personne n’est pas membre de ce lieu. Conversation ouverte par une rencontre acceptée."
+    >
+      Rencontre
+    </span>
   )
 }
 

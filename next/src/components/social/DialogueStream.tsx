@@ -36,11 +36,16 @@ export function DialogueStream({
   memberIds = [],
   participantsById = {},
   createdBy,
+  lockedGroup = false,
+  canManageCore = false,
+  canDelete = false,
+  onRequestDelete,
   onGroupRenamed,
   communityMembers = [],
   onGroupMembersChanged,
   onBack,
   otherUserId,
+  viaMeet = false,
   onOpenProfile,
 }: {
   channelId: number
@@ -53,11 +58,16 @@ export function DialogueStream({
   memberIds?: number[]
   participantsById?: Record<number, { pseudo: string; avatar?: string | null; avatarEmoji?: string }>
   createdBy?: number | null
+  lockedGroup?: boolean
+  canManageCore?: boolean
+  canDelete?: boolean
+  onRequestDelete?: () => void
   onGroupRenamed?: (name: string) => void
   communityMembers?: CommunityMember[]
   onGroupMembersChanged?: () => void
   onBack?: () => void
   otherUserId?: number | null
+  viaMeet?: boolean
   onOpenProfile?: (userId: number) => void
 }) {
   const { user } = useAuth()
@@ -113,7 +123,11 @@ export function DialogueStream({
   const messages = messagesByChannel[String(channelId)] || []
   const visibleMessages = [...messages, ...pendingMessages]
   const peerLastReadAt = isGroup ? null : peerLastReadAtByChannel[String(channelId)] ?? null
-  const canRename = isGroup && createdBy != null && meId != null && Number(createdBy) === Number(meId)
+  const canRename =
+    isGroup &&
+    meId != null &&
+    (lockedGroup ? canManageCore : createdBy != null && Number(createdBy) === Number(meId))
+  const canEditIcon = canRename && !lockedGroup
 
   useEffect(() => {
     if (!editingName) return
@@ -436,8 +450,11 @@ export function DialogueStream({
     reader.readAsDataURL(file)
   }
 
+  const participantCount = memberCount ?? (memberIds.length || Object.keys(participantsById).length)
   const statusLabel = isGroup
-    ? `${memberCount ?? (memberIds.length || Object.keys(participantsById).length)} participants`
+    ? lockedGroup
+      ? `Groupe cœur du lieu · ${participantCount} participants`
+      : `${participantCount} participants`
     : otherIsOnline
       ? 'en ligne'
       : 'hors ligne'
@@ -485,22 +502,32 @@ export function DialogueStream({
             </span>
           )}
           <div className="min-w-0 flex-1 px-1">
-            {!isGroup && otherUserId && onOpenProfile ? (
-              <button
-                type="button"
-                onClick={() => onOpenProfile(otherUserId)}
-                className="block max-w-full text-left text-[15px] font-semibold truncate leading-tight hover:underline"
-              >
-                {otherPseudo || 'Conversation'}
-              </button>
-            ) : (
-              <p className="text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Conversation'}</p>
-            )}
+            <div className="flex items-center gap-1.5 min-w-0">
+              {!isGroup && otherUserId && onOpenProfile ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenProfile(otherUserId)}
+                  className="min-w-0 text-left text-[15px] font-semibold truncate leading-tight hover:underline"
+                >
+                  {otherPseudo || 'Conversation'}
+                </button>
+              ) : (
+                <p className="min-w-0 text-[15px] font-semibold truncate leading-tight">{otherPseudo || 'Conversation'}</p>
+              )}
+              {viaMeet && !isGroup && (
+                <span
+                  className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-700/60 text-amber-200"
+                  title="Cette personne n’est pas membre de ce lieu. Conversation ouverte par une rencontre acceptée."
+                >
+                  Rencontre
+                </span>
+              )}
+            </div>
             <p className={`text-xs truncate ${!isGroup && otherIsOnline ? 'text-emerald-400' : 'text-slate-400'}`}>
               {statusLabel}
             </p>
           </div>
-          {isGroup && (
+          {(isGroup || canDelete) && (
             <button
               type="button"
               onClick={() => setInfoOpen((v) => !v)}
@@ -508,7 +535,7 @@ export function DialogueStream({
                 infoOpen ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/80'
               }`}
               aria-expanded={infoOpen}
-              aria-label="Infos du groupe"
+              aria-label={isGroup ? 'Infos du groupe' : 'Actions de la conversation'}
             >
               ···
             </button>
@@ -560,6 +587,7 @@ export function DialogueStream({
                     >
                       Renommer
                     </button>
+                    {canEditIcon && (
                     <button
                       type="button"
                       onClick={() => {
@@ -570,12 +598,13 @@ export function DialogueStream({
                     >
                       Icône
                     </button>
+                    )}
                   </>
                 )}
               </div>
             )}
             {renameError && <p className="text-xs text-red-400">{renameError}</p>}
-            {iconEditing && canRename && (
+            {iconEditing && canEditIcon && (
           <div className="mt-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -649,24 +678,35 @@ export function DialogueStream({
             </div>
             </div>
             )}
+            <div className="px-3 pb-2 space-y-1 border-t border-slate-800/70">
+              {memberIds.length > 0 && (
+                <GroupParticipantsPreview
+                  memberIds={memberIds}
+                  participantsById={participantsById}
+                  meId={meId}
+                  onOpenProfile={onOpenProfile}
+                />
+              )}
+              {!lockedGroup && (
+                <AddGroupMembersPanel
+                  channelId={channelId}
+                  existingMemberIds={memberIds}
+                  communityMembers={communityMembers}
+                  onMembersAdded={onGroupMembersChanged}
+                />
+              )}
+            </div>
           </div>
         )}
-        {isGroup && (
-          <div className="px-3 pb-2 space-y-1 border-t border-slate-800/70">
-            {memberIds.length > 0 && (
-              <GroupParticipantsPreview
-                memberIds={memberIds}
-                participantsById={participantsById}
-                meId={meId}
-                onOpenProfile={onOpenProfile}
-              />
-            )}
-            <AddGroupMembersPanel
-              channelId={channelId}
-              existingMemberIds={memberIds}
-              communityMembers={communityMembers}
-              onMembersAdded={onGroupMembersChanged}
-            />
+        {infoOpen && canDelete && onRequestDelete && (
+          <div className="border-t border-slate-800 bg-slate-900/90 px-3 py-3">
+            <button
+              type="button"
+              onClick={onRequestDelete}
+              className="w-full rounded-lg border border-red-700/50 px-3 py-2 text-sm font-medium text-red-800 bg-red-50 hover:bg-red-100"
+            >
+              Supprimer la conversation
+            </button>
           </div>
         )}
       </header>
@@ -801,12 +841,7 @@ export function DialogueStream({
             value={input}
             rows={1}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void handleSendText()
-              }
-            }}
+            enterKeyHint="enter"
             placeholder="Écrire un message…"
             className="m-chat-input flex-1 min-w-0 w-0 min-h-[44px] px-4 py-2.5 rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-500 text-[15px] leading-snug resize-none"
             aria-label="Écrire un message"

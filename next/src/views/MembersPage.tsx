@@ -19,6 +19,7 @@ import { queueSkillFiche } from '@/components/skills/SkillsDirectory'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { WeatherBadge } from '@/components/community/WeatherBadge'
+import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 
 type MemberCardData = CommunityMember | MemberDirectoryEntry
 
@@ -63,6 +64,7 @@ export function MembersPage({
   const [manageUserId, setManageUserId] = useState<number | null>(null)
   const [removeTarget, setRemoveTarget] = useState<{ userId: number; label: string } | null>(null)
   const [removing, setRemoving] = useState(false)
+  const [circleBusyId, setCircleBusyId] = useState<number | null>(null)
 
   const loadCommunity = useCallback(async () => {
     if (!active?.slug) {
@@ -149,6 +151,22 @@ export function MembersPage({
     onNavigate?.('skills')
   }
 
+  const toggleCircle = async (userId: number, next: 'member' | 'core') => {
+    if (!active?.id) return
+    setCircleBusyId(userId)
+    setError(null)
+    try {
+      await managerApi.communities.setMemberCircle(active.id, userId, next)
+      setActionMsg(next === 'core' ? 'Ajouté au groupe cœur' : 'Retiré du groupe cœur')
+      await loadCommunity()
+      await refreshCommunities()
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.detail : 'Erreur')
+    } finally {
+      setCircleBusyId(null)
+    }
+  }
+
   const confirmRemoveMember = async () => {
     if (!removeTarget || !activeSlug) return
     setRemoving(true)
@@ -204,7 +222,7 @@ export function MembersPage({
           </h1>
           <p className="text-sm text-slate-400 mt-1">
             {organisationMode
-              ? `Administration des membres — ${active?.name ?? 'lieu actif'}. Attribuez le rôle gestionnaire depuis la fiche d’un membre.`
+              ? `Administration des membres — ${active?.name ?? 'lieu actif'}. Le groupe cœur se coche sur la carte. Le rôle gestionnaire se change dans la fiche.`
               : directoryMode
                 ? 'Annuaire multi-communautés'
                 : active?.name
@@ -315,6 +333,10 @@ export function MembersPage({
               onOpenProfile={onNavigate ? openFiche : undefined}
               canManage={canManageActiveCommunity}
               onManage={(id) => setManageUserId(id)}
+              onToggleCircle={
+                canManageActiveCommunity && !directoryMode ? (id, next) => void toggleCircle(id, next) : undefined
+              }
+              circleBusyId={circleBusyId}
               onRemove={
                 organisationMode && canManageActiveCommunity
                   ? (id, label) => setRemoveTarget({ userId: id, label })
@@ -359,6 +381,10 @@ export function MembersPage({
   )
 }
 
+function isCoreMember(member: MemberCardData): boolean {
+  return !isDirectoryMember(member) && member.circle === 'core'
+}
+
 function MemberGrid({
   members,
   directoryMode,
@@ -368,6 +394,8 @@ function MemberGrid({
   canManage,
   onManage,
   onRemove,
+  onToggleCircle,
+  circleBusyId,
 }: {
   members: MemberCardData[]
   directoryMode: boolean
@@ -377,7 +405,32 @@ function MemberGrid({
   canManage?: boolean
   onManage?: (userId: number) => void
   onRemove?: (userId: number, label: string) => void
+  onToggleCircle?: (userId: number, next: 'member' | 'core') => void
+  circleBusyId?: number | null
 }) {
+  const cardProps = {
+    directoryMode,
+    activeSlug,
+    onOpenMessages,
+    onOpenProfile,
+    canManage,
+    onManage,
+    onRemove,
+    onToggleCircle,
+    circleBusyId,
+  }
+
+  if (!directoryMode) {
+    const core = members.filter(isCoreMember)
+    const rest = members.filter((m) => !isCoreMember(m))
+    return (
+      <div className="space-y-6">
+        <MemberSection title={CORE_CIRCLE_LABEL} members={core} empty="Personne dans le groupe cœur pour l’instant." {...cardProps} />
+        <MemberSection title="Membres" members={rest} empty="Aucun membre visible." {...cardProps} />
+      </div>
+    )
+  }
+
   const me = members.find((m) => m.is_me)
   const others = members.filter((m) => !m.is_me)
 
@@ -386,21 +439,7 @@ function MemberGrid({
       {me && (
         <div className="rounded-xl border border-violet-500/40 bg-violet-950/30 p-4 mb-4">
           <p className="text-[10px] uppercase tracking-widest text-violet-400 mb-2">Moi</p>
-          <MemberCard
-            member={me}
-            directoryMode={directoryMode}
-            activeSlug={activeSlug}
-            onOpenMessages={onOpenMessages}
-            onOpenProfile={onOpenProfile}
-            isMe
-            canManage={canManage}
-            onManage={onManage}
-          />
-          {!me.profile_public && (
-            <p className="text-xs text-amber-400/90 mt-2">
-              Profil non public — activez-le dans Mon compte.
-            </p>
-          )}
+          <MemberCard member={me} {...cardProps} isMe />
         </div>
       )}
       {!others.length && !me && (
@@ -409,20 +448,39 @@ function MemberGrid({
       <ul className="grid sm:grid-cols-2 gap-3">
         {others.map((m) => (
           <li key={m.user_id}>
-            <MemberCard
-              member={m}
-              directoryMode={directoryMode}
-              activeSlug={activeSlug}
-              onOpenMessages={onOpenMessages}
-              onOpenProfile={onOpenProfile}
-              canManage={canManage}
-              onManage={onManage}
-              onRemove={onRemove}
-            />
+            <MemberCard member={m} {...cardProps} />
           </li>
         ))}
       </ul>
     </>
+  )
+}
+
+function MemberSection({
+  title,
+  members,
+  empty,
+  ...cardProps
+}: {
+  title: string
+  members: MemberCardData[]
+  empty: string
+} & Omit<Parameters<typeof MemberCard>[0], 'member' | 'isMe'>) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-sm font-semibold text-slate-200">
+        {title}
+        <span className="ml-2 text-xs font-normal text-slate-500">{members.length}</span>
+      </h2>
+      {!members.length && <p className="text-sm text-slate-500 italic">{empty}</p>}
+      <ul className="grid sm:grid-cols-2 gap-3">
+        {members.map((m) => (
+          <li key={m.user_id}>
+            <MemberCard member={m} {...cardProps} isMe={m.is_me} />
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -457,6 +515,8 @@ function MemberCard({
   canManage,
   onManage,
   onRemove,
+  onToggleCircle,
+  circleBusyId,
 }: {
   member: MemberCardData
   directoryMode: boolean
@@ -467,6 +527,8 @@ function MemberCard({
   canManage?: boolean
   onManage?: (userId: number) => void
   onRemove?: (userId: number, label: string) => void
+  onToggleCircle?: (userId: number, next: 'member' | 'core') => void
+  circleBusyId?: number | null
 }) {
   const communities = isDirectoryMember(member) ? member.communities : []
   const weather = memberWeather(member, directoryMode, activeSlug)
@@ -481,6 +543,11 @@ function MemberCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <p className="font-medium truncate">{member.pseudo}</p>
+          {isCoreMember(member) && (
+            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-700/60 text-amber-200">
+              {CORE_CIRCLE_LABEL}
+            </span>
+          )}
           <WeatherBadge status={weather.status} note={weather.note} />
         </div>
         {member.display_name && member.display_name !== member.pseudo && (
@@ -496,7 +563,11 @@ function MemberCard({
   )
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col gap-3 h-full">
+    <div
+      className={`rounded-xl border p-4 flex flex-col gap-3 h-full ${
+        isMe ? 'border-violet-500/40 bg-violet-950/30' : 'border-slate-800 bg-slate-900/50'
+      }`}
+    >
       {onOpenProfile ? (
         <button
           type="button"
@@ -509,9 +580,12 @@ function MemberCard({
       ) : (
         <div className="flex items-center gap-3">{identity}</div>
       )}
-      {!isMe && (
+      {isMe && !member.profile_public && (
+        <p className="text-[10px] text-amber-400/90">Profil non public — activez-le dans Mon compte.</p>
+      )}
+      {(!isMe || onToggleCircle) && (
         <div className="flex flex-col gap-2 mt-auto">
-          {onOpenMessages && (
+          {!isMe && onOpenMessages && (
             <button
               type="button"
               onClick={() => onOpenMessages(String(member.user_id))}
@@ -520,7 +594,23 @@ function MemberCard({
               💬 Message
             </button>
           )}
-          {canManage && onManage && (
+          {onToggleCircle && !directoryMode && (
+            <button
+              type="button"
+              disabled={circleBusyId === member.user_id}
+              onClick={() =>
+                onToggleCircle(member.user_id, isCoreMember(member) ? 'member' : 'core')
+              }
+              className="w-full text-xs py-1.5 rounded-lg border border-amber-700/50 text-amber-100 hover:bg-amber-950/30 font-medium disabled:opacity-50"
+            >
+              {circleBusyId === member.user_id
+                ? '…'
+                : isCoreMember(member)
+                  ? 'Retirer du groupe cœur'
+                  : 'Groupe cœur'}
+            </button>
+          )}
+          {!isMe && canManage && onManage && (
             <button
               type="button"
               onClick={() => onManage(member.user_id)}
@@ -529,7 +619,7 @@ function MemberCard({
               ⚙️ Gérer la fiche
             </button>
           )}
-          {canManage && onRemove && (
+          {!isMe && canManage && onRemove && (
             <button
               type="button"
               onClick={() =>

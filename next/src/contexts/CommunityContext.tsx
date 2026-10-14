@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
+import { ACTIVE_PLACE_STORAGE_KEY } from '@/lib/theme/place-palette'
 export type Community = {
   id: number
   slug: string
@@ -16,6 +17,7 @@ export type Community = {
   logo_emoji?: string | null
   avatar?: string | null
   role?: string
+  circle?: 'member' | 'core'
 }
 
 type PlaceSwitchNotice = {
@@ -30,11 +32,13 @@ type CommunityContextValue = {
   placeSwitchNotice: PlaceSwitchNotice | null
   dismissPlaceSwitch: () => void
   loading: boolean
+  /** Échec du chargement des lieux : ne pas le confondre avec « aucun lieu ». */
+  loadError: string | null
   refresh: () => Promise<void>
   joinCommunity: (slug: string, inviteCode?: string | null) => Promise<void>
 }
 
-const STORAGE_KEY = 'mandala_active_community'
+const STORAGE_KEY = ACTIVE_PLACE_STORAGE_KEY
 
 const CommunityContext = createContext<CommunityContextValue | null>(null)
 
@@ -43,6 +47,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const [communities, setCommunities] = useState<Community[]>([])
   const [activeSlug, setActiveSlugState] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [placeSwitchNotice, setPlaceSwitchNotice] = useState<PlaceSwitchNotice | null>(null)
   const communitiesRef = useRef<Community[]>([])
   const activeSlugRef = useRef<string | null>(null)
@@ -59,11 +64,13 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     if (!user) {
       setCommunities([])
+      setLoadError(null)
       setLoading(false)
       return
     }
     setLoading(true)
     try {
+      setLoadError(null)
       const res = (await communitiesApi.mine()) as { items?: Community[] }
       const items = res?.items ?? []
       setCommunities(items)
@@ -82,6 +89,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setCommunities([])
       communitiesRef.current = []
+      setLoadError('Impossible de charger vos lieux.')
     } finally {
       setLoading(false)
     }
@@ -144,10 +152,11 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
       placeSwitchNotice,
       dismissPlaceSwitch,
       loading,
+      loadError,
       refresh,
       joinCommunity,
     }),
-    [communities, active, setActiveSlug, placeSwitchNotice, dismissPlaceSwitch, loading, refresh, joinCommunity]
+    [communities, active, setActiveSlug, placeSwitchNotice, dismissPlaceSwitch, loading, loadError, refresh, joinCommunity]
   )
 
   return <CommunityContext.Provider value={value}>{children}</CommunityContext.Provider>

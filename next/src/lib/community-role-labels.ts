@@ -1,6 +1,28 @@
 import type { CommunityRole } from './db-communities'
 
+export type CommunityCircle = 'member' | 'core'
+
+export const CORE_CIRCLE_LABEL = 'Groupe cœur'
+
 const MANAGER_ROLES = new Set<CommunityRole>(['organizer', 'admin'])
+
+export function parseCommunityCircle(value: unknown): CommunityCircle {
+  return String(value ?? '').toLowerCase() === 'core' ? 'core' : 'member'
+}
+
+export function isCoreCircle(circle: string | undefined | null): boolean {
+  return parseCommunityCircle(circle) === 'core'
+}
+
+/** Libellé du lieu actif : le cœur remplace « Membre », pas « Gestionnaire ». */
+export function formatPlaceMembershipLabel(
+  role: string | undefined | null,
+  circle: string | undefined | null
+): string {
+  if (isCommunityManagerRole(role)) return 'Gestionnaire'
+  if (isCoreCircle(circle)) return CORE_CIRCLE_LABEL
+  return 'Membre'
+}
 
 export function isCommunityManagerRole(role: string | undefined | null): boolean {
   return MANAGER_ROLES.has(String(role ?? '').toLowerCase() as CommunityRole)

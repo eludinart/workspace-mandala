@@ -35,6 +35,7 @@ export type CommunityMember = {
   profile_public: boolean
   is_me: boolean
   role?: string
+  circle?: 'member' | 'core'
   weather_status?: string | null
   weather_note?: string | null
 }

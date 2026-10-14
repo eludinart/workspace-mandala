@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
-import { placeAnnouncementsApi, type PlaceAnnouncement } from '@/api/place-announcements'
+import { placeAnnouncementsApi, type PlaceAnnouncement, type PlaceAnnouncementDraft } from '@/api/place-announcements'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import {
@@ -42,27 +42,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
     void load()
   }, [load])
 
-  if (!canManage && !loading) {
-    return (
-      <div className="w-full space-y-4">
-        <p className="text-slate-400 text-sm">Accès réservé aux organisateurs du lieu.</p>
-        <button
-          type="button"
-          onClick={() => onNavigate('home')}
-          className="text-sm text-violet-400 hover:underline"
-        >
-          ← Retour à l&apos;accueil
-        </button>
-      </div>
-    )
-  }
-
-  const handleCreate = async (data: {
-    title: string
-    body: string
-    image_data: string | null
-    wall_public: boolean
-  }) => {
+  const handleCreate = async (data: PlaceAnnouncementDraft) => {
     if (!active?.slug) return
     setSubmitting(true)
     try {
@@ -76,12 +56,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
     }
   }
 
-  const handleUpdate = async (data: {
-    title: string
-    body: string
-    image_data: string | null
-    wall_public: boolean
-  }) => {
+  const handleUpdate = async (data: PlaceAnnouncementDraft) => {
     if (!editing) return
     setSubmitting(true)
     try {
@@ -141,7 +116,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      {!composerOpen && !editing && (
+      {canManage && !composerOpen && !editing && (
         <button
           type="button"
           onClick={() => setComposerOpen(true)}
@@ -177,6 +152,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
                 initialBody={a.body}
                 initialImage={a.image_data}
                 initialWallPublic={a.wall_public}
+                initialAudience={a.audience === 'core' ? 'core' : 'all'}
                 submitLabel="Enregistrer"
                 busy={submitting}
                 onSubmit={handleUpdate}

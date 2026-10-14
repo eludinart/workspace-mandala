@@ -32,6 +32,7 @@ export type CommunityMemberAdmin = {
   pseudo: string
   display_name: string
   role: string
+  circle?: 'member' | 'core'
   joined_at: string | null
 }
 
@@ -92,6 +93,8 @@ export const adminApi = {
       api.patch(`/api/admin/communities/${id}`, body) as Promise<{ community: CommunityAdmin }>,
     setMemberRole: (communityId: number, userId: number, role: string) =>
       api.patch(`/api/admin/communities/${communityId}/members`, { user_id: userId, role }),
+    setMemberCircle: (communityId: number, userId: number, circle: 'member' | 'core') =>
+      api.patch(`/api/admin/communities/${communityId}/members`, { user_id: userId, circle }),
   },
   broadcasts: {
     list: (params: { page?: number; status?: string } = {}) => {
