@@ -12,7 +12,7 @@ import { ensurePlaceAnnouncementTables } from './db-place-announcements'
 import { ensurePostTables } from './db-posts'
 import { getEventEffectiveEnd } from './event-dates'
 import { isEventOngoing, isEventPast, isEventUpcoming } from './event-temporal'
-import { normalizeDbDateTime } from './format-datetime'
+import { normalizeDbDateTime, normalizeWallClockDateTime } from './format-datetime'
 import type { WallFeedItem, WallFeedSort, WallPlaceRef } from './wall-feed-types'
 
 const PUBLIC_ANNOUNCEMENT_LIMIT = 8
@@ -103,8 +103,8 @@ async function fetchPublicWallEvents(limit: number): Promise<WallFeedItem[]> {
   const items: WallFeedItem[] = []
   for (const r of rows ?? []) {
     const ev = {
-      starts_at: normalizeDbDateTime(r.starts_at),
-      ends_at: normalizeDbDateTime(r.ends_at),
+      starts_at: normalizeWallClockDateTime(r.starts_at),
+      ends_at: normalizeWallClockDateTime(r.ends_at),
       phase: String(r.phase ?? 'preparation'),
       created_at: normalizeDbDateTime(r.created_at),
     }
@@ -310,8 +310,8 @@ async function fetchMemberEvents(communityIds: number[], perPlace: number): Prom
 
   const items: WallFeedItem[] = []
   for (const r of rows ?? []) {
-    const starts_at = normalizeDbDateTime(r.starts_at)
-    const ends_at = normalizeDbDateTime(r.ends_at)
+    const starts_at = normalizeWallClockDateTime(r.starts_at)
+    const ends_at = normalizeWallClockDateTime(r.ends_at)
     const phase = String(r.phase ?? 'preparation')
     const ev = {
       starts_at,

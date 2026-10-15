@@ -8,7 +8,7 @@ import {
   isEventPast,
   isEventUpcoming,
 } from '@/lib/event-temporal'
-import { formatMandalaDate, formatMandalaDateTime, parseMandalaDateTime } from '@/lib/format-datetime'
+import { formatMandalaDate, formatMandalaDateTime, parseWallClockDateTime } from '@/lib/format-datetime'
 
 export { eventTemporalBadge, isEventOngoing, isEventPast, isEventUpcoming }
 
@@ -43,8 +43,8 @@ export function phaseBadgeClass(phase: string): string {
 
 export function formatEventDateRange(startsAt: string | null, endsAt: string | null): string {
   if (!startsAt) return 'Date à préciser'
-  const start = parseMandalaDateTime(startsAt)
-  const end = parseMandalaDateTime(endsAt)
+  const start = parseWallClockDateTime(startsAt)
+  const end = parseWallClockDateTime(endsAt)
   if (!start) return formatMandalaDate(startsAt)
   if (!end || end.getTime() <= start.getTime()) {
     return formatMandalaDateTime(startsAt)
@@ -75,8 +75,8 @@ export function isEventOnDay(
 
 export function sortEventsByStart(events: HomeEventPreview[]): HomeEventPreview[] {
   return [...events].sort((a, b) => {
-    const ta = parseMandalaDateTime(a.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
-    const tb = parseMandalaDateTime(b.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const ta = parseWallClockDateTime(a.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const tb = parseWallClockDateTime(b.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
     return ta - tb
   })
 }

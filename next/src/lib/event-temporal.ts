@@ -1,7 +1,7 @@
 /** Statut calendrier d'un événement (serveur + client). */
 
 import { getEventEffectiveEnd } from './event-dates'
-import { parseMandalaDateTime } from './format-datetime'
+import { parseWallClockDateTime } from './format-datetime'
 
 export type EventTemporalInput = {
   starts_at: string | null
@@ -14,13 +14,13 @@ export function isEventUpcoming(ev: EventTemporalInput): boolean {
   const end = getEventEffectiveEnd(ev.starts_at, ev.ends_at)
   if (end) return end.getTime() >= Date.now()
   if (!ev.starts_at) return true
-  const start = parseMandalaDateTime(ev.starts_at)
+  const start = parseWallClockDateTime(ev.starts_at)
   return start ? start.getTime() >= Date.now() - 86400000 : true
 }
 
 export function isEventOngoing(ev: EventTemporalInput): boolean {
   if (ev.phase === 'closed') return false
-  const start = parseMandalaDateTime(ev.starts_at)
+  const start = parseWallClockDateTime(ev.starts_at)
   const end = getEventEffectiveEnd(ev.starts_at, ev.ends_at)
   if (!start || !end) return false
   const now = Date.now()

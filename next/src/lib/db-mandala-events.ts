@@ -11,7 +11,7 @@ import {
 } from './db-communities'
 import { assertEndsAfterStarts } from './event-dates'
 import type { EventPhase } from './event-constants'
-import { normalizeDbDateTime } from './format-datetime'
+import { normalizeDbDateTime, normalizeWallClockDateTime } from './format-datetime'
 
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 
@@ -161,8 +161,8 @@ function mapEvent(r: RowDataPacket): EventRecord {
     title: String(r.title),
     description: r.description != null ? String(r.description) : null,
     location: r.location != null ? String(r.location) : null,
-    starts_at: normalizeDbDateTime(r.starts_at),
-    ends_at: normalizeDbDateTime(r.ends_at),
+    starts_at: normalizeWallClockDateTime(r.starts_at),
+    ends_at: normalizeWallClockDateTime(r.ends_at),
     phase: String(r.phase) as EventPhase,
     status: String(r.status) as EventStatus,
     created_by: Number(r.created_by),

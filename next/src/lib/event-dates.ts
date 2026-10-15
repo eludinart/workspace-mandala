@@ -1,12 +1,12 @@
-import { parseMandalaDateTime } from './format-datetime'
+import { parseWallClockDateTime } from './format-datetime'
 
 export type EventSpanPosition = 'single' | 'start' | 'middle' | 'end'
 
 /** Date de fin effective : `ends_at` si postérieur au début, sinon le jour de début. */
 export function getEventEffectiveEnd(startsAt: string | null, endsAt: string | null): Date | null {
-  const start = parseMandalaDateTime(startsAt)
+  const start = parseWallClockDateTime(startsAt)
   if (!start) return null
-  const end = parseMandalaDateTime(endsAt)
+  const end = parseWallClockDateTime(endsAt)
   if (!end || end.getTime() < start.getTime()) {
     return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 23, 59, 59, 999)
   }
@@ -19,7 +19,7 @@ export function dateToDayKey(d: Date): string {
 
 /** Jours civils couverts par un événement (inclusifs). */
 export function enumerateEventDays(startsAt: string | null, endsAt: string | null): string[] {
-  const start = parseMandalaDateTime(startsAt)
+  const start = parseWallClockDateTime(startsAt)
   if (!start) return []
   const effectiveEnd = getEventEffectiveEnd(startsAt, endsAt)
   if (!effectiveEnd) return []
@@ -43,8 +43,8 @@ export function getEventSpanPosition(day: string, startDay: string, endDay: stri
 
 export function assertEndsAfterStarts(startsAt: string | null | undefined, endsAt: string | null | undefined): void {
   if (!startsAt || !endsAt) return
-  const start = parseMandalaDateTime(startsAt)
-  const end = parseMandalaDateTime(endsAt)
+  const start = parseWallClockDateTime(startsAt)
+  const end = parseWallClockDateTime(endsAt)
   if (start && end && end.getTime() < start.getTime()) {
     throw new Error('La date de fin doit être postérieure ou égale au début.')
   }

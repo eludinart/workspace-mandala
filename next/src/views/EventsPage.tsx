@@ -8,7 +8,7 @@ import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { EVENT_PHASES } from '@/lib/event-constants'
 import { type HomeEventPreview, isEventUpcoming } from '@/lib/event-preview'
-import { parseMandalaDateTime } from '@/lib/format-datetime'
+import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { ApiError } from '@/lib/api-client'
 
 function phaseLabel(id: string) {
@@ -299,14 +299,14 @@ export function EventsPage({
       else pa.push(ev)
     }
     const byDate = (a: HomeEventPreview, b: HomeEventPreview) => {
-      const da = parseMandalaDateTime(a.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
-      const db = parseMandalaDateTime(b.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
+      const da = parseWallClockDateTime(a.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
+      const db = parseWallClockDateTime(b.starts_at)?.getTime() ?? Number.MAX_SAFE_INTEGER
       return da - db
     }
     up.sort(byDate)
     pa.sort((a, b) => {
-      const da = parseMandalaDateTime(a.starts_at)?.getTime() ?? 0
-      const db = parseMandalaDateTime(b.starts_at)?.getTime() ?? 0
+      const da = parseWallClockDateTime(a.starts_at)?.getTime() ?? 0
+      const db = parseWallClockDateTime(b.starts_at)?.getTime() ?? 0
       return db - da
     })
     return { upcoming: up, past: pa }

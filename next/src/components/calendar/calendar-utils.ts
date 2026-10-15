@@ -1,7 +1,7 @@
 'use client'
 
 import type { EventSpanPosition } from '@/lib/event-dates'
-import { formatMandalaDateTime, parseMandalaDateTime } from '@/lib/format-datetime'
+import { formatMandalaDateTime, parseWallClockDateTime } from '@/lib/format-datetime'
 
 export type PresentUser = {
   user_id: number
@@ -224,7 +224,7 @@ export function shortWeekdayFr(day: string): string {
 }
 
 export function formatEventShortTime(startsAt: string | null): string {
-  const d = parseMandalaDateTime(startsAt)
+  const d = parseWallClockDateTime(startsAt)
   if (!d) return ''
   return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }

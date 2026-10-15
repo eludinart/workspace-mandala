@@ -12,7 +12,7 @@ import {
   pickFeaturedEvent,
   pickOtherUpcoming,
 } from '@/lib/event-preview'
-import { parseMandalaDateTime } from '@/lib/format-datetime'
+import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 import { AgoraFeed } from '@/components/community/AgoraFeed'
 import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncementsSection'
@@ -22,7 +22,7 @@ import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
 
 function eventDateParts(startsAt: string | null): { day: string; month: string } | null {
-  const d = parseMandalaDateTime(startsAt)
+  const d = parseWallClockDateTime(startsAt)
   if (!d) return null
   return {
     day: String(d.getDate()).padStart(2, '0'),

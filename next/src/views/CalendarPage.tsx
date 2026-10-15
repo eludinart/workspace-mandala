@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { calendarApi } from '@/api/calendar'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { parseMandalaDateTime } from '@/lib/format-datetime'
+import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { enumerateEventDays, getEventSpanPosition } from '@/lib/event-dates'
 import { ApiError } from '@/lib/api-client'
 import { eventsApi } from '@/api/events'
@@ -124,8 +124,8 @@ export function CalendarPage() {
     }
     for (const list of map.values()) {
       list.sort((a, b) => {
-        const da = parseMandalaDateTime(a.starts_at)?.getTime() ?? 0
-        const db = parseMandalaDateTime(b.starts_at)?.getTime() ?? 0
+        const da = parseWallClockDateTime(a.starts_at)?.getTime() ?? 0
+        const db = parseWallClockDateTime(b.starts_at)?.getTime() ?? 0
         return da - db
       })
     }

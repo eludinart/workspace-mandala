@@ -8,6 +8,7 @@ import { calendarApi } from '@/api/calendar'
 import { FeedSection } from '@/components/community/FeedSection'
 import { ApiError } from '@/lib/api-client'
 import { dayLabelFr } from '@/components/calendar/calendar-utils'
+import { parseWallClockDateTime } from '@/lib/format-datetime'
 
 type TodayPayload = {
   day: string
@@ -62,14 +63,9 @@ function todayYmd() {
 }
 
 function formatTime(startsAt: string | null): string {
-  if (!startsAt) return ''
-  try {
-    const d = new Date(startsAt.includes('T') ? startsAt : startsAt.replace(' ', 'T'))
-    if (Number.isNaN(d.getTime())) return ''
-    return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
+  const d = parseWallClockDateTime(startsAt)
+  if (!d) return ''
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
 export function TodayBoard({
