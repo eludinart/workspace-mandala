@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { eventsApi } from '@/api/events'
 import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
-import { formatMandalaDateTime } from '@/lib/format-datetime'
+import { formatEventDateRange } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
 import { WallPublicToggle } from '@/components/wall/WallPublicToggle'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
@@ -48,6 +48,16 @@ const TABS: { id: DetailTab; label: string }[] = [
   { id: 'tasks', label: 'Tâches' },
   { id: 'photos', label: 'Photos' },
 ]
+
+const EVENT_STATUSES = [
+  { id: 'draft', label: 'Brouillon' },
+  { id: 'published', label: 'Publié' },
+  { id: 'cancelled', label: 'Annulé' },
+  { id: 'completed', label: 'Terminé' },
+] as const
+
+const fieldClass =
+  'mt-1.5 w-full rounded-xl bg-slate-950/80 border border-white/10 px-3 py-2.5 text-slate-100 [color-scheme:dark] focus:outline-none focus:border-violet-400/70'
 
 function phaseLabel(id: string) {
   return EVENT_PHASES.find((p) => p.id === id)?.label ?? id
@@ -312,28 +322,21 @@ export function EventDetailPage({
               />
             </label>
           )}
-          {!can_manage && event.description && (
-            <p className="text-slate-300 text-sm leading-relaxed">{event.description}</p>
+          {!can_manage && (
+            <article className="rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-950/50 via-slate-950 to-slate-900 p-5 shadow-lg shadow-violet-950/20">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-violet-200/80">Quand</p>
+              <p className="mt-2 text-xl font-semibold text-slate-50 leading-snug">
+                {formatEventDateRange(event.starts_at, event.ends_at)}
+              </p>
+              <p className="mt-3 text-sm text-slate-300">{event.location || 'Lieu à préciser'}</p>
+              {event.description && (
+                <p className="mt-4 text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{event.description}</p>
+              )}
+            </article>
           )}
-          <dl className="grid sm:grid-cols-2 gap-2 text-sm text-slate-400">
-            <div>
-              <dt className="text-slate-500">Lieu</dt>
-              <dd>{event.location || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Début</dt>
-              <dd>{formatMandalaDateTime(event.starts_at)}</dd>
-            </div>
-            {event.ends_at && (
-              <div>
-                <dt className="text-slate-500">Fin</dt>
-                <dd>{formatMandalaDateTime(event.ends_at)}</dd>
-              </div>
-            )}
-          </dl>
           {can_manage && (
             <form
-              className="space-y-2 rounded-xl border border-slate-800 p-3 text-sm"
+              className="space-y-4 rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-950/45 via-slate-950 to-slate-900 p-4 sm:p-5 text-sm shadow-lg shadow-violet-950/20"
               onSubmit={(e) => {
                 e.preventDefault()
                 const title = editTitle.trim()
@@ -360,69 +363,83 @@ export function EventDetailPage({
                   )
               }}
             >
-              <p className="text-xs text-slate-500 uppercase tracking-wide">Informations</p>
               <label className="block">
-                <span className="text-slate-500 text-xs">Titre</span>
+                <span className="text-[11px] uppercase tracking-[0.16em] text-violet-200/75">Titre</span>
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
+                  className={`${fieldClass} text-base font-medium`}
+                />
+              </label>
+              <div className="grid sm:grid-cols-2 gap-3 rounded-2xl border border-violet-300/15 bg-violet-400/10 p-3">
+                <label className="block">
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-violet-100/80">Début</span>
+                  <input
+                    type="datetime-local"
+                    value={editStarts}
+                    onChange={(e) => setEditStarts(e.target.value)}
+                    className={fieldClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-violet-100/80">Fin</span>
+                  <input
+                    type="datetime-local"
+                    value={editEnds}
+                    onChange={(e) => setEditEnds(e.target.value)}
+                    className={fieldClass}
+                  />
+                  <span className="mt-1.5 block text-[11px] text-slate-400">
+                    Seulement si l’événement dure plusieurs jours
+                  </span>
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-[11px] uppercase tracking-[0.16em] text-violet-200/75">Lieu</span>
+                <input
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="Où ça se passe"
+                  className={fieldClass}
                 />
               </label>
               <label className="block">
-                <span className="text-slate-500 text-xs">Description</span>
+                <span className="text-[11px] uppercase tracking-[0.16em] text-violet-200/75">Description</span>
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={3}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
+                  className={fieldClass}
                 />
               </label>
-              <label className="block">
-                <span className="text-slate-500 text-xs">Lieu</span>
-                <input
-                  value={editLocation}
-                  onChange={(e) => setEditLocation(e.target.value)}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
-                />
-              </label>
-              <label className="block">
-                <span className="text-slate-500 text-xs">Début</span>
-                <input
-                  type="datetime-local"
-                  value={editStarts}
-                  onChange={(e) => setEditStarts(e.target.value)}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
-                />
-              </label>
-              <label className="block">
-                <span className="text-slate-500 text-xs">Fin (optionnel, pour événements sur plusieurs jours)</span>
-                <input
-                  type="datetime-local"
-                  value={editEnds}
-                  onChange={(e) => setEditEnds(e.target.value)}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
-                />
-              </label>
-              <label className="block">
-                <span className="text-slate-500 text-xs">Statut</span>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5"
-                >
-                  <option value="draft">Brouillon</option>
-                  <option value="published">Publié</option>
-                  <option value="cancelled">Annulé</option>
-                  <option value="completed">Terminé</option>
-                </select>
-              </label>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-violet-200/75">Statut</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {EVENT_STATUSES.map((status) => (
+                    <button
+                      key={status.id}
+                      type="button"
+                      onClick={() => setEditStatus(status.id)}
+                      className={`px-3 py-1.5 rounded-full border text-xs transition-colors ${
+                        editStatus === status.id
+                          ? 'border-violet-300/70 bg-violet-500/30 text-violet-50'
+                          : 'border-white/10 text-slate-400 hover:border-violet-300/40 hover:text-slate-200'
+                      }`}
+                    >
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <WallPublicToggle
                 id="wall-public-event"
                 checked={editWallPublic}
                 onChange={setEditWallPublic}
               />
-              <button type="submit" className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white">
+              <button
+                type="submit"
+                className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-400"
+              >
                 Enregistrer
               </button>
             </form>
