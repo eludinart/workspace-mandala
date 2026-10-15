@@ -2,6 +2,7 @@
  * Client Web Push : enregistrement du service worker + abonnement VAPID.
  */
 import { notificationsApi } from '@/api/notifications'
+import { isIosDevice, isStandaloneDisplay } from '@/lib/pwa-install'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -18,23 +19,6 @@ export function isPushClientSupported(): boolean {
     'serviceWorker' in navigator &&
     'PushManager' in window &&
     'Notification' in window
-  )
-}
-
-function isIosDevice(): boolean {
-  if (typeof navigator === 'undefined') return false
-  const ua = navigator.userAgent || ''
-  if (/iPad|iPhone|iPod/i.test(ua)) return true
-  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
-}
-
-function isStandaloneDisplay(): boolean {
-  if (typeof window === 'undefined') return false
-  const nav = navigator as Navigator & { standalone?: boolean }
-  if (nav.standalone === true) return true
-  return (
-    window.matchMedia('(display-mode: standalone)').matches ||
-    window.matchMedia('(display-mode: fullscreen)').matches
   )
 }
 

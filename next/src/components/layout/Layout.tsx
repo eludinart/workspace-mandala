@@ -12,6 +12,7 @@ import { AdminActingRoleBar } from '@/components/AdminActingRoleBar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
 import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer'
+import { InstallAppPrompt } from '@/components/InstallAppPrompt'
 import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { HelpButton } from '@/components/help/HelpButton'
 import { useEffect, useState } from 'react'
@@ -57,6 +58,7 @@ export function Layout({
   if (page === 'messages') {
     return (
       <div className="h-full min-h-0 flex flex-col bg-slate-950 text-slate-100 border-t-4 border-accent">
+        <InstallAppPrompt />
         <main className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">{children}</main>
         <HelpButton page={page} />
       </div>
@@ -99,6 +101,7 @@ export function Layout({
         )}
         <PlaceSwitchBanner />
         <AdminActingRoleBar />
+        <InstallAppPrompt />
         <PushNotificationPriming />
         <main
           className={`flex-1 min-h-0 min-w-0 w-full ${

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { InstallAppPrompt } from '@/components/InstallAppPrompt'
 import { ThemePicker } from '@/components/theme/ThemePicker'
 import {
   capturePlaceInviteFromUrl,
@@ -152,7 +153,8 @@ export function LoginPage() {
         : null
 
   return (
-    <div className="relative flex-1 h-full min-h-0 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950">
+    <div className="relative flex flex-col flex-1 h-full min-h-0 bg-gradient-to-br from-slate-950 via-slate-900/90 to-slate-950">
+      <InstallAppPrompt />
       <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="relative min-h-full flex items-center justify-center px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
         <div className="absolute top-3 right-3 z-10">
