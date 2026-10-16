@@ -553,10 +553,12 @@ export function MandalaApp() {
     return (
       <div className="flex-1 h-full min-h-0 overflow-y-auto flex flex-col items-center justify-center gap-3 bg-slate-900 px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] text-center">
         <p className="text-sm text-slate-400">Chargement…</p>
-        <p className="text-xs text-slate-600 max-w-sm">
-          Si cet écran reste bloqué, vérifiez que le serveur tourne (
-          <code className="text-slate-500">npm run dev.vps</code>) et que le tunnel MariaDB est actif.
-        </p>
+        {process.env.NODE_ENV !== 'production' && (
+          <p className="text-xs text-slate-600 max-w-sm">
+            Si cet écran reste bloqué, vérifiez que le serveur tourne (
+            <code className="text-slate-500">npm run dev.vps</code>) et que le tunnel MariaDB est actif.
+          </p>
+        )}
       </div>
     )
   }
