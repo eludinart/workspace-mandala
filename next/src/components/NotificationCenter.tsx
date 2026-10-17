@@ -6,11 +6,7 @@ import type { MandalaNavigate } from '@/components/MandalaApp'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNotifications, type NotificationItem } from '@/contexts/NotificationContext'
 import { navigateFromNotification } from '@/lib/notification-navigation'
-import {
-  BELL_READ_PREVIEW_LIMIT,
-  isChatNotification,
-  splitNotificationsForDisplay,
-} from '@/lib/notification-retention'
+import { BELL_READ_PREVIEW_LIMIT, splitNotificationsForDisplay } from '@/lib/notification-retention'
 
 const ICONS: Record<string, string> = {
   announcement: '📢',
@@ -97,8 +93,6 @@ export function NotificationCenter({ onNavigate }: { onNavigate: MandalaNavigate
   const filterTouchedRef = useRef(false)
 
   const filtered = items.filter((n) => {
-    const chat = isChatNotification(n.type, n.source_type)
-    if (chat) return filter === 'all' && !!n.read_at
     if (filter === 'unread') return !n.read_at
     if (filter === 'announcement') return (n.type ?? '').includes('announcement')
     return true

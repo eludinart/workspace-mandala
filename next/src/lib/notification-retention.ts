@@ -10,7 +10,7 @@ export const BELL_READ_PREVIEW_LIMIT = 8
 /** Sur la page Centre d'alertes, tout l'historique conservé. */
 export const PAGE_READ_PREVIEW_LIMIT = READ_NOTIFICATION_KEEP_COUNT
 
-/** Messages de chat : badge Messages + push, pas la liste des alertes. */
+/** Messages de chat : aussi dans la cloche, en plus du badge Messages. */
 const CHAT_NOTIFICATION_TYPES = new Set([
   'chat_new_message',
   'chat_message',

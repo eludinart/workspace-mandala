@@ -340,6 +340,72 @@ export async function createNotification(
   return { notification_id: notificationId, deliveries, push_sent: pushSent, push_errors: pushErrors }
 }
 
+/** Une alerte visible dans la cloche pour une personne. N'envoie pas le push. */
+export async function recordUserNotification(input: {
+  userId: number
+  type: string
+  title: string
+  body?: string | null
+  actionUrl?: string | null
+  actionLabel?: string | null
+  priority?: string
+  sourceType?: string | null
+  sourceId?: number | null
+  channelId?: number | null
+  createdBy?: number | null
+}): Promise<number | null> {
+  const userId = Number(input.userId)
+  if (!isDbConfigured() || !userId) return null
+  await ensureNotificationsTables()
+  const pool = getPool()
+  const tN = T_NOTIF()
+  const tD = T_DELIV()
+  const tUsers = table('users')
+  const title = String(input.title ?? '').trim().slice(0, 255)
+  if (!title) return null
+
+  const [emailRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_email FROM ${tUsers} WHERE ID = ? LIMIT 1`,
+    [userId]
+  )
+  const email = normalizeEmail(emailRows?.[0]?.user_email) || null
+  const hasLegacyUserId = await notificationsHasLegacyUserIdColumn(pool)
+  const fields = [
+    input.type.slice(0, 40) || 'system',
+    title,
+    input.body != null ? String(input.body) : null,
+    input.actionUrl != null ? String(input.actionUrl).slice(0, 255) : null,
+    input.actionLabel != null ? String(input.actionLabel).slice(0, 80) : null,
+    'user',
+    userId,
+    null,
+    String(input.priority ?? 'high').slice(0, 20),
+    input.sourceType ?? null,
+    input.sourceId ?? null,
+    input.channelId ?? null,
+    input.createdBy ?? null,
+    null,
+  ]
+  const [insRes] = await pool.execute(
+    hasLegacyUserId
+      ? `INSERT INTO ${tN}
+          (user_id, type, title, body, action_url, action_label, recipient_type, recipient_id, recipient_role, priority, source_type, source_id, channel_id, created_by, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO ${tN}
+          (type, title, body, action_url, action_label, recipient_type, recipient_id, recipient_role, priority, source_type, source_id, channel_id, created_by, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    hasLegacyUserId ? [userId, ...fields] : fields
+  )
+  const notificationId = Number((insRes as ResultSetHeader).insertId)
+  if (!notificationId) return null
+  await pool.execute(
+    `INSERT IGNORE INTO ${tD} (notification_id, user_id, user_email, channel_id) VALUES (?, ?, ?, ?)`,
+    [notificationId, userId, email, input.channelId ?? null]
+  )
+  invalidateNotifUnreadCache(userId)
+  return notificationId
+}
+
 const GLOBAL_PURGE_INTERVAL_MS = 60 * 60 * 1000
 let _lastGlobalPurgeAt = 0
 let _globalPurgeInFlight = false
@@ -458,11 +524,7 @@ export async function unreadCountForUser(userId: number): Promise<number> {
      FROM ${tD} d
      JOIN ${tN} n ON n.id = d.notification_id
      WHERE d.user_id = ? AND d.read_at IS NULL
-       AND (n.expires_at IS NULL OR n.expires_at > NOW())
-       AND NOT (
-         COALESCE(n.source_type, '') = 'clairiere_channel'
-         OR n.type IN ('chat_new_message', 'chat_message', 'clairiere_message')
-       )`,
+       AND (n.expires_at IS NULL OR n.expires_at > NOW())`,
     [userId]
   )
   return Number(rows?.[0]?.c ?? 0)

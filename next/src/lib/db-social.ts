@@ -1939,55 +1939,98 @@ async function getSharedCommunitySlug(
 }
 
 /**
- * Nouveau message : push appareil uniquement.
- * Le badge Messages couvre la liste in-app ; pas d'entrée dans la cloche.
+ * Nouveau message : une ligne dans la cloche pour chaque autre membre,
+ * puis un push prioritaire pour réveiller le téléphone.
  */
-export async function createClairiereMessageNotification(
-  channelId: number,
-  senderId: number,
-  recipientId: number,
-  body: string | null,
+export async function notifyChannelMessage(input: {
+  channelId: number
+  senderId: number
+  recipientIds: number[]
+  body: string | null
   cardSlug: string | null
-): Promise<void> {
+}): Promise<void> {
+  const recipients = [...new Set(input.recipientIds.filter((id) => id > 0 && id !== input.senderId))]
+  if (!recipients.length) return
+
   const pool = getPool()
   const tUsers = table('users')
   const tMeta = table('usermeta')
+  const tCh = table('chat_channels')
 
   const [senderRows] = await pool.execute<RowDataPacket[]>(
     `SELECT display_name FROM ${tUsers} WHERE ID = ? LIMIT 1`,
-    [senderId]
+    [input.senderId]
   )
   let pseudo = senderRows?.[0]?.display_name ? String(senderRows[0].display_name).trim() : ''
   if (!pseudo) {
     const [metaRows] = await pool.execute<RowDataPacket[]>(
       `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = 'mdl_pseudo' LIMIT 1`,
-      [senderId]
+      [input.senderId]
     )
-    pseudo = metaRows?.[0]?.meta_value ? String(metaRows[0].meta_value).trim() : 'Quelqu\'un'
+    pseudo = metaRows?.[0]?.meta_value ? String(metaRows[0].meta_value).trim() : ''
   }
   if (!pseudo) pseudo = 'Quelqu\'un'
 
-  let actionUrl = `/clairiere/${channelId}`
-  try {
-    const ctx = await getChannelNavigationContext(channelId, recipientId)
-    const params = new URLSearchParams({ channelId: String(channelId) })
-    if (ctx.communitySlug) params.set('community', ctx.communitySlug)
-    actionUrl = `mandala:messages?${params.toString()}`
-  } catch {
-    /* garder l'URL legacy */
+  const [chRows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COALESCE(channel_type, 'direct') AS channel_type, channel_name, community_id
+     FROM ${tCh} WHERE id = ? LIMIT 1`,
+    [input.channelId]
+  )
+  const isGroup = String(chRows?.[0]?.channel_type ?? 'direct') === 'group'
+  const groupName = chRows?.[0]?.channel_name ? String(chRows[0].channel_name).trim() : ''
+  const communityId = chRows?.[0]?.community_id ? Number(chRows[0].community_id) : 0
+  const communitySlug = isGroup && communityId ? await getCommunitySlugById(pool, communityId) : null
+
+  const excerpt = input.cardSlug
+    ? 'a partagé une carte'
+    : input.body
+      ? input.body.length > 140
+        ? `${input.body.slice(0, 137)}...`
+        : input.body
+      : 'Nouveau message'
+  const title = isGroup ? groupName || 'Groupe' : pseudo
+  const bodyText = isGroup ? `${pseudo} : ${excerpt}` : excerpt
+  const params = new URLSearchParams({ channelId: String(input.channelId) })
+  if (communitySlug) params.set('community', communitySlug)
+  const actionUrl = `mandala:messages?${params.toString()}`
+
+  const { recordUserNotification } = await import('./db-notifications')
+  for (const recipientId of recipients) {
+    try {
+      await recordUserNotification({
+        userId: recipientId,
+        type: 'clairiere_message',
+        title,
+        body: bodyText,
+        actionUrl,
+        actionLabel: 'Ouvrir',
+        priority: 'high',
+        sourceType: 'clairiere_channel',
+        sourceId: input.channelId,
+        channelId: input.channelId,
+        createdBy: input.senderId,
+      })
+    } catch (err: unknown) {
+      console.error('[messages] cloche', recipientId, (err as Error)?.message ?? err)
+    }
   }
-  const bodyText = cardSlug
-    ? `${pseudo} a partagé une carte avec vous`
-    : body
-      ? `${pseudo} : ${body.length > 75 ? `${body.slice(0, 72)}...` : body}`
-      : `${pseudo} vous a envoyé un message`
-  const title = 'Nouveau message'
 
   try {
-    const { sendFcmPush } = await import('./fcm')
-    await sendFcmPush(recipientId, null, title, bodyText, actionUrl)
-  } catch {
-    /* push optionnel, ne pas faire échouer l'envoi */
+    const { sendWebPushToUsers } = await import('./web-push-send')
+    const stats = await sendWebPushToUsers(recipients, title, bodyText, actionUrl, {
+      urgency: 'high',
+      tag: `mdl-ch-${input.channelId}`,
+    })
+    console.info(
+      '[messages] push',
+      input.channelId,
+      `sent=${stats.sent}`,
+      `gone=${stats.gone}`,
+      `errors=${stats.errors}`,
+      `users=${stats.users}`
+    )
+  } catch (err: unknown) {
+    console.error('[messages] push', input.channelId, (err as Error)?.message ?? err)
   }
 }
 

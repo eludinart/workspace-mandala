@@ -37,14 +37,20 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const tag = data.tag ? String(data.tag).slice(0, 64) : ''
+  const options = {
+    body: data.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    silent: false,
+    // Sans vibration, Android peut classer l'alerte comme silencieuse et ne pas la montrer.
+    vibrate: [120, 40, 120],
+    data: { url: data.url || '/app?page=notifications' },
+    ...(tag ? { tag, renotify: true } : {}),
+  }
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(data.title || 'Mandala', {
-        body: data.body || '',
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        data: { url: data.url || '/app?page=notifications' },
-      }),
+      self.registration.showNotification(data.title || 'Mandala', options),
       // Rafraîchir la cloche / le sous-menu si l'app est ouverte
       notifyOpenClients({
         type: 'MDL_PUSH_RECEIVED',

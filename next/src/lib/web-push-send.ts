@@ -55,12 +55,28 @@ export function actionUrlToWebPath(actionUrl?: string | null): string {
   return '/app?page=notifications'
 }
 
+export type WebPushOptions = {
+  /** `high` réveille l'appareil (Android / Samsung). `normal` peut attendre que Chrome s'ouvre. */
+  urgency?: 'very-low' | 'low' | 'normal' | 'high'
+  /** Même sujet = le dernier message remplace celui encore en file, et réveille quand même. */
+  tag?: string
+}
+
+function pushTopic(tag: string | undefined): string | undefined {
+  if (!tag) return undefined
+  const topic = tag.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
+  return topic || undefined
+}
+
 async function sendToSubscription(
   sub: PushSubscriptionRow,
   title: string,
   body: string,
-  webPath: string
+  webPath: string,
+  options?: WebPushOptions
 ): Promise<'ok' | 'gone' | 'error'> {
+  const urgency = options?.urgency ?? 'normal'
+  const tag = options?.tag
   try {
     await webpush.sendNotification(
       {
@@ -71,17 +87,25 @@ async function sendToSubscription(
         title,
         body,
         url: webPath,
+        ...(tag ? { tag, renotify: true } : {}),
       }),
-      { TTL: 60 * 60 * 12, urgency: 'normal' }
+      {
+        TTL: 60 * 60 * 12,
+        urgency,
+        ...(pushTopic(tag) ? { topic: pushTopic(tag) } : {}),
+      }
     )
     return 'ok'
   } catch (err: unknown) {
     const statusCode = Number((err as { statusCode?: number })?.statusCode ?? 0)
-    if (statusCode === 404 || statusCode === 410) {
+    const detail = String((err as { body?: string })?.body || (err as Error)?.message || '').slice(0, 180)
+    // 404/410 : appareil désinscrit. 403 : clé refusée, cet abonnement ne marchera plus.
+    if (statusCode === 404 || statusCode === 410 || statusCode === 403) {
       await deletePushSubscriptionById(sub.id).catch(() => {})
+      console.error('[web-push] subscription removed', statusCode, detail)
       return 'gone'
     }
-    console.error('[web-push] send failed', statusCode || '', (err as Error)?.message ?? err)
+    console.error('[web-push] send failed', statusCode || '', detail)
     return 'error'
   }
 }
@@ -91,7 +115,8 @@ export async function sendWebPushToUser(
   userId: number,
   title: string,
   body: string,
-  actionUrl?: string | null
+  actionUrl?: string | null,
+  options?: WebPushOptions
 ): Promise<{ sent: number; gone: number; errors: number }> {
   if (!ensureVapid()) {
     return { sent: 0, gone: 0, errors: 0 }
@@ -110,7 +135,7 @@ export async function sendWebPushToUser(
   let gone = 0
   let errors = 0
   for (const sub of subs) {
-    const result = await sendToSubscription(sub, title, body, webPath)
+    const result = await sendToSubscription(sub, title, body, webPath, options)
     if (result === 'ok') sent += 1
     else if (result === 'gone') gone += 1
     else errors += 1
@@ -129,7 +154,8 @@ export async function sendWebPushToUsers(
   userIds: number[],
   title: string,
   body: string,
-  actionUrl?: string | null
+  actionUrl?: string | null,
+  options?: WebPushOptions
 ): Promise<{ sent: number; gone: number; errors: number; users: number }> {
   const unique = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))]
   const acc = { sent: 0, gone: 0, errors: 0, users: unique.length }
@@ -140,7 +166,7 @@ export async function sendWebPushToUsers(
     while (cursor < unique.length) {
       const userId = unique[cursor]
       cursor += 1
-      const result = await sendWebPushToUser(userId, title, body, actionUrl)
+      const result = await sendWebPushToUser(userId, title, body, actionUrl, options)
       acc.sent += result.sent
       acc.gone += result.gone
       acc.errors += result.errors

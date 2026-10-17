@@ -91,6 +91,21 @@ async function fetchVapidPublicKey(): Promise<string | null> {
   }
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+/** L'abonnement a été créé avec une autre clé : il sera refusé (403) tant qu'on ne le refait pas. */
+function subscriptionKeyMismatch(subscription: PushSubscription, publicKey: string): boolean {
+  const current = subscription.options?.applicationServerKey
+  if (!current) return false
+  const existing = bytesToBase64Url(new Uint8Array(current))
+  const expected = publicKey.trim().replace(/=+$/g, '')
+  return existing !== expected
+}
+
 /** Demande la permission (si besoin), s’abonne et enregistre l’endpoint côté serveur. */
 export async function enablePushNotifications(): Promise<{
   ok: boolean
@@ -122,6 +137,10 @@ export async function enablePushNotifications(): Promise<{
   await navigator.serviceWorker.ready
 
   let subscription = await registration.pushManager.getSubscription()
+  if (subscription && subscriptionKeyMismatch(subscription, publicKey)) {
+    await subscription.unsubscribe().catch(() => {})
+    subscription = null
+  }
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,

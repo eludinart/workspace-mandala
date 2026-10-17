@@ -6,11 +6,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { navigateFromNotification } from '@/lib/notification-navigation'
 import type { NotificationItem } from '@/contexts/NotificationContext'
-import {
-  isChatNotification,
-  PAGE_READ_PREVIEW_LIMIT,
-  splitNotificationsForDisplay,
-} from '@/lib/notification-retention'
+import { PAGE_READ_PREVIEW_LIMIT, splitNotificationsForDisplay } from '@/lib/notification-retention'
 import { directoryApi } from '@/api/directory'
 import { ApiError } from '@/lib/api-client'
 
@@ -32,7 +28,7 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
     })
   }
 
-  const inbox = items.filter((n) => !isChatNotification(n.type, n.source_type) || !!n.read_at)
+  const inbox = items
   const { unread, read } = splitNotificationsForDisplay(inbox, PAGE_READ_PREVIEW_LIMIT)
   const hasReads = inbox.some((n) => n.read_at)
 

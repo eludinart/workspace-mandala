@@ -6,7 +6,7 @@ import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
 import {
   sendChannelMessage,
-  createClairiereMessageNotification,
+  notifyChannelMessage,
   getChannelRecipientIds,
 } from '@/lib/db-social'
 import { addStubMessage } from '@/lib/social-stub-store'
@@ -138,15 +138,15 @@ export async function POST(req: NextRequest) {
           ? 'Photo'
           : msg.attachment.name
         : null)
-    for (const recipientId of recipientIds) {
-      createClairiereMessageNotification(
-        channelId,
-        senderId,
-        recipientId,
-        noticeBody,
-        msg.cardSlug
-      ).catch(() => {})
-    }
+    await notifyChannelMessage({
+      channelId,
+      senderId,
+      recipientIds,
+      body: noticeBody,
+      cardSlug: msg.cardSlug,
+    }).catch((err: unknown) => {
+      console.error('[messages] notification', (err as Error)?.message ?? err)
+    })
     return NextResponse.json(
       {
         id: msg.id,
