@@ -71,6 +71,7 @@ export function WallDiscoverSection({
       setFriendIds([])
       return
     }
+    setFriendIds([])
     let cancelled = false
     void placeLinksApi
       .friendsOf(place.id)

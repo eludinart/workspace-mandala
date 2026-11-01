@@ -157,8 +157,9 @@ export function PlacesMap({
   )
 
   const ensureFriends = useCallback(async (communityId: number): Promise<number[]> => {
-    const cached = friendsCacheRef.current.get(communityId)
-    if (cached) return cached
+    if (friendsCacheRef.current.has(communityId)) {
+      return friendsCacheRef.current.get(communityId) ?? []
+    }
     try {
       const res = await placeLinksApi.friendsOf(communityId)
       const ids = res.can_view ? res.friend_ids ?? [] : []
@@ -167,16 +168,21 @@ export function PlacesMap({
       return ids
     } catch {
       friendsCacheRef.current.set(communityId, [])
+      setFriendsVersion((v) => v + 1)
       return []
     }
   }, [])
 
-  // Cache des amis du lieu sélectionné (prop parent)
+  // Amis du lieu sélectionné : prop parent si déjà connus, sinon fetch (y compris visiteurs)
   useEffect(() => {
     if (!selectedPlace?.id) return
-    friendsCacheRef.current.set(selectedPlace.id, friendCommunityIds)
-    setFriendsVersion((v) => v + 1)
-  }, [selectedPlace?.id, friendCommunityIds])
+    if (friendCommunityIds.length > 0) {
+      friendsCacheRef.current.set(selectedPlace.id, friendCommunityIds)
+      setFriendsVersion((v) => v + 1)
+      return
+    }
+    void ensureFriends(selectedPlace.id)
+  }, [selectedPlace?.id, friendCommunityIds, ensureFriends])
 
   const onHoverEnter = useCallback(
     (slug: string, communityId: number) => {
@@ -186,9 +192,8 @@ export function PlacesMap({
       }
       hoverSlugRef.current = slug
       setHoverSlug(slug)
-      const cached = friendsCacheRef.current.get(communityId)
-      if (cached) {
-        setHoverFriendIds(cached)
+      if (friendsCacheRef.current.has(communityId)) {
+        setHoverFriendIds(friendsCacheRef.current.get(communityId) ?? [])
         return
       }
       setHoverFriendIds([])
@@ -449,6 +454,11 @@ export function PlacesMap({
               >
                 {panelPlace.name}
               </p>
+              {panelPlace.tagline?.trim() && (
+                <p className="text-xs mt-0.5 line-clamp-1" style={{ color: '#6d28d9' }}>
+                  {panelPlace.tagline.trim()}
+                </p>
+              )}
               <p
                 className="text-xs mt-0.5 truncate"
                 style={{ color: '#475569' }}
@@ -460,10 +470,15 @@ export function PlacesMap({
                   ? ` · ${panelPlace.member_count} membre${panelPlace.member_count > 1 ? 's' : ''}`
                   : ''}
               </p>
+              {panelPlace.description?.trim() && (
+                <p className="text-xs mt-1.5 leading-relaxed line-clamp-2" style={{ color: '#334155' }}>
+                  {panelPlace.description.trim()}
+                </p>
+              )}
               {panelFriendCount > 0 && (
                 <p className="text-[11px] mt-1" style={{ color: '#6d28d9' }}>
                   {panelFriendCount} lieu{panelFriendCount > 1 ? 'x' : ''} ami
-                  {panelFriendCount > 1 ? 's' : ''} — survolez un marqueur pour voir les traits
+                  {panelFriendCount > 1 ? 's' : ''} relié{panelFriendCount > 1 ? 's' : ''} sur la carte
                 </p>
               )}
             </div>

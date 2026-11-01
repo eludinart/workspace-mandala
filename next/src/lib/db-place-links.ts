@@ -120,13 +120,15 @@ export type AcceptedFriendBrief = {
 
 /** Lieux amis accepted avec nom (carte / fiche Relier). */
 export async function listAcceptedFriendsBrief(
-  communityId: number
+  communityId: number,
+  opts?: { listedPublicOnly?: boolean }
 ): Promise<AcceptedFriendBrief[]> {
   if (!isDbConfigured() || !communityId) return []
   await ensurePlaceLinksTable()
   const pool = getPool()
   const t = table('mandala_place_links')
   const tC = table('mandala_communities')
+  const listedClause = opts?.listedPublicOnly ? ' AND COALESCE(c.listed_public, 1) = 1' : ''
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT
        CASE WHEN l.community_a_id = ? THEN l.community_b_id ELSE l.community_a_id END AS other_id,
@@ -135,6 +137,7 @@ export async function listAcceptedFriendsBrief(
      JOIN ${tC} c ON c.id = CASE
        WHEN l.community_a_id = ? THEN l.community_b_id ELSE l.community_a_id END
        AND c.is_active = 1
+       ${listedClause}
      WHERE l.status = 'accepted'
        AND (l.community_a_id = ? OR l.community_b_id = ?)
      ORDER BY c.name ASC`,
