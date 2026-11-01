@@ -22,6 +22,8 @@ export type HomeEventPreview = {
   location: string | null
   cover_image: string | null
   media_count?: number
+  /** Première photo galerie si pas de cover (liste événements). */
+  first_media_image?: string | null
   /** Présent sur les dates « Ailleurs » (lieu ami). */
   host_community_id?: number
   host_slug?: string

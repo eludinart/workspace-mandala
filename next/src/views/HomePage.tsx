@@ -12,12 +12,15 @@ import {
   pickFeaturedEvent,
   pickOtherUpcoming,
 } from '@/lib/event-preview'
+import {
+  featuredProgramMediaKind,
+  resolveFeaturedProgramImage,
+} from '@/lib/featured-program-media'
 import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 import { AgoraFeed } from '@/components/community/AgoraFeed'
 import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncementsSection'
 import { TodayBoard } from '@/components/place/TodayBoard'
-import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
 
@@ -84,9 +87,12 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const otherUpcoming = pickOtherUpcoming(events, featuredEvent)
   const elsewhereList = pickOtherUpcoming(elsewhere, null)
   const featuredIsToday = featuredEvent ? isEventOnDay(featuredEvent) : false
+  const featuredImage = featuredEvent ? resolveFeaturedProgramImage(featuredEvent) : null
+  const featuredMediaKind = featuredProgramMediaKind(featuredImage)
+  const featuredDateParts = featuredEvent ? eventDateParts(featuredEvent.starts_at) : null
   const heroImage = isAvatarImageUrl(active?.avatar)
     ? active!.avatar!
-    : featuredEvent?.cover_image || null
+    : featuredImage || null
 
   const shortcuts = [
     { icon: '🗓️', title: 'Calendrier', text: 'Présences et rythme du lieu', go: () => onNavigate('calendar') },
@@ -209,24 +215,46 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
             {loading && <p className="text-sm text-slate-500 text-center">Chargement…</p>}
             {!loading && featuredEvent && (
               <div className="m-home-program">
-                <div className="overflow-hidden rounded-[1.35rem] border border-slate-800 bg-slate-950 min-h-[14rem]">
-                  {featuredEvent.cover_image ? (
+                <button
+                  type="button"
+                  onClick={() => setSelectedEventId(featuredEvent.id)}
+                  className="relative overflow-hidden rounded-[1.35rem] border border-slate-800 bg-slate-950 min-h-[14rem] max-h-80 w-full text-left hover:border-violet-500/40 transition-colors"
+                  aria-label={`Ouvrir ${featuredEvent.title}`}
+                >
+                  {featuredMediaKind === 'image' && featuredImage ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={featuredEvent.cover_image}
+                      src={featuredImage}
                       alt=""
-                      className="w-full h-full object-cover min-h-[14rem] max-h-80"
+                      className="absolute inset-0 w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="h-full min-h-[14rem] flex items-center justify-center p-8">
-                      <EventPreviewCard
-                        event={featuredEvent}
-                        variant="hero"
-                        onClick={() => setSelectedEventId(featuredEvent.id)}
-                      />
-                    </div>
+                    <div
+                      className="absolute inset-0"
+                      style={{
+                        background: `linear-gradient(145deg, ${accent}55, rgb(15 23 42), rgb(2 6 23))`,
+                      }}
+                    />
                   )}
-                </div>
+                  {featuredMediaKind === 'image' && (
+                    <div
+                      className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/25 to-slate-950/10"
+                      aria-hidden
+                    />
+                  )}
+                  <div className="relative z-[1] min-h-[14rem] max-h-80 h-full flex items-center justify-center p-8">
+                    {featuredDateParts ? (
+                      <span className="m-home-date scale-150 origin-center shadow-lg shadow-black/30">
+                        <span className="m-home-date-day">{featuredDateParts.day}</span>
+                        <span className="m-home-date-month">{featuredDateParts.month}</span>
+                      </span>
+                    ) : (
+                      <span className="text-5xl opacity-80" aria-hidden>
+                        📅
+                      </span>
+                    )}
+                  </div>
+                </button>
                 <div className="space-y-4">
                   <p className="m-landing-eyebrow">
                     {featuredIsToday ? 'Aujourd’hui' : 'À venir'}

@@ -203,6 +203,8 @@ async function requireEventManager(
 
 export type EventListItem = EventRecord & {
   media_count: number
+  /** Première photo galerie — utile en fond Accueil si pas de cover. */
+  first_media_image: string | null
 }
 
 export type FriendPlaceEventItem = EventListItem & {
@@ -219,11 +221,21 @@ export async function listEventsForCommunity(communityId: number): Promise<Event
   const tM = table('event_media')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image, e.wall_public, e.open_to_friend_places,
-            COALESCE(mc.cnt, 0) AS media_count
+            COALESCE(mc.cnt, 0) AS media_count,
+            CASE
+              WHEN e.cover_image IS NULL OR TRIM(e.cover_image) = '' THEN fm.image_data
+              ELSE NULL
+            END AS first_media_image
      FROM ${tE} e
      LEFT JOIN (
        SELECT event_id, COUNT(*) AS cnt FROM ${tM} GROUP BY event_id
      ) mc ON mc.event_id = e.id
+     LEFT JOIN ${tM} fm ON fm.id = (
+       SELECT m.id FROM ${tM} m
+       WHERE m.event_id = e.id
+       ORDER BY m.sort_order ASC, m.id ASC
+       LIMIT 1
+     )
      WHERE e.community_id = ? AND e.status != 'cancelled'
      ORDER BY COALESCE(e.starts_at, e.created_at) ASC`,
     [communityId]
@@ -231,6 +243,7 @@ export async function listEventsForCommunity(communityId: number): Promise<Event
   return (rows ?? []).map((r) => ({
     ...mapEvent(r),
     media_count: Number(r.media_count ?? 0),
+    first_media_image: r.first_media_image ? String(r.first_media_image) : null,
   }))
 }
 
@@ -284,12 +297,22 @@ export async function listOpenFriendEventsForCommunity(params: {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image, e.wall_public, e.open_to_friend_places,
             COALESCE(mc.cnt, 0) AS media_count,
+            CASE
+              WHEN e.cover_image IS NULL OR TRIM(e.cover_image) = '' THEN fm.image_data
+              ELSE NULL
+            END AS first_media_image,
             c.slug AS host_slug, c.name AS host_name, c.accent_color AS host_accent_color
      FROM ${tE} e
      JOIN ${tC} c ON c.id = e.community_id AND c.is_active = 1
      LEFT JOIN (
        SELECT event_id, COUNT(*) AS cnt FROM ${tM} GROUP BY event_id
      ) mc ON mc.event_id = e.id
+     LEFT JOIN ${tM} fm ON fm.id = (
+       SELECT m.id FROM ${tM} m
+       WHERE m.event_id = e.id
+       ORDER BY m.sort_order ASC, m.id ASC
+       LIMIT 1
+     )
      WHERE e.community_id IN (${placeholders})
        AND e.open_to_friend_places = 1
        AND e.status = 'published'
@@ -299,6 +322,7 @@ export async function listOpenFriendEventsForCommunity(params: {
   return (rows ?? []).map((r) => ({
     ...mapEvent(r),
     media_count: Number(r.media_count ?? 0),
+    first_media_image: r.first_media_image ? String(r.first_media_image) : null,
     host_community_id: Number(r.community_id),
     host_slug: String(r.host_slug || ''),
     host_name: String(r.host_name || 'Lieu ami'),
