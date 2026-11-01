@@ -5,6 +5,7 @@ import { joinCommunity } from '@/lib/db-communities'
 import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
 import { clientIpFromRequest, rateLimitAllow } from '@/lib/rate-limit'
+import { acceptCurrentCguBundle } from '@/lib/db-legal'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,21 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+    if (!body.accept_cgu) {
+      return NextResponse.json(
+        {
+          error:
+            'Vous devez accepter les Conditions générales d’utilisation et la Politique de confidentialité.',
+        },
+        { status: 422 }
+      )
+    }
     const user = await authRegister(email, password, firstName, lastName)
+    await acceptCurrentCguBundle({
+      userId: user.id,
+      ip,
+      userAgent: req.headers.get('user-agent'),
+    })
 
     const communitySlug = String(body.community_slug ?? '').trim().toLowerCase()
     const inviteCode =

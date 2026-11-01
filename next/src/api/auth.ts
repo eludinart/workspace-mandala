@@ -9,7 +9,8 @@ export const authApi = {
     firstName: string,
     lastName: string,
     inviteToken?: string,
-    communitySlug?: string
+    communitySlug?: string,
+    acceptCgu = true
   ) =>
     api.post('/api/auth/register', {
       email,
@@ -18,6 +19,7 @@ export const authApi = {
       last_name: lastName,
       invite_token: inviteToken,
       community_slug: communitySlug,
+      accept_cgu: acceptCgu,
     }) as Promise<{
       token: string
       user: Record<string, unknown>

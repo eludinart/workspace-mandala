@@ -31,6 +31,11 @@ gh auth login
 
 Guide : [docs/COOLIFY-MANDALA-SETUP.md](docs/COOLIFY-MANDALA-SETUP.md)
 
+## Google Play + paiements
+
+- Stripe Mandala : [docs/STRIPE-SETUP-MANDALA.md](docs/STRIPE-SETUP-MANDALA.md) (`node scripts/stripe-setup-mandala.mjs`)
+- Feuille de route Play : [docs/PLAY-STORE-ROADMAP.md](docs/PLAY-STORE-ROADMAP.md) · cases [docs/SUITE.md](docs/SUITE.md)
+
 Variables prod prêtes sur le VPS : `/root/mandala-coolify-production.env` (SSH root, copier dans l’UI Coolify).
 
 ## Secrets (hors Git)

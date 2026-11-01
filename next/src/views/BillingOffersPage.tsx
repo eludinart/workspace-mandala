@@ -1,8 +1,18 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { billingApi, type BillingProduct } from '@/api/billing'
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import {
+  isPlayBillingAvailable,
+  purchasePlaySubscription,
+} from '@/lib/play-billing-client'
+import {
+  paymentSurfaceAllowsStripe,
+  resolvePaymentSurface,
+  type PaymentSurface,
+} from '@/lib/play-distribution-context'
 
 type Props = {
   onNavigate: MandalaNavigate
@@ -22,19 +32,28 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
   const [error, setError] = useState('')
   const [memberCovered, setMemberCovered] = useState(false)
   const [coveredCount, setCoveredCount] = useState<number | null>(null)
+  const [paymentSurface, setPaymentSurface] = useState<PaymentSurface>('web')
+  const [playBillingOk, setPlayBillingOk] = useState(false)
+
+  const onPlaySurface = paymentSurface === 'play'
+  const allowStripe = paymentSurfaceAllowsStripe(paymentSurface)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const [prod, access] = await Promise.all([
+        const [prod, access, surface, playOk] = await Promise.all([
           billingApi.listProducts(),
           billingApi.getAccess(),
+          resolvePaymentSurface(),
+          isPlayBillingAvailable(),
         ])
         if (cancelled) return
         setProducts(prod.products)
         setCanSee(Boolean(access.can_see_cta))
         setMemberCovered(Boolean(access.member_covered))
+        setPaymentSurface(surface)
+        setPlayBillingOk(playOk)
         if (communityId) {
           const place = (access.places || []).find(
             (p) => Number(p.communityId ?? p.community_id) === communityId
@@ -53,16 +72,52 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
     }
   }, [communityId])
 
-  async function startCheckout(productId: string, family: 'place' | 'pro') {
+  async function startCheckout(product: BillingProduct, family: 'place' | 'pro') {
     setError('')
-    setCheckoutId(productId)
+    setCheckoutId(product.product_id)
     try {
       if (family === 'place' && !communityId) {
         setError('Choisissez un lieu dans les réglages pour souscrire à l’offre Lieu.')
         return
       }
+
+      // Contexte Google Play (TWA / standalone Android) → Play Billing uniquement, jamais Stripe.
+      if (onPlaySurface) {
+        if (!product.play_configured || !product.play_sku) {
+          setError(
+            'Abonnement Google Play non configuré pour cette offre. Utilisez le site web Mandala sur un navigateur, ou réessayez après mise à jour Play.'
+          )
+          return
+        }
+        if (!playBillingOk) {
+          setError(
+            'Paiement Google Play indisponible sur cet appareil. Ouvrez Mandala depuis l’app Play, ou souscrivez sur mandala.eludein.art dans un navigateur.'
+          )
+          return
+        }
+        const purchase = await purchasePlaySubscription(product.play_sku)
+        await billingApi.acknowledgePlayPurchase({
+          product_id: product.product_id,
+          purchase_token: purchase.purchaseToken,
+          community_id: family === 'place' ? communityId ?? undefined : undefined,
+        })
+        setError('')
+        window.location.href = '/app?checkout=success&provider=play'
+        return
+      }
+
+      if (!allowStripe) {
+        setError('Paiement Stripe indisponible dans ce contexte.')
+        return
+      }
+
+      if (!product.configured) {
+        setError('Paiement Stripe non configuré pour cette offre.')
+        return
+      }
+
       const { url } = await billingApi.createCheckoutSession({
-        product_id: productId,
+        product_id: product.product_id,
         community_id: family === 'place' ? communityId ?? undefined : undefined,
       })
       if (!url) throw new Error('URL checkout manquante')
@@ -114,6 +169,28 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
           Le réseau vivant des lieux. L’appartenance reste gratuite — on soutient ceux qui
           organisent et ceux qui monnayent leur savoir-faire.
         </p>
+        <p className="text-xs text-slate-500">
+          Paiement :{' '}
+          {onPlaySurface
+            ? playBillingOk
+              ? 'Google Play sur cet appareil'
+              : 'Google Play requis (Stripe masqué)'
+            : 'Stripe (web)'}{' '}
+          ·{' '}
+          <Link href="/cgv" className="text-violet-300/90 underline">
+            CGV
+          </Link>
+        </p>
+        {onPlaySurface && (
+          <p className="text-xs text-amber-200/80 leading-relaxed">
+            Depuis l’app Android (Play), les abonnements passent uniquement par Google Play. Pour
+            Stripe, ouvrez{' '}
+            <a href="https://mandala.eludein.art" className="underline">
+              mandala.eludein.art
+            </a>{' '}
+            dans un navigateur.
+          </p>
+        )}
         {memberCovered && (
           <p className="text-sm text-emerald-400/90">
             Vous êtes déjà couvert·e par au moins un lieu abonné ou partenaire.
@@ -145,18 +222,23 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
             </p>
           )}
           <div className="flex flex-col gap-2 pt-2">
-            {placeProducts.map((p) => (
-              <button
-                key={p.product_id}
-                type="button"
-                disabled={!p.configured || checkoutId === p.product_id || !communityId}
-                onClick={() => startCheckout(p.product_id, 'place')}
-                className="rounded-xl bg-amber-600/90 px-4 py-2.5 text-sm font-medium text-slate-950 disabled:opacity-40"
-              >
-                {p.label} — {formatPrice(p.amount_cents, p.unit)}
-                {!p.configured ? ' (bientôt)' : ''}
-              </button>
-            ))}
+            {placeProducts.map((p) => {
+              const ready = onPlaySurface
+                ? Boolean(p.play_configured && p.play_sku && playBillingOk)
+                : p.configured
+              return (
+                <button
+                  key={p.product_id}
+                  type="button"
+                  disabled={!ready || checkoutId === p.product_id || !communityId}
+                  onClick={() => void startCheckout(p, 'place')}
+                  className="rounded-xl bg-amber-600/90 px-4 py-2.5 text-sm font-medium text-slate-950 disabled:opacity-40"
+                >
+                  {p.label} — {formatPrice(p.amount_cents, p.unit)}
+                  {!ready ? ' (bientôt)' : ''}
+                </button>
+              )
+            })}
             {!communityId && (
               <p className="text-xs text-slate-500">
                 Ouvre les réglages d’un lieu pour souscrire à l’offre Lieu.
@@ -176,18 +258,23 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
             <li>Contact en un geste</li>
           </ul>
           <div className="flex flex-col gap-2 pt-2">
-            {proProducts.map((p) => (
-              <button
-                key={p.product_id}
-                type="button"
-                disabled={!p.configured || checkoutId === p.product_id}
-                onClick={() => startCheckout(p.product_id, 'pro')}
-                className="rounded-xl bg-violet-600/90 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40"
-              >
-                {p.label} — {formatPrice(p.amount_cents, p.unit)}
-                {!p.configured ? ' (bientôt)' : ''}
-              </button>
-            ))}
+            {proProducts.map((p) => {
+              const ready = onPlaySurface
+                ? Boolean(p.play_configured && p.play_sku && playBillingOk)
+                : p.configured
+              return (
+                <button
+                  key={p.product_id}
+                  type="button"
+                  disabled={!ready || checkoutId === p.product_id}
+                  onClick={() => void startCheckout(p, 'pro')}
+                  className="rounded-xl bg-violet-600/90 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+                >
+                  {p.label} — {formatPrice(p.amount_cents, p.unit)}
+                  {!ready ? ' (bientôt)' : ''}
+                </button>
+              )
+            })}
           </div>
         </section>
       </div>

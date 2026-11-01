@@ -10,6 +10,7 @@ export type AdminTabId =
   | 'doors'
   | 'support'
   | 'evaluations'
+  | 'moderation'
 
 export type MainNavItem = {
   id: MandalaPage
@@ -186,6 +187,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: '🚪',
     adminTab: 'doors',
     description: 'Qui voit Relier, carte membres, aide…',
+  },
+  {
+    id: 'admin-moderation',
+    label: 'Modération UGC',
+    icon: '🛡️',
+    adminTab: 'moderation',
+    description: 'Signalements de contenus et membres',
   },
   {
     id: 'admin-support',

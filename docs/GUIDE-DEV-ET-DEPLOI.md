@@ -155,8 +155,12 @@ Script local : `scripts/setup-mariadb-tunnel-mandala.sh` (à exécuter sur le VP
 | `VAPID_PUBLIC_KEY` | sortie de `npx web-push generate-vapid-keys` |
 | `VAPID_PRIVATE_KEY` | idem (secret serveur) |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | **identique** à `VAPID_PUBLIC_KEY` |
+| `MANDALA_BILLING_PUBLIC` | `0` jusqu’à ouverture volontaire |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Billing (voir [STRIPE-SETUP-MANDALA.md](STRIPE-SETUP-MANDALA.md)) |
+| `STRIPE_PRICE_PLACE_*` / `STRIPE_PRICE_PRO_*` | 4 price_id créés par `scripts/stripe-setup-mandala.mjs` |
 
-Push smartphone : [docs/PUSH-SMARTPHONE.md](PUSH-SMARTPHONE.md).
+Push smartphone : [docs/PUSH-SMARTPHONE.md](PUSH-SMARTPHONE.md).  
+Stripe / Play : [STRIPE-SETUP-MANDALA.md](STRIPE-SETUP-MANDALA.md) · [PLAY-STORE-ROADMAP.md](PLAY-STORE-ROADMAP.md).
 
 9. **Deploy** → tester `https://votre-domaine/api/health`.
 

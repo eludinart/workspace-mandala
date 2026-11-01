@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#020617" />
+    <title>Mandala — hors ligne</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, sans-serif;
+        background: #020617;
+        color: #e2e8f0;
+        padding: 1.5rem;
+        text-align: center;
+      }
+      h1 { font-size: 1.35rem; margin: 0 0 0.75rem; }
+      p { color: #94a3b8; font-size: 0.95rem; line-height: 1.5; max-width: 22rem; }
+      button {
+        margin-top: 1.25rem;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.7rem 1.25rem;
+        background: #7c3aed;
+        color: white;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <h1>Vous êtes hors ligne</h1>
+      <p>
+        Mandala a besoin d’une connexion pour afficher les lieux et les messages.
+        Vérifiez le réseau puis réessayez.
+      </p>
+      <button type="button" onclick="location.reload()">Réessayer</button>
+    </div>
+  </body>
+</html>

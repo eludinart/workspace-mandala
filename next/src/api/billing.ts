@@ -8,6 +8,8 @@ export type BillingProduct = {
   amount_cents: number
   unit: string
   configured: boolean
+  play_configured?: boolean
+  play_sku?: string | null
 }
 
 export const billingApi = {
@@ -37,6 +39,19 @@ export const billingApi = {
       session_id?: string
     }>,
 
+  acknowledgePlayPurchase: (body: {
+    product_id: string
+    purchase_token: string
+    community_id?: number
+    order_id?: string
+  }) =>
+    api.post('/api/billing/play/acknowledge', body) as Promise<{
+      ok: boolean
+      provider: string
+      stub?: boolean
+      plan_id: string
+    }>,
+
   submitPro: (body: {
     tagline?: string
     modalities?: string
@@ -63,4 +78,19 @@ export const billingApi = {
     api.post(`/api/admin/billing/place/${communityId}/partner`, {
       partner,
     }) as Promise<{ ok: boolean; place: unknown }>,
+
+  openPortal: (return_url?: string) =>
+    api.post('/api/billing/portal', { return_url }) as Promise<{ url: string }>,
+
+  adminSmoke: () =>
+    api.get('/api/admin/billing/smoke') as Promise<{
+      ok: boolean
+      billing_public: boolean
+      stripe: Record<string, unknown>
+      play: Record<string, unknown>
+      db: Record<string, unknown>
+      products: Array<Record<string, unknown>>
+      checklist: Record<string, unknown>
+      next_steps: string[]
+    }>,
 }

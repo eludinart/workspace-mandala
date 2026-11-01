@@ -89,3 +89,17 @@ export async function fetchStripeSubscription(
   if (!subscriptionId?.startsWith('sub_')) return null
   return stripeFetch('GET', `/subscriptions/${subscriptionId}`)
 }
+
+/** Portail client Stripe (résiliation / moyens de paiement). */
+export async function createBillingPortalSession(params: {
+  customerId: string
+  returnUrl: string
+}): Promise<{ url?: string } | null> {
+  if (!params.customerId?.startsWith('cus_')) return null
+  const data = await stripeFetch('POST', '/billing_portal/sessions', {
+    customer: params.customerId,
+    return_url: params.returnUrl,
+  })
+  if (!data) return null
+  return { url: (data as { url?: string }).url }
+}

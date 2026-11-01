@@ -86,6 +86,9 @@ export async function ensureBillingTables(): Promise<void> {
         status VARCHAR(32) NOT NULL DEFAULT 'none',
         stripe_subscription_id VARCHAR(255) NULL,
         stripe_price_id VARCHAR(255) NULL,
+        payment_provider VARCHAR(16) NOT NULL DEFAULT 'stripe',
+        play_purchase_token VARCHAR(512) NULL,
+        play_order_id VARCHAR(128) NULL,
         current_period_end DATETIME NULL,
         cancel_at_period_end TINYINT(1) NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -93,6 +96,37 @@ export async function ensureBillingTables(): Promise<void> {
         UNIQUE KEY uq_stripe_sub (stripe_subscription_id),
         KEY idx_user_family (user_id, plan_family),
         KEY idx_community (community_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `)
+    try {
+      await pool.execute(
+        `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS payment_provider VARCHAR(16) NOT NULL DEFAULT 'stripe'`
+      )
+      await pool.execute(
+        `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS play_purchase_token VARCHAR(512) NULL`
+      )
+      await pool.execute(
+        `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS play_order_id VARCHAR(128) NULL`
+      )
+    } catch {
+      /* colonnes déjà présentes */
+    }
+    await pool.execute(`
+      CREATE TABLE IF NOT EXISTS ${prefix}play_billing_purchases (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        product_id VARCHAR(64) NOT NULL,
+        plan_family ENUM('place','pro') NOT NULL,
+        plan_id VARCHAR(40) NOT NULL,
+        community_id INT NULL DEFAULT NULL,
+        purchase_token VARCHAR(512) NOT NULL,
+        order_id VARCHAR(128) NULL,
+        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+        raw_json MEDIUMTEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_play_token (purchase_token(191)),
+        KEY idx_user (user_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `)
     await pool.execute(`
@@ -151,6 +185,19 @@ export async function upsertCustomer(
   )
 }
 
+export async function getStripeCustomerIdForUser(userId: number): Promise<string | null> {
+  if (!isDbConfigured() || userId <= 0) return null
+  await ensureBillingTables()
+  const pool = getPool()
+  const t = table('mandala_billing_customers')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT stripe_customer_id FROM ${t} WHERE user_id = ? LIMIT 1`,
+    [userId]
+  )
+  const id = rows[0]?.stripe_customer_id ? String(rows[0].stripe_customer_id) : ''
+  return id.startsWith('cus_') ? id : null
+}
+
 export async function upsertSubscription(row: {
   userId: number
   communityId: number | null
@@ -194,6 +241,84 @@ export async function upsertSubscription(row: {
   )
 
   if (row.planFamily === 'place' && row.communityId && isActiveSubStatus(row.status)) {
+    await setCommunityFeatured(row.communityId, true)
+  }
+}
+
+/**
+ * Active un abonnement issu de Google Play Billing.
+ * `stripe_subscription_id` reste NULL ; on stocke le token Play (unique logique).
+ */
+export async function upsertPlaySubscription(row: {
+  userId: number
+  communityId: number | null
+  planFamily: PlanFamily
+  planId: string
+  purchaseToken: string
+  orderId?: string | null
+  productId: string
+  rawJson?: string | null
+  currentPeriodEnd?: Date | null
+}): Promise<void> {
+  if (!isDbConfigured() || row.userId <= 0 || !row.purchaseToken) return
+  await ensureBillingTables()
+  const pool = getPool()
+  const tPurchases = table('play_billing_purchases')
+  const tSubs = table('mandala_billing_subscriptions')
+
+  await pool.execute(
+    `INSERT INTO ${tPurchases}
+      (user_id, product_id, plan_family, plan_id, community_id, purchase_token, order_id, status, raw_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
+     ON DUPLICATE KEY UPDATE
+       status = 'active',
+       order_id = COALESCE(VALUES(order_id), order_id),
+       raw_json = VALUES(raw_json),
+       updated_at = CURRENT_TIMESTAMP`,
+    [
+      row.userId,
+      row.productId.slice(0, 64),
+      row.planFamily,
+      row.planId.slice(0, 40),
+      row.communityId,
+      row.purchaseToken.slice(0, 512),
+      row.orderId?.slice(0, 128) ?? null,
+      row.rawJson?.slice(0, 65000) ?? null,
+    ]
+  )
+
+  // Identifiant synthétique unique pour la contrainte stripe_subscription_id (souvent UNIQUE nullable)
+  const playSubKey = `play:${row.purchaseToken.slice(0, 200)}`
+
+  await pool.execute(
+    `INSERT INTO ${tSubs}
+      (user_id, community_id, plan_family, plan_id, status, stripe_subscription_id,
+       stripe_price_id, payment_provider, play_purchase_token, play_order_id,
+       current_period_end, cancel_at_period_end)
+     VALUES (?, ?, ?, ?, 'active', ?, NULL, 'play', ?, ?, ?, 0)
+     ON DUPLICATE KEY UPDATE
+       user_id = VALUES(user_id),
+       community_id = VALUES(community_id),
+       plan_family = VALUES(plan_family),
+       plan_id = VALUES(plan_id),
+       status = 'active',
+       payment_provider = 'play',
+       play_purchase_token = VALUES(play_purchase_token),
+       play_order_id = VALUES(play_order_id),
+       current_period_end = VALUES(current_period_end)`,
+    [
+      row.userId,
+      row.communityId,
+      row.planFamily,
+      row.planId.slice(0, 40),
+      playSubKey.slice(0, 255),
+      row.purchaseToken.slice(0, 512),
+      row.orderId?.slice(0, 128) ?? null,
+      row.currentPeriodEnd ?? null,
+    ]
+  )
+
+  if (row.planFamily === 'place' && row.communityId) {
     await setCommunityFeatured(row.communityId, true)
   }
 }

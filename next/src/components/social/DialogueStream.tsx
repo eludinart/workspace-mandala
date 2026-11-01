@@ -24,6 +24,8 @@ import {
   type MessageReplyQuote,
 } from '@/lib/chat-attachments'
 import { ApiError } from '@/lib/api-client'
+import { moderationApi } from '@/api/moderation'
+import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
 
 export function DialogueStream({
   channelId,
@@ -110,6 +112,9 @@ export function DialogueStream({
   const [iconImageDraft, setIconImageDraft] = useState<string | null>(null)
   const [iconError, setIconError] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [blockBusy, setBlockBusy] = useState(false)
+  const [blockMsg, setBlockMsg] = useState<string | null>(null)
   const [unreadFromId, setUnreadFromId] = useState<number | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [replyDraft, setReplyDraft] = useState<MessageReplyQuote | null>(null)
@@ -527,7 +532,7 @@ export function DialogueStream({
               {statusLabel}
             </p>
           </div>
-          {(isGroup || canDelete) && (
+          {(isGroup || canDelete || (!isGroup && otherUserId)) && (
             <button
               type="button"
               onClick={() => setInfoOpen((v) => !v)}
@@ -698,7 +703,53 @@ export function DialogueStream({
             </div>
           </div>
         )}
-        {infoOpen && canDelete && onRequestDelete && (
+        {infoOpen && !isGroup && otherUserId ? (
+          <div className="border-t border-slate-800 bg-slate-900/90 px-3 py-3 space-y-2">
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className="w-full rounded-lg border border-amber-700/40 px-3 py-2 text-sm text-amber-100/90 hover:bg-amber-950/40"
+            >
+              Signaler cette personne
+            </button>
+            <button
+              type="button"
+              disabled={blockBusy}
+              onClick={() => {
+                void (async () => {
+                  setBlockBusy(true)
+                  setBlockMsg(null)
+                  try {
+                    await moderationApi.block(otherUserId)
+                    setBlockMsg(
+                      'Personne bloquée. Elle ne pourra plus vous écrire en conversation à deux.'
+                    )
+                  } catch (e: unknown) {
+                    setBlockMsg(
+                      e instanceof ApiError ? e.detail : 'Blocage impossible'
+                    )
+                  } finally {
+                    setBlockBusy(false)
+                  }
+                })()
+              }}
+              className="w-full rounded-lg border border-rose-700/50 px-3 py-2 text-sm font-medium text-rose-100 bg-rose-950/40 hover:bg-rose-900/40 disabled:opacity-50"
+            >
+              {blockBusy ? '…' : 'Bloquer cette personne'}
+            </button>
+            {blockMsg && <p className="text-xs text-slate-400">{blockMsg}</p>}
+            {canDelete && onRequestDelete && (
+              <button
+                type="button"
+                onClick={onRequestDelete}
+                className="w-full rounded-lg border border-red-700/50 px-3 py-2 text-sm font-medium text-red-800 bg-red-50 hover:bg-red-100"
+              >
+                Supprimer la conversation
+              </button>
+            )}
+          </div>
+        ) : null}
+        {infoOpen && isGroup && canDelete && onRequestDelete && (
           <div className="border-t border-slate-800 bg-slate-900/90 px-3 py-3">
             <button
               type="button"
@@ -710,6 +761,14 @@ export function DialogueStream({
           </div>
         )}
       </header>
+      <ReportContentDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="user"
+        targetId={otherUserId ?? 0}
+        targetUserId={otherUserId ?? undefined}
+        title="Signaler un membre"
+      />
 
       <div ref={listRef} className="m-chat-wallpaper min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-3 space-y-1">
         {visibleMessages.length === 0 && (

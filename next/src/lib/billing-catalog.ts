@@ -8,6 +8,7 @@ export type PlanFamily = 'place' | 'pro'
 export type ResolvedProduct = {
   productId: string
   priceId: string
+  playSku: string | null
   mode: 'subscription'
   planId: string
   planFamily: PlanFamily
@@ -21,10 +22,13 @@ export type PublicBillingProduct = {
   amount_cents: number
   unit: string
   configured: boolean
+  play_configured: boolean
+  play_sku: string | null
 }
 
 type CatalogSub = {
   price_id_env: string
+  play_sku_env?: string
   plan_id?: string
   plan_family?: string
   label?: string
@@ -56,12 +60,40 @@ export function resolveBillingProduct(productId: string): ResolvedProduct | null
   const priceId = envPrice(sub.price_id_env)
   if (!priceId) return null
 
+  const playSku = sub.play_sku_env ? envPrice(sub.play_sku_env) || null : null
+
   return {
     productId: id,
     priceId,
+    playSku,
     mode: 'subscription',
     planId: sub.plan_id ?? id,
     planFamily,
+  }
+}
+
+/** Produit connu du catalogue (même sans prix Stripe), pour Play. */
+export function resolveBillingProductMeta(productId: string): {
+  productId: string
+  planId: string
+  planFamily: PlanFamily
+  playSku: string | null
+  priceId: string | null
+} | null {
+  const id = String(productId || '').trim()
+  if (!id) return null
+  const subs =
+    (billingProducts as { subscriptions?: Record<string, CatalogSub> }).subscriptions ?? {}
+  const sub = subs[id]
+  if (!sub) return null
+  const planFamily = asPlanFamily(sub.plan_family)
+  if (!planFamily) return null
+  return {
+    productId: id,
+    planId: sub.plan_id ?? id,
+    planFamily,
+    playSku: sub.play_sku_env ? envPrice(sub.play_sku_env) || null : null,
+    priceId: envPrice(sub.price_id_env) || null,
   }
 }
 
@@ -71,6 +103,7 @@ export function listBillingProducts(): PublicBillingProduct[] {
     (billingProducts as { subscriptions?: Record<string, CatalogSub> }).subscriptions ?? {}
   return Object.entries(subs).map(([productId, sub]) => {
     const planFamily = asPlanFamily(sub.plan_family) ?? 'pro'
+    const playSku = sub.play_sku_env ? envPrice(sub.play_sku_env) || null : null
     return {
       product_id: productId,
       plan_id: sub.plan_id ?? productId,
@@ -79,6 +112,8 @@ export function listBillingProducts(): PublicBillingProduct[] {
       amount_cents: Number(sub.amount_cents ?? 0) || 0,
       unit: sub.unit ?? '',
       configured: Boolean(envPrice(sub.price_id_env)),
+      play_configured: Boolean(playSku),
+      play_sku: playSku,
     }
   })
 }

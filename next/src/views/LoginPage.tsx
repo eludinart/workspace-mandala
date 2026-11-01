@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { InstallAppPrompt } from '@/components/InstallAppPrompt'
 import { ThemePicker } from '@/components/theme/ThemePicker'
@@ -76,6 +77,7 @@ export function LoginPage() {
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [acceptCgu, setAcceptCgu] = useState(false)
 
   useEffect(() => {
     const invite = capturePlaceInviteFromUrl()
@@ -128,6 +130,12 @@ export function LoginPage() {
       }
       if (mode === 'login') await login(email.trim(), password)
       else {
+        if (!acceptCgu) {
+          setError(
+            'Cochez l’acceptation des CGU et de la politique de confidentialité pour créer un compte.'
+          )
+          return
+        }
         const invite = pendingInvite ?? readPendingPlaceInvite()
         await register(
           email.trim(),
@@ -278,12 +286,38 @@ export function LoginPage() {
               />
             </div>
           )}
+          {mode === 'register' && (
+            <label className="flex items-start gap-3 text-xs text-slate-400 leading-relaxed cursor-pointer">
+              <input
+                type="checkbox"
+                checked={acceptCgu}
+                onChange={(e) => setAcceptCgu(e.target.checked)}
+                className="mt-0.5 rounded border-slate-600"
+                required
+              />
+              <span>
+                J’ai au moins 13 ans et j’accepte les{' '}
+                <Link href="/cgu" target="_blank" className="text-violet-300 underline">
+                  CGU
+                </Link>
+                , les{' '}
+                <Link href="/cgv" target="_blank" className="text-violet-300 underline">
+                  CGV
+                </Link>{' '}
+                et la{' '}
+                <Link href="/confidentialite" target="_blank" className="text-violet-300 underline">
+                  politique de confidentialité
+                </Link>
+                .
+              </span>
+            </label>
+          )}
           {error && <p className="text-sm text-red-400">{error}</p>}
           {info && <p className="text-sm text-emerald-300/90 leading-relaxed">{info}</p>}
           {!(mode === 'forgot' && info) && (
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === 'register' && !acceptCgu)}
               className="w-full rounded-xl bg-violet-600 hover:bg-violet-500 py-3.5 font-semibold disabled:opacity-50"
             >
               {loading

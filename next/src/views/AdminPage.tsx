@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api-client'
 import { assignableAppRole } from '@/lib/app-roles'
 import { ProEndorseQueue } from '@/components/billing/ProEndorseQueue'
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
+import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
 
 import type { AdminTabId } from '@/lib/nav'
 type CommMode = 'announcement' | 'broadcast'
@@ -59,6 +60,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'places', label: 'Lieux & communautés' },
   { id: 'doors', label: 'Portes' },
   { id: 'evaluations', label: 'Évaluations' },
+  { id: 'moderation', label: 'Modération' },
   { id: 'support', label: 'Retours' },
 ]
 
@@ -652,6 +654,7 @@ export function AdminPage({
         </section>
       )}
 
+      {tab === 'moderation' && <AdminContentReportsTab />}
       {tab === 'support' && <AdminSupportTab />}
       {tab === 'evaluations' && <AdminEvaluationsTab />}
 

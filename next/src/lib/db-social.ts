@@ -10,6 +10,7 @@ import { messageReplyExcerpt, type MessageReplyQuote } from './chat-attachments'
 import { isAvatarImageUrl } from './user-avatar'
 import { removeUpload } from './resource-files'
 import { invalidateNotifUnreadCache } from './db-notifications'
+import { isBlockedEitherWay } from './db-moderation'
 
 const PRESENCE_ONLINE_SECONDS = 300
 
@@ -529,6 +530,12 @@ export async function openDirectChannel(
   const pool = getPool()
   if (!userId || !targetUserId) throw new Error('Utilisateurs requis')
   if (userId === targetUserId) throw new Error('Impossible de discuter avec soi-même')
+  if (await isBlockedEitherWay(userId, targetUserId)) {
+    throw Object.assign(
+      new Error('Conversation impossible : un blocage est en place entre ces comptes.'),
+      { status: 403 }
+    )
+  }
   if (communityId) await verifyUsersInCommunity(pool, communityId, [userId, targetUserId])
 
   await ensureGroupChannelSupport(pool)
@@ -1582,7 +1589,17 @@ export async function sendChannelMessage(
 
   const t = table(P2P_MESSAGES_TABLE)
 
-  await assertChannelAccess(pool, channelId, senderId)
+  const ch = await assertChannelAccess(pool, channelId, senderId)
+  if (String(ch.channel_type ?? 'direct') !== 'group') {
+    const other =
+      Number(ch.user_a) === senderId ? Number(ch.user_b) : Number(ch.user_a)
+    if (other > 0 && (await isBlockedEitherWay(senderId, other))) {
+      throw Object.assign(
+        new Error('Message impossible : un blocage est en place avec cette personne.'),
+        { status: 403 }
+      )
+    }
+  }
 
   await ensureMessagesTable(pool)
 

@@ -1,10 +1,36 @@
-/* Mandala service worker — Web Push */
+/* Mandala service worker — Web Push + offline minimale (TWA / Play) */
+const OFFLINE_URL = '/offline.html'
+const OFFLINE_CACHE = 'mandala-offline-v1'
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting())
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(OFFLINE_CACHE)
+      await cache.add(OFFLINE_URL)
+      await self.skipWaiting()
+    })()
+  )
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
+})
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request
+  if (req.method !== 'GET') return
+  if (req.mode !== 'navigate') return
+  event.respondWith(
+    (async () => {
+      try {
+        return await fetch(req)
+      } catch {
+        const cache = await caches.open(OFFLINE_CACHE)
+        const cached = await cache.match(OFFLINE_URL)
+        return cached || new Response('Hors ligne', { status: 503, statusText: 'Offline' })
+      }
+    })()
+  )
 })
 
 function notifyOpenClients(message) {

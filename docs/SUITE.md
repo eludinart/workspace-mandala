@@ -28,10 +28,16 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 - [ ] **Cartes d’explication.** Une fois par personne et par écran, le jour où elle y entre ou le jour où la porte s’ouvre pour elle. Une raison, un bouton. Porte `aide_contextuelle`, fermée tant que vous ne l’ouvrez pas.
 - [ ] **Écrire à quelqu’un d’un lieu ami.** Seulement via une date commune ou une conversation où un gestionnaire a ajouté la personne. Porte `seuil`.
 - [ ] **Coches lu en conversation de groupe.** Les conversations à deux ont déjà envoyé / lu. En groupe : sur mes messages, montrer quand c’est lu (par tout le monde, ou un résumé clair). Sans changer le comportement des conversations à deux.
-- [ ] **Monétisation Lieu / Pro.** Derrière porte billing. Spec `docs/superpowers/specs/2026-11-01-monetisation-design.md`, plan `docs/superpowers/plans/2026-11-01-monetisation-mvp.md`. Ne pas ouvrir la porte tant que le smoke Stripe test n’est pas vert.
+- [ ] **Play Console — enregistrement app.** Compte payé OK ; identité/entreprise en validation. Ensuite : créer l’app Mandala, package `art.eludein.mandala`, Play App Signing (SHA-256). §2 roadmap.
+- [ ] **Play — abonnements + SKUs.** Créer les 4 abos Play, renseigner `PLAY_SKU_*` + `PLAY_PACKAGE_NAME` Coolify, brancher la vérif Google (plus de stub prod). §3 roadmap.
+- [ ] **Asset links + TWA (AAB).** Remplir `assetlinks.json`, déployer, Bubblewrap/PWABuilder → AAB, upload piste interne/fermée. §4–5 roadmap.
+- [ ] **Fiche store + Data safety + test fermé.** Textes, 13+, confidentialité, UGC déclaré, 12 testeurs / 14 j si compte perso. §6–7 roadmap.
+- [ ] **Soumission production Play.** Revue Google, soft launch, monitoring Stripe/Play. §8 roadmap. Checklist complète : `docs/PLAY-STORE-ROADMAP.md`.
 
 ## Fait
 
+- [x] **2026-11-01 — Stripe — config + smoke.** 4 prix Live créés (script), webhook Mandala, env Coolify + recreate conteneur, `/api/billing/products` 4× configured, porte `MANDALA_BILLING_PUBLIC=0`. Portail Compte + `GET /api/admin/billing/smoke` (à déployer avec le prochain push). Doc `docs/STRIPE-SETUP-MANDALA.md`. Checkout carte manuel encore à valider une fois (admin).
+- [x] **2026-11-01 — Play Store readiness (socle).** Pages `/cgu` `/cgv` `/confidentialite`, acceptation CGU à l’inscription + gate comptes existants, signalement UGC + admin Modération, blocage messagerie 1:1, dual checkout Stripe/Play (Digital Goods + `/api/billing/play/acknowledge`), SW offline + `assetlinks.json` placeholder. Spec `docs/superpowers/specs/2026-11-01-play-store-readiness-design.md`, schéma `021_mandala_play_readiness.sql`.
 - [x] **2026-11-01 — Vocabulaire Mandala.** Direction verrouillée (`docs/VOCABULAIRE.md`) : à l’écran lien / message / conversation / lieu ami. Copy « Graines / Jardinier » retirée de Messages ; erreurs API alignées. Tables/routes legacy (`prairie_*`, seeds) non renommées.
 - [x] **2026-11-01 — Porte des fonctions.** Tables `feature_doors` / `feature_door_users`, `canAccessFeatureDoor`, admin onglet Portes, `GET /api/feature-doors/access`. Clés : `lieux_lies`, `seuil`, `carte_membres`, `aide_contextuelle` (défaut administrateurs). Schéma `docs/schema/018_mandala_feature_doors.sql`.
 - [x] **2026-11-01 — Relier depuis la carte.** Table `place_links`, `POST/GET /api/place-links`, bouton « Relier à… » sur les fiches lieu (Découvrir / carte) derrière porte `lieux_lies`. Un lieu géré = envoi immédiat ; plusieurs = une question. Pas de page Lieux amis. Schéma `019_mandala_place_links.sql`.

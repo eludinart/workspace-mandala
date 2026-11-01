@@ -2,6 +2,7 @@
   "subscriptions": {
     "place_monthly": {
       "price_id_env": "STRIPE_PRICE_PLACE_MONTHLY",
+      "play_sku_env": "PLAY_SKU_PLACE_MONTHLY",
       "plan_id": "place_monthly",
       "plan_family": "place",
       "label": "Lieu — mensuel",
@@ -10,6 +11,7 @@
     },
     "place_yearly": {
       "price_id_env": "STRIPE_PRICE_PLACE_YEARLY",
+      "play_sku_env": "PLAY_SKU_PLACE_YEARLY",
       "plan_id": "place_yearly",
       "plan_family": "place",
       "label": "Lieu — annuel",
@@ -18,6 +20,7 @@
     },
     "pro_monthly": {
       "price_id_env": "STRIPE_PRICE_PRO_MONTHLY",
+      "play_sku_env": "PLAY_SKU_PRO_MONTHLY",
       "plan_id": "pro_monthly",
       "plan_family": "pro",
       "label": "Mandala Pro — mensuel",
@@ -26,6 +29,7 @@
     },
     "pro_yearly": {
       "price_id_env": "STRIPE_PRICE_PRO_YEARLY",
+      "play_sku_env": "PLAY_SKU_PRO_YEARLY",
       "plan_id": "pro_yearly",
       "plan_family": "pro",
       "label": "Mandala Pro — annuel",

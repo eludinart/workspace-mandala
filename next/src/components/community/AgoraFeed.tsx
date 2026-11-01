@@ -10,6 +10,7 @@ import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { FeedSection } from '@/components/community/FeedSection'
 import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
+import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
 
 export function AgoraFeed() {
   const { active } = useCommunity()
@@ -37,6 +38,8 @@ export function AgoraFeed() {
   const [wallPublic, setWallPublic] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
+  const [reportPostId, setReportPostId] = useState<number | null>(null)
+  const [reportAuthorId, setReportAuthorId] = useState<number | undefined>(undefined)
 
   const load = useCallback(async () => {
     if (!active?.id) {
@@ -265,17 +268,32 @@ export function AgoraFeed() {
                     {p.type === 'logistics' ? 'Logistique' : 'Inspiration'}
                   </span>
                   <WallPublicBadge public={p.wall_public} />
-                  {canManage && (
-                    <button
-                      type="button"
-                      disabled={removingId === p.id}
-                      onClick={() => void removePost(p.id)}
-                      className="ml-auto text-sm text-red-400/90 hover:text-red-300 disabled:opacity-50"
-                      title="Retirer du mur"
-                    >
-                      {removingId === p.id ? '…' : 'Retirer'}
-                    </button>
-                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    {myId !== p.author_id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportPostId(p.id)
+                          setReportAuthorId(p.author_id)
+                        }}
+                        className="text-sm text-slate-500 hover:text-amber-300"
+                        title="Signaler"
+                      >
+                        Signaler
+                      </button>
+                    )}
+                    {canManage && (
+                      <button
+                        type="button"
+                        disabled={removingId === p.id}
+                        onClick={() => void removePost(p.id)}
+                        className="text-sm text-red-400/90 hover:text-red-300 disabled:opacity-50"
+                        title="Retirer du mur"
+                      >
+                        {removingId === p.id ? '…' : 'Retirer'}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-base text-slate-200 mt-3 whitespace-pre-wrap leading-relaxed">
                   {p.content}
@@ -295,6 +313,18 @@ export function AgoraFeed() {
           </li>
         ))}
       </ul>
+      <ReportContentDialog
+        open={reportPostId != null}
+        onClose={() => {
+          setReportPostId(null)
+          setReportAuthorId(undefined)
+        }}
+        targetType="post"
+        targetId={reportPostId ?? 0}
+        targetUserId={reportAuthorId}
+        communityId={active?.id}
+        title="Signaler une publication"
+      />
     </FeedSection>
   )
 }

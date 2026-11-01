@@ -6,11 +6,17 @@ import { ACCOUNT_SKILLS_ANCHOR, SkillsProfileSection } from '@/components/skills
 import { MyResourcesSection } from '@/components/resources/MyResourcesSection'
 import { accountApi } from '@/api/account'
 import { authApi } from '@/api/auth'
+import { billingApi } from '@/api/billing'
 import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { ApiError } from '@/lib/api-client'
+import {
+  paymentSurfaceAllowsStripe,
+  resolvePaymentSurface,
+  type PaymentSurface,
+} from '@/lib/play-distribution-context'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
 import { formatPlaceMembershipLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
@@ -71,6 +77,9 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [pushBusy, setPushBusy] = useState(false)
   const [iosHomeScreen, setIosHomeScreen] = useState(false)
   const [pushUiReady, setPushUiReady] = useState(false)
+  const [paymentSurface, setPaymentSurface] = useState<PaymentSurface>('web')
+
+  const allowStripePortal = paymentSurfaceAllowsStripe(paymentSurface)
 
   const load = useCallback(async () => {
     try {
@@ -106,6 +115,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   useEffect(() => {
     setIosHomeScreen(needsIosHomeScreenForPush())
     setPushUiReady(true)
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void resolvePaymentSurface().then((surface) => {
+      if (!cancelled) setPaymentSurface(surface)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -414,6 +433,40 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             >
               Voir les offres
             </button>
+            {allowStripePortal ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const { url } = await billingApi.openPortal()
+                      if (url) window.location.href = url
+                    } catch (e: unknown) {
+                      setErr(
+                        e instanceof ApiError
+                          ? e.detail
+                          : 'Portail de facturation indisponible'
+                      )
+                    }
+                  })()
+                }}
+                className="w-full py-2 rounded-lg border border-slate-600 text-slate-200 text-sm hover:bg-slate-800"
+              >
+                Gérer un abonnement Stripe (résilier / carte)
+              </button>
+            ) : (
+              <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                Depuis l’app Play, la gestion / résiliation d’un abonnement Google Play se fait dans
+                les réglages Google Play de l’appareil. Pour un abonnement Stripe, ouvrez Mandala
+                dans un navigateur web.
+              </p>
+            )}
+            {allowStripePortal && (
+              <p className="text-[11px] text-slate-500">
+                Abonnement souscrit via Google Play : résiliation dans les réglages Google Play de
+                l’appareil.
+              </p>
+            )}
           </div>
         </section>
       )}
@@ -517,6 +570,32 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           {pushMsg && <p className="text-xs text-slate-300">{pushMsg}</p>}
           <p className="text-xs text-slate-500">
             Le centre de notifications in-app reste disponible depuis l&apos;en-tête.
+          </p>
+        </div>
+      </section>
+
+      <section id="legal" className="scroll-mt-20 space-y-3">
+        <h2 className="text-lg font-semibold text-slate-200">Documents légaux</h2>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400 space-y-2">
+          <p>
+            <a href="/cgu" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
+              Conditions générales d’utilisation
+            </a>
+          </p>
+          <p>
+            <a href="/cgv" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
+              Conditions générales de vente
+            </a>
+          </p>
+          <p>
+            <a
+              href="/confidentialite"
+              className="text-violet-300 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Politique de confidentialité
+            </a>
           </p>
         </div>
       </section>

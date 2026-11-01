@@ -29,6 +29,7 @@ import { PlaceListPage } from '@/views/PlaceListPage'
 import { CirclesJournalPage } from '@/views/CirclesJournalPage'
 import { BillingOffersPage } from '@/views/BillingOffersPage'
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate'
+import { TermsAcceptanceGate } from '@/components/legal/TermsAcceptanceGate'
 import { TelemetryTracker } from '@/components/TelemetryTracker'
 import type { AdminTabId } from '@/lib/nav'
 
@@ -304,7 +305,16 @@ export function MandalaApp() {
     const eventIdRaw = params.get('eventId')
     const eventId = eventIdRaw ? Number(eventIdRaw) : undefined
     const adminTabRaw = params.get('adminTab')
-    const adminTabs: AdminTabId[] = ['people', 'communications', 'telemetry', 'places', 'support', 'evaluations']
+    const adminTabs: AdminTabId[] = [
+      'people',
+      'communications',
+      'telemetry',
+      'places',
+      'doors',
+      'support',
+      'evaluations',
+      'moderation',
+    ]
     const adminTabParam =
       adminTabRaw && adminTabs.includes(adminTabRaw as AdminTabId)
         ? (adminTabRaw as AdminTabId)
@@ -578,17 +588,19 @@ export function MandalaApp() {
   return (
     <CommunityProvider>
       <PlaceChromeTheme />
-      <OnboardingGate>
-        <TelemetryTracker page={page} />
-        <Layout
-          page={page}
-          onNavigate={navigate}
-          adminTab={adminTab}
-          onBack={historyDepth > 1 ? goBack : undefined}
-        >
-          {content}
-        </Layout>
-      </OnboardingGate>
+      <TermsAcceptanceGate>
+        <OnboardingGate>
+          <TelemetryTracker page={page} />
+          <Layout
+            page={page}
+            onNavigate={navigate}
+            adminTab={adminTab}
+            onBack={historyDepth > 1 ? goBack : undefined}
+          >
+            {content}
+          </Layout>
+        </OnboardingGate>
+      </TermsAcceptanceGate>
     </CommunityProvider>
   )
 }

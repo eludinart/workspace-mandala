@@ -124,21 +124,33 @@ export function RelierPlaceButton({
   if (!canLink) return null
 
   if (status === 'accepted') {
+    // Afficher le(s) lieu(x) ami(s), pas seulement le lieu ouvert (sinon « Sivana — reliés »).
+    const friendsForLabel =
+      targetFriends.length > 0
+        ? targetFriends
+        : soleManaged
+          ? [{ id: soleManaged.id, name: soleManaged.name }]
+          : []
+    const headline =
+      friendsForLabel.length === 1
+        ? `${targetName} est déjà relié à ${friendsForLabel[0].name}`
+        : friendsForLabel.length > 1
+          ? `${targetName} — lieux amis`
+          : `${targetName} — lien déjà établi`
+
     return (
       <div className="space-y-1.5">
-        <p className="text-xs text-emerald-400/90 font-medium">
-          {targetName} — lieux déjà reliés
-          {soleManaged ? ` (lien via ${soleManaged.name})` : ''}
-        </p>
-        {targetFriends.length > 0 ? (
+        <p className="text-xs text-emerald-400/90 font-medium">{headline}</p>
+        {friendsForLabel.length > 1 ? (
           <ul className="text-xs text-slate-300 space-y-0.5 list-disc list-inside">
-            {targetFriends.map((f) => (
+            {friendsForLabel.map((f) => (
               <li key={f.id}>{f.name}</li>
             ))}
           </ul>
-        ) : (
-          <p className="text-xs text-slate-500">Aucun autre lieu ami listé pour l’instant.</p>
-        )}
+        ) : null}
+        {friendsForLabel.length === 0 ? (
+          <p className="text-xs text-slate-500">Aucun lieu ami listé pour l’instant.</p>
+        ) : null}
       </div>
     )
   }
