@@ -153,6 +153,17 @@ export function PublicLandingPage() {
         <p className="m-landing-logo text-[11px] tracking-[0.35em] text-slate-400 mb-3">Mandala</p>
         <p>Lieux, communautés &amp; événements</p>
         <p className="mt-1">France · Belgique · Suisse · espace francophone</p>
+        <p className="mt-4 flex flex-wrap justify-center gap-3 text-[11px] text-slate-400">
+          <Link href="/cgu" className="hover:text-violet-300">
+            CGU
+          </Link>
+          <Link href="/cgv" className="hover:text-violet-300">
+            CGV
+          </Link>
+          <Link href="/confidentialite" className="hover:text-violet-300">
+            Confidentialité
+          </Link>
+        </p>
       </footer>
     </PublicSiteChrome>
   )
