@@ -46,6 +46,7 @@ Socle technique proche de Fleur (auth, MariaDB, social léger) — **bases et po
 3. Contenu public vs membres : respecter les frontières.
 4. Ne pas mélanger tunnels/ports avec Fleur ou Korymb.
 5. Ne pas confondre avec Korymb (missions IA) ni Fleur (jardin relationnel).
+6. **Langage UI** : lien, message, conversation, lieu, lieu ami — jamais Prairie / Graine / Clairière (`docs/VOCABULAIRE.md`, `docs/SUITE.md`).
 
 ## Instructions agent
 

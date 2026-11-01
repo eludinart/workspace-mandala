@@ -1,0 +1,36 @@
+{
+  "subscriptions": {
+    "place_monthly": {
+      "price_id_env": "STRIPE_PRICE_PLACE_MONTHLY",
+      "plan_id": "place_monthly",
+      "plan_family": "place",
+      "label": "Lieu — mensuel",
+      "amount_cents": 2900,
+      "unit": "mois"
+    },
+    "place_yearly": {
+      "price_id_env": "STRIPE_PRICE_PLACE_YEARLY",
+      "plan_id": "place_yearly",
+      "plan_family": "place",
+      "label": "Lieu — annuel",
+      "amount_cents": 29000,
+      "unit": "an"
+    },
+    "pro_monthly": {
+      "price_id_env": "STRIPE_PRICE_PRO_MONTHLY",
+      "plan_id": "pro_monthly",
+      "plan_family": "pro",
+      "label": "Mandala Pro — mensuel",
+      "amount_cents": 1200,
+      "unit": "mois"
+    },
+    "pro_yearly": {
+      "price_id_env": "STRIPE_PRICE_PRO_YEARLY",
+      "plan_id": "pro_yearly",
+      "plan_family": "pro",
+      "label": "Mandala Pro — annuel",
+      "amount_cents": 12000,
+      "unit": "an"
+    }
+  }
+}

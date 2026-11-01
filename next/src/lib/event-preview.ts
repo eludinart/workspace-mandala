@@ -22,6 +22,11 @@ export type HomeEventPreview = {
   location: string | null
   cover_image: string | null
   media_count?: number
+  /** Présent sur les dates « Ailleurs » (lieu ami). */
+  host_community_id?: number
+  host_slug?: string
+  host_name?: string
+  host_accent_color?: string | null
 }
 
 export function phaseLabel(id: string): string {

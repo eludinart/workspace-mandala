@@ -4,6 +4,7 @@ import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communi
 import {
   createEvent,
   listEventsForCommunity,
+  listOpenFriendEventsForCommunity,
   purgeAutoSeededDemoEvents,
   type EventPhase,
 } from '@/lib/db-mandala-events'
@@ -29,9 +30,13 @@ export async function GET(req: NextRequest) {
     // Nettoie d’anciens faux événements injectés dans les lieux vides (plus de seed).
     await purgeAutoSeededDemoEvents(community.id)
     const events = await listEventsForCommunity(community.id)
+    const elsewhere = await listOpenFriendEventsForCommunity({
+      viewerCommunityId: community.id,
+      userId: uid,
+    })
     const role = await requireCommunityMembership(uid, community.id)
     const can_manage = await userCanOrganizeEventsInCommunity(uid, role)
-    return NextResponse.json({ events, can_manage })
+    return NextResponse.json({ events, elsewhere, can_manage })
   } catch (err: unknown) {
     const e = err as { status?: number; message?: string }
     return NextResponse.json({ error: e.message ?? 'Erreur' }, { status: e.status ?? 500 })

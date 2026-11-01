@@ -58,7 +58,7 @@ async function touchSocialPresence(pool: Awaited<ReturnType<typeof getPool>>, us
 function pseudoFromUser(u: RowDataPacket, uid: number): string {
   const p = u.pseudo ? String(u.pseudo).trim() : ''
   const d = u.display_name ? String(u.display_name).trim() : ''
-  return p || d || `jardinier_${Buffer.from(String(uid)).toString('hex').slice(0, 6)}`
+  return p || d || `membre_${Buffer.from(String(uid)).toString('hex').slice(0, 6)}`
 }
 
 function ph(n: number) { return Array(n).fill('?').join(',') }

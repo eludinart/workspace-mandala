@@ -18,16 +18,25 @@ export function EventPreviewCard({
   variant?: 'default' | 'hero' | 'compact'
 }) {
   const excerpt = descriptionExcerpt(event.description, variant === 'compact' ? 80 : 140)
+  const accent = event.host_accent_color?.trim() || null
+  const hostLabel = event.host_name?.trim() || null
+  const borderStyle = accent ? { borderColor: `${accent}88` } : undefined
 
   if (variant === 'compact') {
     return (
       <button
         type="button"
         onClick={onClick}
+        style={borderStyle}
         className="w-full text-left rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3 hover:border-violet-500/40 transition-colors group"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
+            {hostLabel && (
+              <p className="text-[10px] uppercase tracking-wider mb-1" style={{ color: accent || undefined }}>
+                {hostLabel}
+              </p>
+            )}
             <h3 className="font-semibold text-base text-slate-100 leading-snug">{event.title}</h3>
             <p className="mt-1">
               <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-950/40 px-2.5 py-1 text-sm font-semibold text-slate-100">
@@ -54,6 +63,7 @@ export function EventPreviewCard({
       <button
         type="button"
         onClick={onClick}
+        style={borderStyle}
         className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden hover:border-violet-500/40 transition-colors group"
       >
         {showCover && (
@@ -72,6 +82,11 @@ export function EventPreviewCard({
           </div>
         )}
         <div className="p-4 space-y-2">
+          {hostLabel && (
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: accent || undefined }}>
+              {hostLabel}
+            </p>
+          )}
           <h3 className="font-semibold text-xl text-slate-100 leading-snug">{event.title}</h3>
           <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-700/40 bg-violet-950/40 px-2.5 py-1 text-sm font-semibold text-slate-100">
             <span aria-hidden>📅</span>
@@ -91,6 +106,7 @@ export function EventPreviewCard({
     <button
       type="button"
       onClick={onClick}
+      style={borderStyle}
       className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden hover:border-violet-500/40 transition-colors group"
     >
       <div className="flex items-stretch gap-0 sm:gap-0">
@@ -109,6 +125,11 @@ export function EventPreviewCard({
           </div>
         )}
         <div className="min-w-0 flex-1 p-3 sm:p-4 space-y-1.5">
+          {hostLabel && (
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: accent || undefined }}>
+              {hostLabel}
+            </p>
+          )}
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold text-slate-100 leading-snug">{event.title}</h3>
             <span

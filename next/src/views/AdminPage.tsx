@@ -14,6 +14,8 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
 import { assignableAppRole } from '@/lib/app-roles'
+import { ProEndorseQueue } from '@/components/billing/ProEndorseQueue'
+import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 
 import type { AdminTabId } from '@/lib/nav'
 type CommMode = 'announcement' | 'broadcast'
@@ -55,6 +57,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'communications', label: 'Communications' },
   { id: 'telemetry', label: 'Télémétrie' },
   { id: 'places', label: 'Lieux & communautés' },
+  { id: 'doors', label: 'Portes' },
   { id: 'evaluations', label: 'Évaluations' },
   { id: 'support', label: 'Retours' },
 ]
@@ -331,6 +334,7 @@ export function AdminPage({
 
       {tab === 'people' && (
         <div className="space-y-3">
+          <ProEndorseQueue />
           <p className="text-xs text-slate-500">
             Le rôle <strong className="text-slate-300">gestionnaire</strong> se définit{' '}
             <strong className="text-slate-300">par lieu</strong> dans la fiche (Lieux &amp; rôles),
@@ -658,6 +662,13 @@ export function AdminPage({
             Gestion des sites enregistrés, membres et paramètres par lieu.
           </p>
           <AdminCommunitiesTab scope="app-admin" onMessage={onCommunitiesMessage} />
+        </section>
+      )}
+
+      {tab === 'doors' && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Portes des fonctions</h2>
+          <AdminFeatureDoorsTab />
         </section>
       )}
     </div>

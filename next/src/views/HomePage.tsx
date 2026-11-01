@@ -33,6 +33,7 @@ function eventDateParts(startsAt: string | null): { day: string; month: string }
 export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const { active } = useCommunity()
   const [events, setEvents] = useState<HomeEventPreview[]>([])
+  const [elsewhere, setElsewhere] = useState<HomeEventPreview[]>([])
   const [canManage, setCanManage] = useState(false)
   const [loading, setLoading] = useState(true)
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
@@ -42,6 +43,7 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const load = useCallback(async () => {
     if (!active?.slug) {
       setEvents([])
+      setElsewhere([])
       setLoading(false)
       return
     }
@@ -49,12 +51,15 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
     try {
       const evRes = (await eventsApi.list(active.slug)) as {
         events?: HomeEventPreview[]
+        elsewhere?: HomeEventPreview[]
         can_manage?: boolean
       }
       setEvents(evRes.events ?? [])
+      setElsewhere(evRes.elsewhere ?? [])
       setCanManage(!!evRes.can_manage)
     } catch {
       setEvents([])
+      setElsewhere([])
     } finally {
       setLoading(false)
     }
@@ -77,6 +82,7 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
 
   const featuredEvent = pickFeaturedEvent(events)
   const otherUpcoming = pickOtherUpcoming(events, featuredEvent)
+  const elsewhereList = pickOtherUpcoming(elsewhere, null)
   const featuredIsToday = featuredEvent ? isEventOnDay(featuredEvent) : false
   const heroImage = isAvatarImageUrl(active?.avatar)
     ? active!.avatar!
@@ -321,6 +327,60 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
                 Tous les événements
               </button>
             </div>
+          </section>
+        )}
+
+        {!loading && elsewhereList.length > 0 && (
+          <section className="space-y-6">
+            <div className="text-center space-y-2">
+              <p className="m-landing-eyebrow">Lieux amis</p>
+              <h2 className="text-3xl sm:text-4xl">Ailleurs</h2>
+            </div>
+            <ul className="space-y-3">
+              {elsewhereList.slice(0, 6).map((ev) => {
+                const parts = eventDateParts(ev.starts_at)
+                const hostAccent = ev.host_accent_color?.trim() || accent
+                return (
+                  <li key={`elsewhere-${ev.id}`}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedEventId(ev.id)}
+                      className="m-landing-card w-full text-left px-4 py-3.5 flex items-center gap-4 transition-colors"
+                      style={{ borderColor: `${hostAccent}66` }}
+                    >
+                      {parts ? (
+                        <span
+                          className="m-home-date"
+                          style={{ borderColor: `${hostAccent}88`, color: hostAccent }}
+                        >
+                          <span className="m-home-date-day">{parts.day}</span>
+                          <span className="m-home-date-month">{parts.month}</span>
+                        </span>
+                      ) : (
+                        <span className="m-home-date">
+                          <span className="m-home-date-month">Date</span>
+                        </span>
+                      )}
+                      <span className="min-w-0 flex-1">
+                        {ev.host_name && (
+                          <span
+                            className="block text-[10px] uppercase tracking-[0.16em] mb-0.5"
+                            style={{ color: hostAccent }}
+                          >
+                            {ev.host_name}
+                          </span>
+                        )}
+                        <span className="block text-lg text-slate-100 leading-snug">{ev.title}</span>
+                        <span className="block text-sm text-slate-400 mt-0.5">
+                          {formatEventDateRange(ev.starts_at, ev.ends_at)}
+                          {ev.location ? ` · ${ev.location}` : ''}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           </section>
         )}
 

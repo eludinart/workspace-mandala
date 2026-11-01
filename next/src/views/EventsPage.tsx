@@ -235,6 +235,7 @@ export function EventsPage({
 }) {
   const { active } = useCommunity()
   const [events, setEvents] = useState<HomeEventPreview[]>([])
+  const [elsewhere, setElsewhere] = useState<HomeEventPreview[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [modalEventId, setModalEventId] = useState<number | null>(null)
@@ -260,13 +261,16 @@ export function EventsPage({
     try {
       const res = (await eventsApi.list(active.slug)) as {
         events?: HomeEventPreview[]
+        elsewhere?: HomeEventPreview[]
         can_manage?: boolean
       }
       setEvents(res.events ?? [])
+      setElsewhere(res.elsewhere ?? [])
       setCanManage(!!res.can_manage)
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
       setEvents([])
+      setElsewhere([])
     } finally {
       setLoading(false)
     }
@@ -291,7 +295,7 @@ export function EventsPage({
     if (openEventId) setModalEventId(openEventId)
   }, [openEventId])
 
-  const { upcoming, past } = useMemo(() => {
+  const { upcoming, past, elsewhereUpcoming } = useMemo(() => {
     const up: HomeEventPreview[] = []
     const pa: HomeEventPreview[] = []
     for (const ev of events) {
@@ -309,8 +313,9 @@ export function EventsPage({
       const db = parseWallClockDateTime(b.starts_at)?.getTime() ?? 0
       return db - da
     })
-    return { upcoming: up, past: pa }
-  }, [events])
+    const elseUp = elsewhere.filter(isEventUpcoming).sort(byDate)
+    return { upcoming: up, past: pa, elsewhereUpcoming: elseUp }
+  }, [events, elsewhere])
 
   if (fullPageId && active?.slug) {
     return (
@@ -368,13 +373,14 @@ export function EventsPage({
       )}
       {loading && <p className="text-slate-400 text-sm">Chargement…</p>}
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      {!loading && !error && events.length === 0 && (
+      {!loading && !error && events.length === 0 && elsewhereUpcoming.length === 0 && (
         <p className="text-slate-500 text-sm italic">Aucun événement pour cette communauté.</p>
       )}
-      {!loading && !error && events.length > 0 && (
+      {!loading && !error && (events.length > 0 || elsewhereUpcoming.length > 0) && (
         <div className="space-y-6">
           <EventListSection title="À venir" events={upcoming} onSelect={openModal} />
           <EventListSection title="Passés" events={past} onSelect={openModal} />
+          <EventListSection title="Ailleurs" events={elsewhereUpcoming} onSelect={openModal} />
         </div>
       )}
 

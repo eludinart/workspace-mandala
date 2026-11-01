@@ -70,7 +70,7 @@ export interface SocialStoreState {
 }
 
 /**
- * Store Zustand pour La Lisière, Le Germe et la Clairière.
+ * Store Zustand social (profils, demandes de lien, conversations).
  * Ne contient que des données publiques ou de relation ; pas de chroniques ni sessions privées.
  */
 export const useSocialStore = create<SocialStoreState>((set, get) => ({

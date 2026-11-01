@@ -16,6 +16,8 @@ import {
   type SkillRegister,
   type SkillScope,
 } from './skill-constants'
+import { compareSkillBoost } from './billing-entitlements'
+import { getProBoostFlagsForUsers } from './db-billing'
 
 let _ensured = false
 
@@ -68,6 +70,10 @@ export type SkillCard = {
   resources: SkillCardResource[]
   /** Faux quand la fiche compétences est cachée : l'identité, la bio et les ressources restent lisibles. */
   skills_visible: boolean
+  /** Abo Mandala Pro actif → boost annuaire. */
+  pro_boost?: boolean
+  /** Badge Mandala Pro (abo + verified). */
+  pro_verified?: boolean
 }
 
 export type SkillNote = {
@@ -505,6 +511,7 @@ export async function listSkillDirectory(params: {
   const q = (params.query ?? '').trim().toLocaleLowerCase('fr')
   const tagKey = skillLabelKey(params.tag ?? '')
   const identities = await displayIdentity(userIds)
+  const proFlags = await getProBoostFlagsForUsers(userIds)
   const cards: SkillCard[] = []
 
   for (const userId of userIds) {
@@ -535,11 +542,17 @@ export async function listSkillDirectory(params: {
     const card = cardFromProfile(profile, identity, params.viewerId, places)
     card.shares_place = params.viewerId !== userId && !!shared
     card.shared_place_slug = shared?.slug ?? null
+    const flags = proFlags.get(userId)
+    card.pro_boost = Boolean(flags?.proBoost)
+    card.pro_verified = Boolean(flags?.proBoost && flags?.proVerified)
     cards.push(card)
   }
 
   cards.sort((a, b) =>
-    (a.display_name || a.pseudo).localeCompare(b.display_name || b.pseudo, 'fr', { sensitivity: 'base' })
+    compareSkillBoost(
+      { proBoost: Boolean(a.pro_boost), label: a.display_name || a.pseudo },
+      { proBoost: Boolean(b.pro_boost), label: b.display_name || b.pseudo }
+    )
   )
   return cards
 }

@@ -52,12 +52,13 @@ Ces termes structurent le langage produit et le code. Gemini doit les utiliser t
 | **Communauté** | Espace collectif (lieu, groupe) | Table `mdl_mandala_communities`, membership `mdl_mandala_community_members` |
 | **Membre** | Utilisateur rattaché à une communauté | Rôles : `member`, `organizer`, `admin` (communauté) |
 | **Admin applicatif** | Super-utilisateur global | `app_role=admin`, ou e-mail dans `MANDALA_ADMIN_EMAILS`, ou `wp_role=administrator` |
-| **Prairie** | Réseau de liens confirmés entre personnes | Table `mdl_prairie_links` ; API `/api/prairie/*` |
-| **Fleur** | Représentation d’un membre dans la prairie (liste visuelle) | `db-prairie.ts`, `/api/prairie/fleurs`, `/api/members/fleurs` |
-| **Graine** | Demande de connexion / intention envoyée à quelqu’un | Table `mdl_social_seeds`, statuts `pending` / accepté / refusé |
-| **Intention** | Motif de la graine (résonance, amitié, etc.) | IDs : `resonance`, `eclairage`, `ludus`, `philia`, `agape` |
-| **Lisière** | Visite du profil public d’un autre membre | API `visit_lisiere` — relation, graines en attente |
-| **La Clairière** | Messagerie P2P (dialogues) après lien établi | Canaux `mdl_chat_channels` + messages ; UI `MessagesPage`, `DialogueStream` |
+| **Lien (personnes)** | Relation confirmée entre deux personnes | Legacy code : `prairie_links`, `/api/prairie/*` — **pas** ce nom à l’écran |
+| **Demande de lien** | Invitation à se connecter (accepter / refuser) | Legacy : `social_seeds` / « graine » — UI : « Demande de lien » |
+| **Messages / conversation** | Messagerie après lien ou dans le lieu | Legacy comments « Clairière » ; UI : Messages |
+| **Profil** | Fiche publique d’un membre | Legacy route `visit_lisiere` |
+| **Lieu ami** | Lien entre deux lieux (Suite) | Porte `lieux_lies` — voir `docs/SUITE.md` |
+
+> Glossaire écran à jour : **`docs/VOCABULAIRE.md`**. Ne plus utiliser Prairie / Graine / Clairière / Lisière dans la copy.
 | **Température** | Indicateur d’ambiance d’un canal (`calm`, etc.) | Champ `temperature` sur messages ; `TemperatureIndicator` |
 | **Événement** | Rassemblement planifié dans une communauté | Tables `mdl_events`, staff, tâches, médias |
 | **Phase événement** | Cycle de vie | `preparation` → `day` → `after` → `closed` |
@@ -140,8 +141,8 @@ Les modules `db-*.ts` créent aussi certaines tables **au runtime** si absentes 
 
 ```
 Login → Accueil (aperçu événements + alertes)
-  → Membres : annuaire communauté, envoyer une Graine 🌱
-  → Messages : Graines reçues (accepter/refuser) → La Clairière (canaux P2P)
+  → Membres : annuaire du lieu, ouvrir une conversation
+  → Messages : demandes de lien (si présentes) + conversations
   → Événements : liste → détail (phase, tâches, équipe, médias)
   → Compte : photo, bio, emoji avatar
   → Alertes : centre de notifications
@@ -173,7 +174,7 @@ Légende : ✅ livré · 🟡 partiel · ⬜ prévu / legacy doc obsolète
 | Communautés | Sélecteur, join, catalogue, profil enrichi (avatar, description, lieu, site, contact) | ✅ |
 | Communautés admin | CRUD, membres, bannière « espace administré » | ✅ |
 | Membres | Annuaire par communauté, carte « Moi », graines vers autrui | ✅ |
-| Messages | Graines entrantes (accepter/refuser), La Clairière, non-lus, présence | ✅ |
+| Messages | Demandes de lien (si présentes), conversations, non-lus, présence | ✅ |
 | Événements | Liste, détail, phases, tâches par phase, staff, médias (cover/galerie) | ✅ |
 | Notifications | Centre utilisateur, création admin, compteurs non-lus | ✅ |
 | Broadcasts | Création, preview audience, enqueue (admin) | ✅ |
@@ -194,7 +195,7 @@ Légende : ✅ livré · 🟡 partiel · ⬜ prévu / legacy doc obsolète
 | `home` | `HomePage.tsx` | Hub : prochains événements, raccourcis, alertes récentes |
 | `events` | `EventsPage.tsx`, `EventDetailPage.tsx` | Liste + détail événement |
 | `members` | `MembersPage.tsx` | Annuaire, graines, lien vers messages |
-| `messages` | `MessagesPage.tsx` | Graines + Clairière |
+| `messages` | `MessagesPage.tsx` | Demandes de lien + conversations |
 | `notifications` | `NotificationsPage.tsx` | Centre d’alertes |
 | `account` | `AccountPage.tsx` | Profil personnel |
 | `admin` | `AdminPage.tsx`, `AdminCommunitiesTab.tsx` | Back-office |
@@ -294,7 +295,7 @@ Pour brainstorming Gemini — **non engagé** :
 
 Copier-coller en préfixant : *« Contexte : voir document Mandala ci-joint. »*
 
-1. **Produit** : « Propose 5 user stories pour le module événements phase “Après”, en gardant le vocabulaire graines / clairière. »
+1. **Produit** : « Propose 5 user stories pour le module événements phase “Après”, en gardant le vocabulaire Mandala (lieu, membre, conversation — voir VOCABULAIRE.md). »
 2. **Architecture** : « Comment isoler la messagerie par communauté sans casser les canaux P2P existants ? »
 3. **UX** : « Rédige le wireframe textuel d’un mur communautaire cohérent avec la navigation actuelle. »
 4. **Data** : « Schéma SQL pour un système de cotisation annuelle par communauté, compatible préfixe mdl_. »
@@ -305,8 +306,9 @@ Copier-coller en préfixant : *« Contexte : voir document Mandala ci-joint. »*
 ## 12. Métadonnées pour l’IA
 
 - **Langue UI** : français
-- **Ton** : bienveillant, symbolique (jardin), pas corporate
-- **Utilisateurs types** : membre, organisateur communauté, admin app
+- **Ton** : clair, humain, ancré lieux — pas le jargon jardin Fleur
+- **Utilisateurs types** : membre, gestionnaire de lieu, admin app
+- **Vocabulaire** : `docs/VOCABULAIRE.md`
 - **Contrainte technique** : petit VPS — pool MariaDB limité (`MARIADB_POOL_LIMIT=2`)
 - **Ne jamais inventer** de secrets (`JWT_SECRET`, mots de passe DB) dans les réponses — utiliser des placeholders
 

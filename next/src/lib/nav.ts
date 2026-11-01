@@ -2,7 +2,14 @@ import type { MandalaPage } from '@/components/MandalaApp'
 
 export { ORGANISATION_PLACE_PAGES } from '@/lib/place-manage'
 
-export type AdminTabId = 'people' | 'communications' | 'telemetry' | 'places' | 'support' | 'evaluations'
+export type AdminTabId =
+  | 'people'
+  | 'communications'
+  | 'telemetry'
+  | 'places'
+  | 'doors'
+  | 'support'
+  | 'evaluations'
 
 export type MainNavItem = {
   id: MandalaPage
@@ -173,6 +180,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     description: 'Tous les sites enregistrés',
   },
   {
+    id: 'admin-doors',
+    label: 'Portes des fonctions',
+    icon: '🚪',
+    adminTab: 'doors',
+    description: 'Qui voit Relier, carte membres, aide…',
+  },
+  {
     id: 'admin-support',
     label: 'Retours',
     icon: '🛟',
@@ -211,5 +225,6 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   courses: 'Courses',
   logistics: 'Logistique',
   circles: 'Cercles',
+  'billing-offers': 'Offres Mandala',
   admin: 'Administration',
 }

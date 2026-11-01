@@ -93,6 +93,7 @@ export function PlacesMapPage() {
                 place={place}
                 selected={selectedSlug === place.slug}
                 onSelect={() => setSelectedSlug(place.slug)}
+                showRelier
               />
             </div>
           ))}

@@ -40,6 +40,8 @@ export type SkillCard = {
   bio?: string
   resources?: Array<{ id: number; kind: string; title: string; summary: string }>
   skills_visible?: boolean
+  pro_boost?: boolean
+  pro_verified?: boolean
 }
 
 export type SkillNote = {

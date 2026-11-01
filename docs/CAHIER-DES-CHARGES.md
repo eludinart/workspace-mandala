@@ -10,10 +10,10 @@ Plateforme multi-communautés (Shambhala, Sivanà, …) pour **lieux**, **membre
 |--------|-----------------|--------|
 | Auth | Inscription, login, profil (nom, pseudo, visibilité) | ✅ |
 | Communautés | Sélecteur, membership auto, rôles member/organizer/admin | ✅ |
-| Membres | Liste prairie, graines, lien messages | ✅ |
-| Messages | Clairière P2P, présence, non-lus | ✅ |
+| Membres | Annuaire du lieu, lien vers messages | ✅ |
+| Messages | Conversations, présence, non-lus | ✅ |
 | **Événements** | Liste, détail, phases, tâches, équipe (staff) | ✅ |
-| Graines entrantes | Accepter / refuser les demandes reçues | À faire |
+| Demandes de lien | Accepter / refuser (UI Messages) | ✅ |
 | Notifications | Centre de notifications | À faire |
 | Mur / broadcasts | Annonces admin | À faire |
 

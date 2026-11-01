@@ -24,6 +24,7 @@ export type DayDetailData = {
     disabled_reason?: string | null
     max_participants?: number
     present_users: PresentUser[]
+    group_inscrits_by_place?: boolean
     events: MonthEvent[]
   }
   settings: { show_presence: boolean; show_events: boolean }
@@ -392,42 +393,43 @@ export function CalendarDayPanel({
             </div>
             {dayDetail.detail.present_users.length === 0 ? (
               <p className="text-sm text-slate-500 italic py-2">Personne inscrit pour l&apos;instant.</p>
+            ) : dayDetail.detail.group_inscrits_by_place ? (
+              <div className="space-y-3">
+                {groupPresentByPlace(dayDetail.detail.present_users).map((group) => (
+                  <div key={group.key} className="space-y-1.5">
+                    <p
+                      className="text-[11px] font-semibold uppercase tracking-wider"
+                      style={{ color: group.accent || undefined }}
+                    >
+                      {group.name}
+                    </p>
+                    <ul className="space-y-1.5">
+                      {group.users.map((u) => (
+                        <PresentUserRow
+                          key={u.user_id}
+                          u={u}
+                          viewerId={viewerId}
+                          canManage={canManage}
+                          presenceBusy={presenceBusy}
+                          onRemoveUser={onRemoveUser}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             ) : (
               <ul className="space-y-1.5">
-                {dayDetail.detail.present_users.map((u) => {
-                  const isMe = viewerId != null && u.user_id === viewerId
-                  return (
-                    <li
-                      key={u.user_id}
-                      className={`rounded-lg border px-3 py-2.5 flex items-center justify-between gap-2 ${
-                        isMe
-                          ? 'border-violet-500/40 bg-violet-950/30'
-                          : 'border-slate-800 bg-slate-950/50'
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {displayLabel(u, viewerId)}
-                          {isMe && (
-                            <span className="ml-1.5 text-[10px] uppercase text-violet-300 font-normal">
-                              vous
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      {canManage && !isMe && (
-                        <button
-                          type="button"
-                          disabled={presenceBusy}
-                          onClick={() => onRemoveUser(u.user_id)}
-                          className="shrink-0 text-[11px] px-2 py-1 rounded-lg border border-red-800/40 text-red-300 hover:bg-red-950/30 disabled:opacity-50"
-                        >
-                          Retirer
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
+                {dayDetail.detail.present_users.map((u) => (
+                  <PresentUserRow
+                    key={u.user_id}
+                    u={u}
+                    viewerId={viewerId}
+                    canManage={canManage}
+                    presenceBusy={presenceBusy}
+                    onRemoveUser={onRemoveUser}
+                  />
+                ))}
               </ul>
             )}
           </section>
@@ -435,6 +437,68 @@ export function CalendarDayPanel({
       </div>
     </div>
   )
+}
+
+function PresentUserRow({
+  u,
+  viewerId,
+  canManage,
+  presenceBusy,
+  onRemoveUser,
+}: {
+  u: PresentUser
+  viewerId?: number | null
+  canManage: boolean
+  presenceBusy: boolean
+  onRemoveUser: (userId: number) => void
+}) {
+  const isMe = viewerId != null && u.user_id === viewerId
+  return (
+    <li
+      className={`rounded-lg border px-3 py-2.5 flex items-center justify-between gap-2 ${
+        isMe ? 'border-violet-500/40 bg-violet-950/30' : 'border-slate-800 bg-slate-950/50'
+      }`}
+    >
+      <div className="min-w-0">
+        <p className="text-sm font-medium truncate">
+          {displayLabel(u, viewerId ?? null)}
+          {isMe && (
+            <span className="ml-1.5 text-[10px] uppercase text-violet-300 font-normal">vous</span>
+          )}
+        </p>
+      </div>
+      {canManage && !isMe && (
+        <button
+          type="button"
+          disabled={presenceBusy}
+          onClick={() => onRemoveUser(u.user_id)}
+          className="shrink-0 text-[11px] px-2 py-1 rounded-lg border border-red-800/40 text-red-300 hover:bg-red-950/30 disabled:opacity-50"
+        >
+          Retirer
+        </button>
+      )}
+    </li>
+  )
+}
+
+function groupPresentByPlace(users: PresentUser[]): Array<{
+  key: string
+  name: string
+  accent: string | null
+  users: PresentUser[]
+}> {
+  const map = new Map<string, { name: string; accent: string | null; users: PresentUser[] }>()
+  for (const u of users) {
+    const key = u.place ? `p-${u.place.id}` : 'local'
+    const name = u.place?.name ?? 'Ce lieu'
+    const accent = u.place?.accent_color ?? null
+    const g = map.get(key) ?? { name, accent, users: [] }
+    g.users.push(u)
+    map.set(key, g)
+  }
+  return [...map.entries()]
+    .map(([key, g]) => ({ key, ...g }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
 }
 
 function EventSpanButton({

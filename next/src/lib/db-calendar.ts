@@ -4,7 +4,14 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
-import { listEventsForCommunityBetween, type EventRecord } from './db-mandala-events'
+import {
+  hostHasOpenFriendEventOnDay,
+  listEventsForCommunityBetween,
+  type EventRecord,
+} from './db-mandala-events'
+import { listAcceptedFriendCommunityIds } from './db-place-links'
+import { canAccessFeatureDoor } from './db-feature-doors'
+import { getCommunityById, listCommunitiesForUser } from './db-communities'
 
 export type CalendarSettings = {
   show_presence: boolean
@@ -13,10 +20,18 @@ export type CalendarSettings = {
   open_weekdays: number[]
 }
 
+export type CalendarPresentPlace = {
+  id: number
+  name: string
+  accent_color: string | null
+}
+
 export type CalendarPresentUser = {
   user_id: number
   pseudo: string
   display_name: string
+  /** Lieu d’origine pour regroupement hôte (lieux amis). */
+  place?: CalendarPresentPlace | null
 }
 
 export type CalendarDaySummary = {
@@ -35,7 +50,9 @@ export type CalendarDayDetail = {
   is_disabled: boolean
   disabled_reason: string | null
   max_participants: number
-  present_users: Array<{ user_id: number; pseudo: string; display_name: string }>
+  present_users: CalendarPresentUser[]
+  /** True si des inscrits viennent de lieux amis (afficher regroupement). */
+  group_inscrits_by_place: boolean
   events: Array<Pick<EventRecord, 'id' | 'title' | 'starts_at' | 'ends_at' | 'location' | 'phase'>>
 }
 
@@ -506,6 +523,57 @@ export async function getCalendarMonth(params: {
   return { ym, settings, days, events }
 }
 
+async function resolvePresentPlaces(params: {
+  hostCommunityId: number
+  userIds: number[]
+}): Promise<Map<number, CalendarPresentPlace>> {
+  const map = new Map<number, CalendarPresentPlace>()
+  if (params.userIds.length === 0) return map
+
+  const host = await getCommunityById(params.hostCommunityId)
+  const hostPlace: CalendarPresentPlace = {
+    id: params.hostCommunityId,
+    name: host?.name ?? 'Ce lieu',
+    accent_color: host?.accent_color ?? null,
+  }
+
+  const friendIds = await listAcceptedFriendCommunityIds(params.hostCommunityId)
+  const allowed = new Set<number>([params.hostCommunityId, ...friendIds])
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const tC = table('mandala_communities')
+  const uPlace = params.userIds.map(() => '?').join(',')
+  const cPlace = [...allowed].map(() => '?').join(',')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT m.user_id, c.id AS community_id, c.name, c.accent_color
+     FROM ${tM} m
+     JOIN ${tC} c ON c.id = m.community_id AND c.is_active = 1
+     WHERE m.user_id IN (${uPlace}) AND m.community_id IN (${cPlace})
+     ORDER BY c.name ASC`,
+    [...params.userIds, ...allowed]
+  )
+
+  const byUser = new Map<number, CalendarPresentPlace[]>()
+  for (const r of rows ?? []) {
+    const uid = Number(r.user_id)
+    const place: CalendarPresentPlace = {
+      id: Number(r.community_id),
+      name: String(r.name || 'Lieu'),
+      accent_color: r.accent_color ? String(r.accent_color) : null,
+    }
+    const list = byUser.get(uid) ?? []
+    list.push(place)
+    byUser.set(uid, list)
+  }
+
+  for (const uid of params.userIds) {
+    const places = byUser.get(uid) ?? []
+    const fromFriend = places.find((p) => p.id !== params.hostCommunityId)
+    map.set(uid, fromFriend ?? hostPlace)
+  }
+  return map
+}
+
 export async function getCalendarDayDetail(params: {
   communityId: number
   day: string
@@ -513,7 +581,6 @@ export async function getCalendarDayDetail(params: {
 }): Promise<{ detail: CalendarDayDetail; settings: CalendarSettings }> {
   await ensureCalendarTables()
   const day = assertDay(params.day)
-  const pool = getPool()
   const settings = await getCalendarSettings(params.communityId)
   const explicit = await readExplicitDay(params.communityId, day)
   const is_disabled = dayIsClosed(explicit?.is_disabled ?? null, day, settings.open_weekdays)
@@ -522,6 +589,7 @@ export async function getCalendarDayDetail(params: {
 
   const present_users: CalendarDayDetail['present_users'] = []
   if (settings.show_presence) {
+    const pool = getPool()
     const tP = table('calendar_presence')
     const tUsers = table('users')
     const tMeta = table('usermeta')
@@ -543,7 +611,22 @@ export async function getCalendarDayDetail(params: {
         display_name: String(r.display_name || ''),
       })
     }
+
+    const doorOk = await canAccessFeatureDoor(params.viewerUserId, 'lieux_lies')
+    if (doorOk && present_users.length > 0) {
+      const places = await resolvePresentPlaces({
+        hostCommunityId: params.communityId,
+        userIds: present_users.map((u) => u.user_id),
+      })
+      for (const u of present_users) {
+        u.place = places.get(u.user_id) ?? null
+      }
+    }
   }
+
+  const group_inscrits_by_place = present_users.some(
+    (u) => u.place != null && u.place.id !== params.communityId
+  )
 
   const events = settings.show_events
     ? (
@@ -570,8 +653,34 @@ export async function getCalendarDayDetail(params: {
       disabled_reason,
       max_participants,
       present_users,
+      group_inscrits_by_place,
       events,
     },
   }
+}
+
+/**
+ * Membre du lieu, ou membre d’un lieu ami (porte lieux_lies).
+ * Pour s’inscrire (present), une date ouverte ce jour est requise côté lieu ami.
+ */
+export async function userCanRegisterPresence(params: {
+  userId: number
+  communityId: number
+  day: string
+  /** false = annuler : ami suffit sans date ouverte. */
+  forPresent?: boolean
+}): Promise<boolean> {
+  const forPresent = params.forPresent !== false
+  const mine = await listCommunitiesForUser(params.userId)
+  if (mine.some((c) => c.id === params.communityId)) return true
+
+  const doorOk = await canAccessFeatureDoor(params.userId, 'lieux_lies')
+  if (!doorOk) return false
+
+  const friendIds = await listAcceptedFriendCommunityIds(params.communityId)
+  if (!mine.some((c) => friendIds.includes(c.id))) return false
+
+  if (!forPresent) return true
+  return hostHasOpenFriendEventOnDay(params.communityId, params.day)
 }
 

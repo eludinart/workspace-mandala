@@ -400,6 +400,24 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </div>
       </section>
 
+      {onNavigate && (
+        <section id="mandala-pro" className="scroll-mt-20 space-y-3">
+          <h2 className="text-lg font-semibold text-slate-200">Mandala Pro &amp; Lieu</h2>
+          <div className="rounded-xl border border-violet-800/50 bg-slate-900/50 p-4 space-y-2">
+            <p className="text-sm text-slate-400">
+              Fais rayonner ton lieu ou ta pratique. Les membres restent en gratuité.
+            </p>
+            <button
+              type="button"
+              onClick={() => onNavigate('billing-offers')}
+              className="w-full py-2 rounded-lg bg-violet-600/90 text-white text-sm font-medium hover:bg-violet-500"
+            >
+              Voir les offres
+            </button>
+          </div>
+        </section>
+      )}
+
       <section id="evaluations" className="scroll-mt-20 space-y-3">
         <h2 className="text-lg font-semibold text-slate-200">Évaluations</h2>
         <MyEvaluationsSection />

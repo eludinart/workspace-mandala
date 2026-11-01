@@ -7,6 +7,7 @@ export type PresentUser = {
   user_id: number
   pseudo: string
   display_name: string
+  place?: { id: number; name: string; accent_color: string | null } | null
 }
 
 export type CalendarViewMode = 'month' | 'week'

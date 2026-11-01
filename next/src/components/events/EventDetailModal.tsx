@@ -1,8 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { eventsApi } from '@/api/events'
+import { calendarApi } from '@/api/calendar'
+import { useAuth } from '@/contexts/AuthContext'
 import { EVENT_PHASES } from '@/lib/event-constants'
+import { enumerateEventDays } from '@/lib/event-dates'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 import { formatEventDateRange, phaseBadgeClass, phaseLabel } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
@@ -23,6 +26,10 @@ type EventDetailData = {
   tasks: Array<{ title: string; is_done: boolean }>
   media: Array<{ id: number; image_data: string; caption: string | null }>
   can_manage: boolean
+  via_friend_place?: boolean
+  host_slug?: string | null
+  host_name?: string | null
+  host_accent_color?: string | null
 }
 
 export function EventDetailModal({
@@ -34,24 +41,47 @@ export function EventDetailModal({
   onClose: () => void
   onOpenFull?: () => void
 }) {
+  const { user } = useAuth()
+  const myId = Number((user as { id?: number | string } | null)?.id ?? 0)
   const [data, setData] = useState<EventDetailData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [presenceBusy, setPresenceBusy] = useState(false)
+  const [presenceMsg, setPresenceMsg] = useState<string | null>(null)
+  const [iAmPresent, setIAmPresent] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setPresenceMsg(null)
     try {
       const d = (await eventsApi.get(eventId)) as EventDetailData
       setData(d)
+      setIAmPresent(false)
+      if (d.via_friend_place && d.host_slug && d.event.starts_at && myId > 0) {
+        const days = enumerateEventDays(d.event.starts_at, d.event.ends_at)
+        const first = days[0]
+        if (first) {
+          try {
+            const dayRes = (await calendarApi.day(d.host_slug, first)) as {
+              detail?: { present_users?: Array<{ user_id: number }> }
+            }
+            setIAmPresent(
+              (dayRes.detail?.present_users ?? []).some((u) => u.user_id === myId)
+            )
+          } catch {
+            setIAmPresent(false)
+          }
+        }
+      }
     } catch (e: unknown) {
       setError(e instanceof ApiError ? e.detail : 'Impossible de charger l’événement')
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [eventId])
+  }, [eventId, myId])
 
   useEffect(() => {
     void load()
@@ -76,6 +106,39 @@ export function EventDetailModal({
   const media = data?.media ?? []
   const doneTasks = data?.tasks.filter((t) => t.is_done).length ?? 0
   const totalTasks = data?.tasks.length ?? 0
+  const eventDays = useMemo(
+    () => (event ? enumerateEventDays(event.starts_at, event.ends_at) : []),
+    [event]
+  )
+  const showFriendPresence =
+    Boolean(data?.via_friend_place) && Boolean(data?.host_slug) && eventDays.length > 0
+
+  const togglePresence = async () => {
+    if (!data?.host_slug || eventDays.length === 0) return
+    setPresenceBusy(true)
+    setPresenceMsg(null)
+    const next = !iAmPresent
+    try {
+      if (eventDays.length === 1) {
+        await calendarApi.setPresence({
+          community_slug: data.host_slug,
+          day: eventDays[0],
+          present: next,
+        })
+      } else {
+        await calendarApi.setPresenceDays({
+          community_slug: data.host_slug,
+          days: eventDays,
+          present: next,
+        })
+      }
+      setIAmPresent(next)
+    } catch (e: unknown) {
+      setPresenceMsg(e instanceof ApiError ? e.detail : 'Inscription impossible')
+    } finally {
+      setPresenceBusy(false)
+    }
+  }
 
   return (
     <>
@@ -241,20 +304,44 @@ export function EventDetailModal({
                       </span>
                     </div>
                   )}
+
+                  {showFriendPresence && data?.host_name && (
+                    <p className="text-xs text-slate-500">
+                      Date ouverte par{' '}
+                      <span style={{ color: data.host_accent_color || undefined }}>
+                        {data.host_name}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </>
             )}
           </div>
 
-          {!loading && !error && event && onOpenFull && (
-            <div className="shrink-0 border-t border-slate-800 p-3 bg-slate-950/50">
-              <button
-                type="button"
-                onClick={onOpenFull}
-                className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 transition-colors"
-              >
-                Ouvrir la fiche complète
-              </button>
+          {!loading && !error && event && (showFriendPresence || onOpenFull) && (
+            <div className="shrink-0 border-t border-slate-800 p-3 bg-slate-950/50 space-y-2">
+              {showFriendPresence && (
+                <>
+                  <button
+                    type="button"
+                    disabled={presenceBusy}
+                    onClick={() => void togglePresence()}
+                    className="w-full py-2.5 rounded-xl border border-violet-500/50 text-violet-100 text-sm font-medium hover:bg-violet-900/30 disabled:opacity-50"
+                  >
+                    {presenceBusy ? '…' : iAmPresent ? 'Annuler' : 'Je viens'}
+                  </button>
+                  {presenceMsg && <p className="text-xs text-red-400 text-center">{presenceMsg}</p>}
+                </>
+              )}
+              {onOpenFull && !data?.via_friend_place && (
+                <button
+                  type="button"
+                  onClick={onOpenFull}
+                  className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 transition-colors"
+                >
+                  Ouvrir la fiche complète
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 /**
- * La Clairière (social / canaux chat) — MariaDB.
+ * Messagerie sociale (canaux / conversations) — MariaDB.
+ * Legacy interne : seeds, prairie_links (voir docs/VOCABULAIRE.md).
  */
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
@@ -843,7 +844,7 @@ export async function getMyChannels(
     const pseudo =
       (p && String(p.meta_value ?? '').trim()) ||
       (u && String(u.display_name ?? '').trim()) ||
-      `jardinier_${Buffer.from(String(otherId)).toString('hex').slice(0, 6)}`
+      `membre_${Buffer.from(String(otherId)).toString('hex').slice(0, 6)}`
     const [seenRows] = await pool.execute<RowDataPacket[]>(
       `SELECT meta_value FROM ${tMeta} WHERE user_id = ? AND meta_key = 'mdl_social_last_seen_at' LIMIT 1`,
       [otherId]
@@ -2228,13 +2229,13 @@ async function ensureSeedsAndLinksTables(pool: Awaited<ReturnType<typeof getPool
   }
 }
 
-/** L'envoi de graines entre utilisateurs a été retiré. */
+/** L'envoi de demandes de lien (ex-« graines ») entre utilisateurs a été retiré. */
 export async function sendSeed(
   _fromUserId: number,
   _toUserId: number,
   _intentionId: string
 ): Promise<{ seedId: number }> {
-  throw new Error("L'envoi de graines entre utilisateurs n'est plus disponible")
+  throw new Error("L'envoi de demandes de lien n'est plus disponible")
 }
 
 /** Accepte une graine, crée le lien et le canal, retourne channelId */
@@ -2255,9 +2256,10 @@ export async function acceptSeedConnection(
     [seedId]
   )
   const seed = seedRows?.[0]
-  if (!seed) throw new Error('Graine introuvable')
-  if (Number(seed.to_user_id) !== acceptorUserId) throw new Error('Seul le destinataire peut accepter cette graine')
-  if (String(seed.status) !== 'pending') throw new Error('Cette graine a déjà été traitée')
+  if (!seed) throw new Error('Demande introuvable')
+  if (Number(seed.to_user_id) !== acceptorUserId)
+    throw new Error('Seul le destinataire peut accepter cette demande')
+  if (String(seed.status) !== 'pending') throw new Error('Cette demande a déjà été traitée')
 
   const fromUserId = Number(seed.from_user_id)
   const toUserId = Number(seed.to_user_id)
@@ -2355,9 +2357,10 @@ export async function rejectSeedConnection(params: {
     [seedId]
   )
   const seed = seedRows?.[0]
-  if (!seed) throw new Error('Graine introuvable')
-  if (Number(seed.to_user_id) !== rejector) throw new Error('Seul le destinataire peut refuser cette graine')
-  if (String(seed.status) !== 'pending') throw new Error('Cette graine a déjà été traitée')
+  if (!seed) throw new Error('Demande introuvable')
+  if (Number(seed.to_user_id) !== rejector)
+    throw new Error('Seul le destinataire peut refuser cette demande')
+  if (String(seed.status) !== 'pending') throw new Error('Cette demande a déjà été traitée')
   await pool.execute(`UPDATE ${tSeeds} SET status = 'rejected', updated_at = NOW() WHERE id = ?`, [seedId])
 }
 
@@ -2404,7 +2407,7 @@ export async function visitLisiere(
   const pseudo =
     String(target.pseudo ?? '').trim() ||
     String(target.display_name ?? '').trim() ||
-    `jardinier_${Buffer.from(String(targetUserId)).toString('hex').slice(0, 6)}`
+    `membre_${Buffer.from(String(targetUserId)).toString('hex').slice(0, 6)}`
   const avatarRaw = target.avatar ? String(target.avatar).trim() : ''
   const avatar = avatarRaw || null
   const avatarEmoji = String(target.avatar_emoji ?? '🌸').trim() || '🌸'

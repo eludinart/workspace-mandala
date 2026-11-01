@@ -104,6 +104,7 @@ export function SkillsDirectory({
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
+  const [mandalaProOnly, setMandalaProOnly] = useState(false)
   const [cards, setCards] = useState<SkillCard[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(initialUserId ?? null)
   const [opened, setOpened] = useState<SkillCard | null>(null)
@@ -187,6 +188,7 @@ export function SkillsDirectory({
         return false
       }
       if (peopleDirectory && placeFilter === 'unattached' && card.places.length > 0) return false
+      if (mandalaProOnly && !(card.pro_boost || card.pro_verified)) return false
       if (register && !card.tags.some((t) => t.register === register)) return false
       if (!matchesTag(card.tags, tag)) return false
       if (!q) return true
@@ -203,7 +205,7 @@ export function SkillsDirectory({
         .toLocaleLowerCase('fr')
       return hay.includes(q)
     })
-  }, [cards, register, tag, query, peopleDirectory, placeFilter])
+  }, [cards, register, tag, query, peopleDirectory, placeFilter, mandalaProOnly])
 
   const skillCloud = useMemo(() => {
     const counts = new Map<string, number>()
@@ -412,6 +414,15 @@ export function SkillsDirectory({
                 ))}
               </select>
             </label>
+            <label className="text-xs text-slate-400 flex items-center gap-2 pt-5">
+              <input
+                type="checkbox"
+                checked={mandalaProOnly}
+                onChange={(e) => setMandalaProOnly(e.target.checked)}
+                className="rounded"
+              />
+              Mandala Pro uniquement
+            </label>
           </div>
         )}
       </div>
@@ -448,7 +459,19 @@ export function SkillsDirectory({
                   <div className="flex items-center gap-3 min-w-0">
                     <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
                     <div className="min-w-0">
-                      <p className="font-medium truncate">{card.display_name || card.pseudo}</p>
+                      <p className="font-medium truncate flex items-center gap-2">
+                        <span className="truncate">{card.display_name || card.pseudo}</span>
+                        {card.pro_verified && (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-600/40 text-violet-100 border border-violet-500/40">
+                            Mandala Pro
+                          </span>
+                        )}
+                        {!card.pro_verified && card.pro_boost && (
+                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700/80 text-slate-200">
+                            Pro
+                          </span>
+                        )}
+                      </p>
                       {card.places.length > 0 ? (
                         <p className="text-[11px] text-slate-500 truncate">
                           {card.places.map((p) => p.name).join(' · ')}
@@ -497,8 +520,13 @@ export function SkillsDirectory({
                   alt={selected.pseudo}
                 />
                 <div className="min-w-0 pt-1">
-                  <h3 className="text-2xl font-semibold text-slate-50 leading-tight">
-                    {selected.display_name || selected.pseudo}
+                  <h3 className="text-2xl font-semibold text-slate-50 leading-tight flex flex-wrap items-center gap-2">
+                    <span>{selected.display_name || selected.pseudo}</span>
+                    {selected.pro_verified && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-600/40 text-violet-100 border border-violet-500/40">
+                        Mandala Pro
+                      </span>
+                    )}
                   </h3>
                   {selected.skills_visible !== false && selected.scope === 'mandala' && (
                     <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communities'
-import { getCalendarDayDetail } from '@/lib/db-calendar'
+import { getCalendarDayDetail, userCanRegisterPresence } from '@/lib/db-calendar'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -19,7 +19,19 @@ export async function GET(req: NextRequest) {
     if (!day) return NextResponse.json({ error: 'day requis (YYYY-MM-DD)' }, { status: 400 })
     const community = await getCommunityBySlug(slug)
     if (!community) return NextResponse.json({ error: 'Communauté introuvable' }, { status: 404 })
-    await requireCommunityMembership(uid, community.id)
+    try {
+      await requireCommunityMembership(uid, community.id)
+    } catch {
+      const ok = await userCanRegisterPresence({
+        userId: uid,
+        communityId: community.id,
+        day,
+        forPresent: true,
+      })
+      if (!ok) {
+        return NextResponse.json({ error: 'Accès communauté refusé' }, { status: 403 })
+      }
+    }
     const data = await getCalendarDayDetail({ communityId: community.id, day, viewerUserId: uid })
     return NextResponse.json(data)
   } catch (err: unknown) {

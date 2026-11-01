@@ -8,6 +8,7 @@ import { navigateFromNotification } from '@/lib/notification-navigation'
 import type { NotificationItem } from '@/contexts/NotificationContext'
 import { PAGE_READ_PREVIEW_LIMIT, splitNotificationsForDisplay } from '@/lib/notification-retention'
 import { directoryApi } from '@/api/directory'
+import { placeLinksApi } from '@/api/place-links'
 import { ApiError } from '@/lib/api-client'
 
 export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
@@ -112,39 +113,62 @@ function NotificationList({
   onOpen: (n: NotificationItem) => void
   onMarkRead: (ids: string[]) => Promise<void>
 }) {
-  const [meetBusy, setMeetBusy] = useState<number | null>(null)
-  const [meetError, setMeetError] = useState<string | null>(null)
-  const [meetDone, setMeetDone] = useState<number[]>([])
+  const [actionBusy, setActionBusy] = useState<number | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionDone, setActionDone] = useState<number[]>([])
 
   const respondMeet = async (n: NotificationItem, accept: boolean) => {
     const requestId = parseInt(String(n.source_id ?? ''), 10)
     if (!requestId) return
-    setMeetBusy(requestId)
-    setMeetError(null)
+    setActionBusy(requestId)
+    setActionError(null)
     try {
       const res = await directoryApi.respondMeet(requestId, accept)
       if (!n.read_at) void onMarkRead([n.id])
-      setMeetDone((ids) => [...ids, requestId])
+      setActionDone((ids) => [...ids, requestId])
       if (accept && res.channel_id && onNavigate) {
         onNavigate('messages', { messagesChannelId: String(res.channel_id) })
       }
     } catch (e: unknown) {
-      setMeetError(e instanceof ApiError ? e.detail : 'Réponse impossible')
+      setActionError(e instanceof ApiError ? e.detail : 'Réponse impossible')
     } finally {
-      setMeetBusy(null)
+      setActionBusy(null)
     }
   }
+
+  const respondPlaceLink = async (n: NotificationItem, accept: boolean) => {
+    const linkId = parseInt(String(n.source_id ?? ''), 10)
+    if (!linkId) return
+    setActionBusy(linkId)
+    setActionError(null)
+    try {
+      await placeLinksApi.respond(linkId, accept)
+      if (!n.read_at) void onMarkRead([n.id])
+      setActionDone((ids) => [...ids, linkId])
+    } catch (e: unknown) {
+      setActionError(e instanceof ApiError ? e.detail : 'Réponse impossible')
+    } finally {
+      setActionBusy(null)
+    }
+  }
+
   return (
     <ul className="space-y-2">
       {items.map((n) => {
         const isUnread = !n.read_at
         const id = parseInt(n.id, 10)
-        const requestId = parseInt(String(n.source_id ?? ''), 10)
-        const canRespond =
+        const sourceId = parseInt(String(n.source_id ?? ''), 10)
+        const isMeet =
           n.type === 'meet_request' &&
           n.action_label === 'Répondre' &&
-          requestId > 0 &&
-          !meetDone.includes(requestId)
+          sourceId > 0 &&
+          !actionDone.includes(sourceId)
+        const isPlaceLink =
+          n.type === 'place_link_request' &&
+          n.action_label === 'Répondre' &&
+          sourceId > 0 &&
+          !actionDone.includes(sourceId)
+        const canRespond = isMeet || isPlaceLink
         const clickable = !!onNavigate && !canRespond
         return (
           <li key={n.delivery_id ?? n.id}>
@@ -191,23 +215,33 @@ function NotificationList({
                     <div className="flex flex-wrap gap-2 mt-3">
                       <button
                         type="button"
-                        disabled={meetBusy === requestId}
-                        onClick={() => void respondMeet(n, true)}
+                        disabled={actionBusy === sourceId}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isPlaceLink) void respondPlaceLink(n, true)
+                          else void respondMeet(n, true)
+                        }}
                         className="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
                       >
                         Accepter
                       </button>
                       <button
                         type="button"
-                        disabled={meetBusy === requestId}
-                        onClick={() => void respondMeet(n, false)}
+                        disabled={actionBusy === sourceId}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isPlaceLink) void respondPlaceLink(n, false)
+                          else void respondMeet(n, false)
+                        }}
                         className="text-xs px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
                       >
                         Refuser
                       </button>
                     </div>
                   )}
-                  {meetError && canRespond && <p className="text-xs text-red-400 mt-2">{meetError}</p>}
+                  {actionError && canRespond && (
+                    <p className="text-xs text-red-400 mt-2">{actionError}</p>
+                  )}
                   {clickable && <p className="text-[10px] text-violet-400/80 mt-2">Ouvrir →</p>}
                 </div>
                 {isUnread && Number.isFinite(id) && (

@@ -19,6 +19,7 @@ import {
 import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
 import { geocodeAddress } from './geocode'
+import { assertCanListPlacePublic } from './billing-access'
 
 export type CommunityRecord = {
   id: number
@@ -1696,6 +1697,9 @@ export async function updateCommunitySettingsForManager(
     values.push(blocks.length ? serializeCharterBlocks(blocks) : null)
   }
   if (body.listed_public !== undefined) {
+    if (body.listed_public && !current.listed_public) {
+      await assertCanListPlacePublic(current.id, isAppSiteManager)
+    }
     updates.push('listed_public = ?')
     values.push(body.listed_public ? 1 : 0)
   }

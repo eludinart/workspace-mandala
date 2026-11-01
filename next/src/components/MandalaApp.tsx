@@ -26,6 +26,7 @@ import { NotificationsPage } from '@/views/NotificationsPage'
 import { CharterPage } from '@/views/CharterPage'
 import { PlaceListPage } from '@/views/PlaceListPage'
 import { CirclesJournalPage } from '@/views/CirclesJournalPage'
+import { BillingOffersPage } from '@/views/BillingOffersPage'
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate'
 import { TelemetryTracker } from '@/components/TelemetryTracker'
 import type { AdminTabId } from '@/lib/nav'
@@ -53,6 +54,7 @@ export type MandalaPage =
   | 'courses'
   | 'logistics'
   | 'circles'
+  | 'billing-offers'
   | 'admin'
 
 export type MandalaNavigate = (
@@ -91,6 +93,7 @@ const APP_PAGES_FROM_URL: MandalaPage[] = [
   'courses',
   'logistics',
   'circles',
+  'billing-offers',
   'admin',
 ]
 
@@ -501,6 +504,8 @@ export function MandalaApp() {
         return <NotificationsPage onNavigate={navigate} />
       case 'account':
         return <AccountPage onNavigate={navigate} />
+      case 'billing-offers':
+        return <BillingOffersPage onNavigate={navigate} />
       case 'charter':
         return <CharterPage onNavigate={navigate} />
       case 'places-map':

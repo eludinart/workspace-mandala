@@ -3,11 +3,14 @@
 import Link from 'next/link'
 import type { PublicCommunityCard } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
+import { RelierPlaceButton } from '@/components/place/RelierPlaceButton'
 
 type Props = {
   place: PublicCommunityCard
   selected?: boolean
   onSelect?: () => void
+  /** Affiche « Relier à… » (carte / Découvrir connecté). */
+  showRelier?: boolean
 }
 
 function normalizeWebsite(url: string): string {
@@ -34,7 +37,7 @@ function directionsUrl(place: PublicCommunityCard): string | null {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`
 }
 
-export function PlacePublicCard({ place, selected, onSelect }: Props) {
+export function PlacePublicCard({ place, selected, onSelect, showRelier }: Props) {
   const website = place.website?.trim()
   const email = place.contact_email?.trim()
   const displayAddress = composeAddress(place)
@@ -74,7 +77,7 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap gap-2 items-center">
         {place.profile_public !== false ? (
           <Link
             href={`/lieux/${encodeURIComponent(place.slug)}`}
@@ -88,6 +91,12 @@ export function PlacePublicCard({ place, selected, onSelect }: Props) {
           </span>
         )}
       </div>
+
+      {showRelier && place.id > 0 && (
+        <div className="mt-3">
+          <RelierPlaceButton targetCommunityId={place.id} targetName={place.name} />
+        </div>
+      )}
 
       {(website || email || directions) && (
         <div className="mt-2 flex flex-wrap gap-2">

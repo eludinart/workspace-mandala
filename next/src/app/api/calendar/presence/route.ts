@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, userCanManageInCommunity } from '@/lib/api-auth'
 import { getCommunityBySlug, requireCommunityMembership } from '@/lib/db-communities'
-import { MAX_CALENDAR_BULK_DAYS, setPresence, setPresenceMany } from '@/lib/db-calendar'
+import {
+  MAX_CALENDAR_BULK_DAYS,
+  setPresence,
+  setPresenceMany,
+  userCanRegisterPresence,
+} from '@/lib/db-calendar'
 import { isDbConfigured } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -30,14 +35,38 @@ export async function POST(req: NextRequest) {
     }
     const community = await getCommunityBySlug(slug)
     if (!community) return NextResponse.json({ error: 'Communauté introuvable' }, { status: 404 })
-    const role = await requireCommunityMembership(uid, community.id)
-    const can_manage = await userCanManageInCommunity(uid, role)
+
+    let role: Awaited<ReturnType<typeof requireCommunityMembership>> | null = null
+    let can_manage = false
+    try {
+      role = await requireCommunityMembership(uid, community.id)
+      can_manage = await userCanManageInCommunity(uid, role)
+    } catch {
+      /* lieu ami possible — vérifié ci-dessous */
+    }
 
     if (targetUserId !== uid && !can_manage) {
       return NextResponse.json({ error: 'Droits admin requis pour modifier un autre utilisateur' }, { status: 403 })
     }
     if (targetUserId !== uid) {
       await requireCommunityMembership(targetUserId, community.id)
+    }
+
+    if (role == null) {
+      for (const day of days) {
+        const ok = await userCanRegisterPresence({
+          userId: targetUserId,
+          communityId: community.id,
+          day,
+          forPresent: present,
+        })
+        if (!ok) {
+          return NextResponse.json(
+            { error: 'Inscription réservée aux membres ou aux lieux amis sur une date ouverte' },
+            { status: 403 }
+          )
+        }
+      }
     }
 
     if (days.length > 1) {

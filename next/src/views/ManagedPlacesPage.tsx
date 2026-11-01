@@ -6,6 +6,7 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { useManagedPlaces } from '@/hooks/useManagedPlaces'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
+import { ProEndorseQueue } from '@/components/billing/ProEndorseQueue'
 
 export function ManagedPlacesPage({
   hubSlug,
@@ -76,6 +77,7 @@ export function ManagedPlacesPage({
 
   return (
     <div className="w-full space-y-6">
+      <ProEndorseQueue />
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Mes lieux</h1>
         <p className="text-sm text-slate-400">

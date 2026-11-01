@@ -5,15 +5,26 @@ import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
 import {
   canOrganizeCommunityEvents,
+  getCommunityById,
   getCommunityBySlug,
+  listCommunitiesForUser,
   requireCommunityMembership,
   type CommunityRole,
 } from './db-communities'
 import { assertEndsAfterStarts } from './event-dates'
 import type { EventPhase } from './event-constants'
 import { normalizeDbDateTime, normalizeWallClockDateTime } from './format-datetime'
-
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
+import {
+  ensureOpenToFriendPlacesColumn,
+  openToFriendPlacesFromRow,
+  parseOpenToFriendPlaces,
+} from './open-to-friend-places'
+import {
+  arePlacesFriends,
+  listAcceptedFriendCommunityIds,
+} from './db-place-links'
+import { canAccessFeatureDoor } from './db-feature-doors'
 
 export type { EventPhase }
 
@@ -33,6 +44,7 @@ export type EventRecord = {
   created_at: string | null
   cover_image: string | null
   wall_public: boolean
+  open_to_friend_places: boolean
 }
 
 export type EventMediaRow = {
@@ -92,6 +104,7 @@ export async function ensureEventsTables(): Promise<void> {
     /* column exists */
   }
   await ensureWallPublicColumn(pool, tE)
+  await ensureOpenToFriendPlacesColumn(pool, tE)
   const tM = table('event_media')
   await exec(
     pool,
@@ -145,7 +158,7 @@ async function getEventRow(eventId: number): Promise<EventRecord | null> {
   const pool = getPool()
   const tE = table('events')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public
+    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public, open_to_friend_places
      FROM ${tE} WHERE id = ? LIMIT 1`,
     [eventId]
   )
@@ -169,6 +182,7 @@ function mapEvent(r: RowDataPacket): EventRecord {
     created_at: normalizeDbDateTime(r.created_at),
     cover_image: r.cover_image ? String(r.cover_image) : null,
     wall_public: wallPublicFromRow(r as Record<string, unknown>),
+    open_to_friend_places: openToFriendPlacesFromRow(r as Record<string, unknown>),
   }
 }
 
@@ -190,13 +204,20 @@ export type EventListItem = EventRecord & {
   media_count: number
 }
 
+export type FriendPlaceEventItem = EventListItem & {
+  host_community_id: number
+  host_slug: string
+  host_name: string
+  host_accent_color: string | null
+}
+
 export async function listEventsForCommunity(communityId: number): Promise<EventListItem[]> {
   await ensureEventsTables()
   const pool = getPool()
   const tE = table('events')
   const tM = table('event_media')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image,
+    `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image, e.wall_public, e.open_to_friend_places,
             COALESCE(mc.cnt, 0) AS media_count
      FROM ${tE} e
      LEFT JOIN (
@@ -222,7 +243,7 @@ export async function listEventsForCommunityBetween(
   const pool = getPool()
   const tE = table('events')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public
+    `SELECT id, community_id, title, description, location, starts_at, ends_at, phase, status, created_by, created_at, cover_image, wall_public, open_to_friend_places
      FROM ${tE}
      WHERE community_id = ? AND status != 'cancelled'
        AND starts_at IS NOT NULL
@@ -237,6 +258,97 @@ export async function listEventsForCommunityBetween(
   return (rows ?? []).map(mapEvent)
 }
 
+/**
+ * Dates ouvertes des lieux amis du lieu actif — hors calendrier local.
+ * Porte `lieux_lies` requise.
+ */
+export async function listOpenFriendEventsForCommunity(params: {
+  viewerCommunityId: number
+  userId: number
+}): Promise<FriendPlaceEventItem[]> {
+  const { viewerCommunityId, userId } = params
+  if (!viewerCommunityId || !userId) return []
+  const doorOk = await canAccessFeatureDoor(userId, 'lieux_lies')
+  if (!doorOk) return []
+
+  const friendIds = await listAcceptedFriendCommunityIds(viewerCommunityId)
+  if (friendIds.length === 0) return []
+
+  await ensureEventsTables()
+  const pool = getPool()
+  const tE = table('events')
+  const tM = table('event_media')
+  const tC = table('mandala_communities')
+  const placeholders = friendIds.map(() => '?').join(',')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT e.id, e.community_id, e.title, e.description, e.location, e.starts_at, e.ends_at, e.phase, e.status, e.created_by, e.created_at, e.cover_image, e.wall_public, e.open_to_friend_places,
+            COALESCE(mc.cnt, 0) AS media_count,
+            c.slug AS host_slug, c.name AS host_name, c.accent_color AS host_accent_color
+     FROM ${tE} e
+     JOIN ${tC} c ON c.id = e.community_id AND c.is_active = 1
+     LEFT JOIN (
+       SELECT event_id, COUNT(*) AS cnt FROM ${tM} GROUP BY event_id
+     ) mc ON mc.event_id = e.id
+     WHERE e.community_id IN (${placeholders})
+       AND e.open_to_friend_places = 1
+       AND e.status = 'published'
+     ORDER BY COALESCE(e.starts_at, e.created_at) ASC`,
+    friendIds
+  )
+  return (rows ?? []).map((r) => ({
+    ...mapEvent(r),
+    media_count: Number(r.media_count ?? 0),
+    host_community_id: Number(r.community_id),
+    host_slug: String(r.host_slug || ''),
+    host_name: String(r.host_name || 'Lieu ami'),
+    host_accent_color: r.host_accent_color ? String(r.host_accent_color) : null,
+  }))
+}
+
+/** Accès lecture : membre du lieu hôte, ou lieu ami + événement ouvert + porte. */
+export async function userCanViewFriendOpenEvent(
+  userId: number,
+  event: EventRecord
+): Promise<boolean> {
+  if (!event.open_to_friend_places || event.status === 'cancelled') return false
+  const doorOk = await canAccessFeatureDoor(userId, 'lieux_lies')
+  if (!doorOk) return false
+  const mine = await listCommunitiesForUser(userId)
+  for (const c of mine) {
+    if (c.id === event.community_id) continue
+    if (await arePlacesFriends(c.id, event.community_id)) return true
+  }
+  return false
+}
+
+/** True s’il existe un événement ouvert aux lieux amis ce jour chez l’hôte. */
+export async function hostHasOpenFriendEventOnDay(
+  hostCommunityId: number,
+  day: string
+): Promise<boolean> {
+  if (!hostCommunityId || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+  await ensureEventsTables()
+  const pool = getPool()
+  const tE = table('events')
+  const from = `${day} 00:00:00`
+  const to = `${day} 23:59:59`
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${tE}
+     WHERE community_id = ?
+       AND open_to_friend_places = 1
+       AND status = 'published'
+       AND starts_at IS NOT NULL
+       AND starts_at < ?
+       AND (
+         (ends_at IS NOT NULL AND ends_at >= ?)
+         OR (ends_at IS NULL AND starts_at >= ?)
+       )
+     LIMIT 1`,
+    [hostCommunityId, to, from, from]
+  )
+  return Boolean(rows?.[0])
+}
+
 export async function getEventDetail(
   eventId: number,
   userId: number,
@@ -247,16 +359,27 @@ export async function getEventDetail(
   tasks: EventTaskRow[]
   media: EventMediaRow[]
   can_manage: boolean
+  via_friend_place: boolean
+  host_slug: string | null
+  host_name: string | null
+  host_accent_color: string | null
 }> {
   const event = await getEventRow(eventId)
   if (!event) throw new Error('Événement introuvable')
 
   let role: CommunityRole = 'member'
+  let viaFriend = false
   try {
     role = await requireCommunityMembership(userId, event.community_id)
   } catch {
-    throw new Error('Accès communauté refusé')
+    if (await userCanViewFriendOpenEvent(userId, event)) {
+      viaFriend = true
+    } else {
+      throw new Error('Accès communauté refusé')
+    }
   }
+
+  const hostCommunity = await getCommunityById(event.community_id)
 
   const pool = getPool()
   const tS = table('event_staff')
@@ -319,7 +442,11 @@ export async function getEventDetail(
       caption: r.caption != null ? String(r.caption) : null,
       sort_order: Number(r.sort_order ?? 0),
     })),
-    can_manage: canManageEvents(role, isAppAdmin) || isCreator,
+    can_manage: !viaFriend && (canManageEvents(role, isAppAdmin) || isCreator),
+    via_friend_place: viaFriend,
+    host_slug: hostCommunity?.slug ?? null,
+    host_name: hostCommunity?.name ?? null,
+    host_accent_color: hostCommunity?.accent_color ?? null,
   }
 }
 
@@ -431,6 +558,10 @@ export async function updateEvent(params: {
   if (p.wall_public !== undefined) {
     fields.push('wall_public = ?')
     values.push(parseWallPublic(p.wall_public) ? 1 : 0)
+  }
+  if (p.open_to_friend_places !== undefined) {
+    fields.push('open_to_friend_places = ?')
+    values.push(parseOpenToFriendPlaces(p.open_to_friend_places) ? 1 : 0)
   }
 
   if (fields.length === 0) return event
