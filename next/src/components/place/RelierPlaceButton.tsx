@@ -6,8 +6,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
 
 /**
- * « Relier à … » sur une fiche lieu (carte / Découvrir).
- * Porte `lieux_lies`. Un seul lieu géré → envoi immédiat ; plusieurs → une question.
+ * Proposition de lien lieu → lieu sur une fiche (carte / Découvrir / profil).
+ * Porte `lieux_lies`. Un seul lieu source → envoi immédiat ; plusieurs → une question.
+ * Si la cible est aussi gérée par l’utilisateur, le lien est accepté tout de suite côté API.
  */
 export function RelierPlaceButton({
   targetCommunityId,
@@ -19,6 +20,7 @@ export function RelierPlaceButton({
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [canLink, setCanLink] = useState(false)
+  const [targetIsManaged, setTargetIsManaged] = useState(false)
   const [status, setStatus] = useState<'none' | 'pending' | 'accepted' | string>('none')
   const [managed, setManaged] = useState<ManagedPlaceOption[]>([])
   const [pickOpen, setPickOpen] = useState(false)
@@ -29,6 +31,8 @@ export function RelierPlaceButton({
   const refresh = useCallback(async () => {
     if (!user || !targetCommunityId) {
       setCanLink(false)
+      setTargetIsManaged(false)
+      setManaged([])
       setLoading(false)
       return
     }
@@ -36,10 +40,12 @@ export function RelierPlaceButton({
     try {
       const res = await placeLinksApi.statusToward(targetCommunityId)
       setCanLink(Boolean(res.can_link))
+      setTargetIsManaged(Boolean(res.target_is_managed))
       setStatus(res.status || 'none')
       setManaged(res.managed || [])
     } catch {
       setCanLink(false)
+      setTargetIsManaged(false)
       setManaged([])
     } finally {
       setLoading(false)
@@ -50,14 +56,24 @@ export function RelierPlaceButton({
     void refresh()
   }, [refresh])
 
+  const soleManaged = managed.length === 1 ? managed[0] : null
+
   async function sendFrom(fromId: number) {
+    const fromName = managed.find((m) => m.id === fromId)?.name ?? 'votre lieu'
     setBusy(true)
     setErr(null)
     setMsg(null)
     try {
-      await placeLinksApi.request(fromId, targetCommunityId)
+      const res = await placeLinksApi.request(fromId, targetCommunityId)
       setPickOpen(false)
-      setMsg('Demande envoyée. Les gestionnaires de l’autre lieu la verront dans leurs alertes.')
+      const link = res.link as { status?: string } | undefined
+      if (link?.status === 'accepted' || targetIsManaged) {
+        setMsg(`${fromName} et ${targetName} sont maintenant lieux amis.`)
+      } else {
+        setMsg(
+          `Demande envoyée depuis ${fromName} vers ${targetName}. Les gestionnaires de ${targetName} pourront accepter dans leurs alertes.`
+        )
+      }
       await refresh()
     } catch (e: unknown) {
       const detail = e instanceof ApiError ? e.detail : e instanceof Error ? e.message : 'Échec'
@@ -79,19 +95,45 @@ export function RelierPlaceButton({
     }
   }
 
-  if (!user || loading || !canLink) return null
+  if (!user || loading) return null
+
+  // Un seul lieu géré = la cible : rien à relier depuis un autre de vos lieux.
+  if (!canLink && targetIsManaged) {
+    return (
+      <p className="text-xs text-slate-500 leading-relaxed">
+        C’est votre seul lieu géré ici. Pour le relier, il faut un autre lieu dont vous êtes
+        gestionnaire — ou ouvrez la fiche d’un lieu que vous ne gérez pas et proposez le lien
+        depuis là.
+      </p>
+    )
+  }
+
+  if (!canLink) return null
 
   if (status === 'accepted') {
     return (
-      <p className="text-xs text-emerald-400/90">Lieu déjà relié à l’un de vos lieux.</p>
+      <p className="text-xs text-emerald-400/90">
+        Déjà lieu ami avec {targetName}
+        {soleManaged ? ` (via ${soleManaged.name})` : ' (via l’un de vos lieux)'}.
+      </p>
     )
   }
 
   if (status === 'pending') {
     return (
-      <p className="text-xs text-amber-300/90">Demande de lien en cours…</p>
+      <p className="text-xs text-amber-300/90">
+        Demande en cours — en attente des gestionnaires de {targetName}.
+      </p>
     )
   }
+
+  const buttonLabel = soleManaged
+    ? `Relier ${soleManaged.name} à ${targetName}`
+    : `Relier un de mes lieux à ${targetName}…`
+
+  const helpText = targetIsManaged
+    ? 'Vous gérez les deux lieux : le lien sera créé immédiatement.'
+    : `Une demande sera envoyée aux gestionnaires de ${targetName}.`
 
   return (
     <div className="space-y-2">
@@ -101,12 +143,15 @@ export function RelierPlaceButton({
         onClick={onRelierClick}
         className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full border border-amber-600/50 text-amber-100 hover:bg-amber-950/40 font-medium disabled:opacity-40"
       >
-        Relier à {targetName}…
+        {buttonLabel}
       </button>
+      <p className="text-xs text-slate-500 leading-relaxed">{helpText}</p>
 
       {pickOpen && managed.length > 1 && (
         <div className="rounded-xl border border-slate-700 bg-slate-950/90 p-3 space-y-2">
-          <p className="text-xs text-slate-400">Quel lieu souhaitez-vous relier ?</p>
+          <p className="text-xs text-slate-400">
+            Quel de vos lieux souhaitez-vous relier à {targetName} ?
+          </p>
           <ul className="space-y-1.5">
             {managed.map((m) => (
               <li key={m.id}>

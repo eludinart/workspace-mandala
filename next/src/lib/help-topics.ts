@@ -63,6 +63,10 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
     'Membres du lieu : rôles et retraits, pour les gestionnaires.',
     'Le groupe cœur est un cercle du lieu. Le cocher ne donne pas les droits de gestion.',
   ],
+  'place-friends': [
+    'Lieux reliés à celui-ci (lieux amis) et demandes en cours.',
+    'Pour proposer un nouveau lien, ouvrez la fiche d’un autre lieu sur Découvrir.',
+  ],
   'place-invites': [
     'Créez un lien ou un code pour inviter quelqu’un dans le lieu.',
   ],

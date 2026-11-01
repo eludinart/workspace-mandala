@@ -22,6 +22,7 @@ import { ManagedPlacesPage } from '@/views/ManagedPlacesPage'
 import { AdminPage } from '@/views/AdminPage'
 import { PlaceAnnouncementsPage } from '@/views/PlaceAnnouncementsPage'
 import { PlaceInvitesPage } from '@/views/PlaceInvitesPage'
+import { PlaceFriendPlacesPage } from '@/views/PlaceFriendPlacesPage'
 import { NotificationsPage } from '@/views/NotificationsPage'
 import { CharterPage } from '@/views/CharterPage'
 import { PlaceListPage } from '@/views/PlaceListPage'
@@ -48,6 +49,7 @@ export type MandalaPage =
   | 'place-profile'
   | 'place-charter'
   | 'place-members'
+  | 'place-friends'
   | 'place-invites'
   | 'place-announcements'
   | 'managed-places'
@@ -87,6 +89,7 @@ const APP_PAGES_FROM_URL: MandalaPage[] = [
   'place-profile',
   'place-charter',
   'place-members',
+  'place-friends',
   'place-invites',
   'place-announcements',
   'managed-places',
@@ -523,6 +526,8 @@ export function MandalaApp() {
             onOpenMessages={(userId) => navigate('messages', { messagesUserId: userId })}
           />
         )
+      case 'place-friends':
+        return <PlaceFriendPlacesPage onNavigate={navigate} />
       case 'place-invites':
         return <PlaceInvitesPage onNavigate={navigate} />
       case 'place-announcements':

@@ -7,6 +7,12 @@ import { getPool, isDbConfigured, table } from '@/lib/db'
 import { assertUserCanManageCommunity, getCommunityById } from '@/lib/db-communities'
 import { canAccessFeatureDoor } from '@/lib/db-feature-doors'
 import { createNotification } from '@/lib/db-notifications'
+import {
+  buildPlaceLinkRequestEmailBody,
+  isTransactionalEmailConfigured,
+  resolvePublicAppOrigin,
+  sendTransactionalEmail,
+} from '@/lib/mandala-mail'
 
 export type PlaceLinkStatus = 'pending' | 'accepted' | 'rejected' | 'canceled'
 
@@ -123,6 +129,68 @@ export async function listAcceptedFriendCommunityIds(
   return out
 }
 
+export type PlaceFriendLinkItem = {
+  link_id: number
+  status: 'accepted' | 'pending'
+  other: {
+    id: number
+    slug: string
+    name: string
+    logo_emoji: string | null
+    accent_color: string | null
+    avatar: string | null
+  }
+  /** True si notre lieu a initié la demande (pending). */
+  we_requested: boolean
+  created_at: string | null
+}
+
+/** Liens accepted + pending d’un lieu (vue gestionnaire). */
+export async function listPlaceFriendLinksForCommunity(
+  communityId: number
+): Promise<PlaceFriendLinkItem[]> {
+  if (!isDbConfigured() || !communityId) return []
+  await ensurePlaceLinksTable()
+  const pool = getPool()
+  const t = table('mandala_place_links')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT *
+     FROM ${t}
+     WHERE status IN ('accepted', 'pending')
+       AND (community_a_id = ? OR community_b_id = ?)
+     ORDER BY
+       CASE status WHEN 'accepted' THEN 0 ELSE 1 END,
+       created_at DESC`,
+    [communityId, communityId]
+  )
+
+  const items: PlaceFriendLinkItem[] = []
+  for (const r of rows ?? []) {
+    const link = mapLink(r)
+    const otherId =
+      link.community_a_id === communityId ? link.community_b_id : link.community_a_id
+    if (!otherId || otherId === communityId) continue
+    const other = await getCommunityById(otherId)
+    if (!other || !other.is_active) continue
+    const status = link.status === 'accepted' ? 'accepted' : 'pending'
+    items.push({
+      link_id: link.id,
+      status,
+      other: {
+        id: other.id,
+        slug: other.slug,
+        name: other.name,
+        logo_emoji: other.logo_emoji,
+        accent_color: other.accent_color,
+        avatar: other.avatar,
+      },
+      we_requested: link.requested_by_community_id === communityId,
+      created_at: link.created_at,
+    })
+  }
+  return items
+}
+
 /** True si A et B sont lieux amis (accepted). */
 export async function arePlacesFriends(
   communityId1: number,
@@ -172,6 +240,8 @@ export async function requestPlaceLink(params: {
   const pool = getPool()
   const t = table('mandala_place_links')
 
+  let pending: PlaceLinkRow
+
   if (existing && (existing.status === 'rejected' || existing.status === 'canceled')) {
     await pool.execute(
       `UPDATE ${t}
@@ -182,25 +252,52 @@ export async function requestPlaceLink(params: {
     )
     const refreshed = await getPlaceLinkBetween(fromCommunityId, toCommunityId)
     if (!refreshed) throw new Error('Lien introuvable après mise à jour')
-    await notifyTargetManagersOfPlaceLink(refreshed, fromCommunityId, toCommunityId, userId)
-    return refreshed
+    pending = refreshed
+  } else {
+    const [res] = await pool.execute(
+      `INSERT INTO ${t}
+        (community_a_id, community_b_id, requested_by_community_id, requested_by_user_id, status)
+       VALUES (?, ?, ?, ?, 'pending')`,
+      [a, b, fromCommunityId, userId]
+    )
+    const insertId = Number((res as ResultSetHeader).insertId)
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT * FROM ${t} WHERE id = ? LIMIT 1`,
+      [insertId]
+    )
+    if (!rows[0]) throw new Error('Création du lien impossible')
+    pending = mapLink(rows[0])
   }
 
-  const [res] = await pool.execute(
-    `INSERT INTO ${t}
-      (community_a_id, community_b_id, requested_by_community_id, requested_by_user_id, status)
-     VALUES (?, ?, ?, ?, 'pending')`,
-    [a, b, fromCommunityId, userId]
-  )
-  const insertId = Number((res as ResultSetHeader).insertId)
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT * FROM ${t} WHERE id = ? LIMIT 1`,
-    [insertId]
-  )
-  if (!rows[0]) throw new Error('Création du lien impossible')
-  const created = mapLink(rows[0])
-  await notifyTargetManagersOfPlaceLink(created, fromCommunityId, toCommunityId, userId)
-  return created
+  // Même gestionnaire des deux côtés → acceptation immédiate (pas d’alerte à soi-même).
+  const managesTarget = await userManagesCommunity(userId, toCommunityId, isAppAdmin)
+  if (managesTarget) {
+    await pool.execute(
+      `UPDATE ${t}
+       SET status = 'accepted', responded_at = NOW(), responded_by_user_id = ?
+       WHERE id = ? AND status = 'pending'`,
+      [userId, pending.id]
+    )
+    const accepted = await getPlaceLinkById(pending.id)
+    if (!accepted) throw new Error('Lien introuvable après acceptation')
+    return accepted
+  }
+
+  await notifyTargetManagersOfPlaceLink(pending, fromCommunityId, toCommunityId, userId)
+  return pending
+}
+
+async function userManagesCommunity(
+  userId: number,
+  communityId: number,
+  isAppAdmin: boolean
+): Promise<boolean> {
+  try {
+    await assertUserCanManageCommunity(userId, communityId, { isAppAdmin })
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function listManagerUserIds(communityId: number): Promise<number[]> {
@@ -215,7 +312,21 @@ async function listManagerUserIds(communityId: number): Promise<number[]> {
   return rows.map((r) => Number(r.user_id)).filter((n) => n > 0)
 }
 
-/** Alerte les gestionnaires du lieu cible — aucune action tant qu’ils n’ouvrent pas l’alerte. */
+async function lookupUserEmail(userId: number): Promise<string | null> {
+  if (!userId) return null
+  const pool = getPool()
+  const tUsers = table('users')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_email FROM ${tUsers} WHERE ID = ? LIMIT 1`,
+    [userId]
+  )
+  const email = String(rows[0]?.user_email ?? '')
+    .trim()
+    .toLowerCase()
+  return email.includes('@') ? email : null
+}
+
+/** Alerte les gestionnaires du lieu cible — cloche (+ push) et e-mail si SMTP/Resend. */
 async function notifyTargetManagersOfPlaceLink(
   link: PlaceLinkRow,
   fromCommunityId: number,
@@ -226,6 +337,14 @@ async function notifyTargetManagersOfPlaceLink(
   const to = await getCommunityById(toCommunityId)
   const fromName = from?.name ?? 'Un lieu'
   const toName = to?.name ?? 'votre lieu'
+  const body = `${fromName} souhaite se relier à ${toName}. Acceptez ou refusez depuis cette alerte.`
+  const alertsUrl = `${resolvePublicAppOrigin()}/?page=notifications`
+  const mailConfigured = isTransactionalEmailConfigured()
+  const { subject, text } = buildPlaceLinkRequestEmailBody({
+    fromPlaceName: fromName,
+    toPlaceName: toName,
+    alertsUrl,
+  })
   const managers = await listManagerUserIds(toCommunityId)
   for (const managerId of managers) {
     if (managerId === requesterUserId) continue
@@ -233,7 +352,7 @@ async function notifyTargetManagersOfPlaceLink(
       await createNotification({
         type: 'place_link_request',
         title: 'Ce lieu souhaite se lier',
-        body: `${fromName} souhaite se relier à ${toName}. Acceptez ou refusez depuis cette alerte.`,
+        body,
         recipient_type: 'user',
         recipient_id: managerId,
         created_by: requesterUserId,
@@ -243,6 +362,13 @@ async function notifyTargetManagersOfPlaceLink(
         action_label: 'Répondre',
         priority: 'high',
       })
+    } catch {
+      /* non bloquant */
+    }
+    if (!mailConfigured) continue
+    try {
+      const email = await lookupUserEmail(managerId)
+      if (email) await sendTransactionalEmail({ to: email, subject, text })
     } catch {
       /* non bloquant */
     }

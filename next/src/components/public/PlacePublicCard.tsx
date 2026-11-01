@@ -9,7 +9,7 @@ type Props = {
   place: PublicCommunityCard
   selected?: boolean
   onSelect?: () => void
-  /** Affiche « Relier à… » (carte / Découvrir connecté). */
+  /** Affiche la proposition de lien lieu → lieu (carte / Découvrir connecté). */
   showRelier?: boolean
 }
 

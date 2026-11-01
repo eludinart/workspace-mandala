@@ -75,7 +75,7 @@ Règles :
 - Gestionnaire du **lieu cible** (pas celui qui a demandé) accepte / refuse → notif existante (`type` dédié, actions Accepter / Refuser).
 - « Lieu ami » = `status = 'accepted'`.
 
-Pas de page « Lieux amis » : lecture via carte + helpers `listFriendPlaceIds(communityId)`.
+Lecture gestionnaire : page « Lieux amis » (`place-friends`) + `listPlaceFriendLinksForCommunity`. Helpers `listAcceptedFriendCommunityIds` pour Ailleurs / accès.
 
 ## 3. Ouverture événement / ressource (case Suite suivante)
 

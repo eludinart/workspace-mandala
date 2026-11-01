@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
+import { RelierPlaceButton } from '@/components/place/RelierPlaceButton'
 import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
 import { ResourceLibrary } from '@/components/resources/ResourceLibrary'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
@@ -121,6 +122,11 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                 </a>
               )}
             </div>
+            {place.id > 0 && (
+              <div className="pt-1">
+                <RelierPlaceButton targetCommunityId={place.id} targetName={place.name} />
+              </div>
+            )}
           </div>
         </section>
 

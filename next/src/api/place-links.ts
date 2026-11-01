@@ -10,6 +10,8 @@ export const placeLinksApi = {
       from_community_id: number | null
       link_id: number | null
       managed: ManagedPlaceOption[]
+      /** True si la cible est aussi un lieu géré par l’utilisateur. */
+      target_is_managed?: boolean
     }>,
 
   request: (fromCommunityId: number, toCommunityId: number) =>

@@ -73,5 +73,24 @@ export const managerApi = {
         action: 'rotate',
         origin,
       }) as Promise<{ invite: PlaceInviteInfo }>,
+    friendPlaces: (communityId: number) =>
+      api.get(`/api/manager/communities/${communityId}/friend-places`) as Promise<{
+        items: PlaceFriendLink[]
+      }>,
   },
+}
+
+export type PlaceFriendLink = {
+  link_id: number
+  status: 'accepted' | 'pending'
+  other: {
+    id: number
+    slug: string
+    name: string
+    logo_emoji: string | null
+    accent_color: string | null
+    has_avatar?: boolean
+  }
+  we_requested: boolean
+  created_at: string | null
 }

@@ -182,6 +182,25 @@ export function buildPlaceInviteEmailBody(params: {
   return { subject, text }
 }
 
+export function buildPlaceLinkRequestEmailBody(params: {
+  fromPlaceName: string
+  toPlaceName: string
+  alertsUrl: string
+}): { subject: string; text: string } {
+  const subject = `${params.fromPlaceName} souhaite se relier à ${params.toPlaceName}`
+  const text = [
+    'Bonjour,',
+    '',
+    `Le lieu « ${params.fromPlaceName} » souhaite se relier à « ${params.toPlaceName} » sur Mandala.`,
+    '',
+    'Ouvrez vos alertes pour accepter ou refuser :',
+    params.alertsUrl,
+    '',
+    '— L’équipe Mandala',
+  ].join('\n')
+  return { subject, text }
+}
+
 export function resolvePublicAppOrigin(reqOrigin?: string | null): string {
   const configured = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '').trim()
   if (configured) return configured

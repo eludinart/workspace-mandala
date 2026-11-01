@@ -48,14 +48,17 @@ export async function GET(req: NextRequest) {
 
     const managed = await listCommunitiesManagedByUser(uid)
     const managedIds = managed.map((c) => c.id)
+    const linkableFrom = managed.filter((c) => c.id !== toId)
     const status = await linkStatusTowardTarget({
       managedCommunityIds: managedIds,
       targetCommunityId: toId,
     })
 
     return NextResponse.json({
-      can_link: managedIds.length > 0 && !managedIds.includes(toId),
-      managed: managed.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
+      // Peut proposer un lien dès qu’un autre lieu géré existe (y compris cible = lieu géré).
+      can_link: linkableFrom.length > 0,
+      managed: linkableFrom.map((c) => ({ id: c.id, slug: c.slug, name: c.name })),
+      target_is_managed: managedIds.includes(toId),
       ...status,
     })
   } catch (err: unknown) {
