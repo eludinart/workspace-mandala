@@ -5,6 +5,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import { ensureCommunitiesTables, listCommunitiesForUser } from './db-communities'
+import { notifyPlacesMembers, resolveActorLabel } from './db-place-activity-notify'
 import { listVisibleResourcesByAuthor } from './db-resources'
 import {
   isSkillRegister,
@@ -274,6 +275,13 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
       ? [...new Set(input.place_ids.filter((id) => mineIds.has(id)))]
       : []
 
+  let before: SkillProfile | null = null
+  try {
+    before = await loadProfile(userId)
+  } catch {
+    before = null
+  }
+
   const tags: SkillTag[] = []
   const seen = new Set<string>()
   for (const raw of input.tags) {
@@ -313,7 +321,46 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
     )
   }
 
-  return loadProfile(userId)
+  const profile = await loadProfile(userId)
+
+  const hasContent = Boolean(tags.length || offer || seek)
+  const beforeHadContent = Boolean(
+    before &&
+      (before.tags.length || before.offer_text.trim() || before.seek_text.trim()) &&
+      before.scope !== 'hidden'
+  )
+  const nowVisible = input.scope !== 'hidden' && hasContent
+  const notifyPlaceIds =
+    input.scope === 'places'
+      ? placeIds
+      : input.scope === 'mandala'
+        ? mine.map((c) => c.id)
+        : []
+  if (nowVisible && !beforeHadContent && notifyPlaceIds.length) {
+    void (async () => {
+      try {
+        const actor = await resolveActorLabel(userId)
+        await notifyPlacesMembers({
+          communityIds: notifyPlaceIds,
+          actorUserId: userId,
+          type: 'skill_profile',
+          titleForPlace: (placeName) => `${actor} a rempli sa fiche compétences (${placeName})`,
+          body: tags
+            .slice(0, 5)
+            .map((t) => t.label)
+            .join(' · ') || offer.slice(0, 160) || null,
+          actionUrl: 'mandala:skills',
+          actionLabel: 'Voir les compétences',
+          sourceType: 'mandala_skill_profile',
+          sourceId: userId,
+        })
+      } catch {
+        /* non bloquant */
+      }
+    })()
+  }
+
+  return profile
 }
 
 async function viewerCanSeeProfile(

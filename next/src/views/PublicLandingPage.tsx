@@ -113,7 +113,7 @@ export function PublicLandingPage() {
               débloquer les annonces complètes, le mur de vos lieux et les brèves des membres.
             </p>
           </div>
-          <WallDiscoverSection mapHeightClass="h-[min(40vh,16rem)] sm:h-[min(56vh,30rem)]" feedLimit={20} />
+          <WallDiscoverSection feedLimit={20} />
         </section>
 
         <section id="projet" className="scroll-mt-16 py-16 sm:py-20 bg-slate-900/40">

@@ -25,4 +25,12 @@ export const placeLinksApi = {
       ok: boolean
       link: unknown
     }>,
+
+  /** Lieux amis (accepted) d’un lieu — pour traits carte / fiche. Porte lieux_lies. */
+  friendsOf: (communityId: number) =>
+    api.get(`/api/place-links/friends?community_id=${communityId}`) as Promise<{
+      friend_ids: number[]
+      friends: Array<{ id: number; slug: string; name: string }>
+      can_view: boolean
+    }>,
 }

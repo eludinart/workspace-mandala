@@ -108,23 +108,49 @@ export async function getPlaceLinkBetween(
 export async function listAcceptedFriendCommunityIds(
   communityId: number
 ): Promise<number[]> {
+  const friends = await listAcceptedFriendsBrief(communityId)
+  return friends.map((f) => f.id)
+}
+
+export type AcceptedFriendBrief = {
+  id: number
+  slug: string
+  name: string
+}
+
+/** Lieux amis accepted avec nom (carte / fiche Relier). */
+export async function listAcceptedFriendsBrief(
+  communityId: number
+): Promise<AcceptedFriendBrief[]> {
   if (!isDbConfigured() || !communityId) return []
   await ensurePlaceLinksTable()
   const pool = getPool()
   const t = table('mandala_place_links')
+  const tC = table('mandala_communities')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT community_a_id, community_b_id
-     FROM ${t}
-     WHERE status = 'accepted'
-       AND (community_a_id = ? OR community_b_id = ?)`,
-    [communityId, communityId]
+    `SELECT
+       CASE WHEN l.community_a_id = ? THEN l.community_b_id ELSE l.community_a_id END AS other_id,
+       c.slug, c.name
+     FROM ${t} l
+     JOIN ${tC} c ON c.id = CASE
+       WHEN l.community_a_id = ? THEN l.community_b_id ELSE l.community_a_id END
+       AND c.is_active = 1
+     WHERE l.status = 'accepted'
+       AND (l.community_a_id = ? OR l.community_b_id = ?)
+     ORDER BY c.name ASC`,
+    [communityId, communityId, communityId, communityId]
   )
-  const out: number[] = []
+  const out: AcceptedFriendBrief[] = []
+  const seen = new Set<number>()
   for (const r of rows ?? []) {
-    const a = Number(r.community_a_id)
-    const b = Number(r.community_b_id)
-    const other = a === communityId ? b : a
-    if (other > 0 && !out.includes(other)) out.push(other)
+    const id = Number(r.other_id)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push({
+      id,
+      slug: String(r.slug || ''),
+      name: String(r.name || 'Lieu'),
+    })
   }
   return out
 }
@@ -338,7 +364,7 @@ async function notifyTargetManagersOfPlaceLink(
   const fromName = from?.name ?? 'Un lieu'
   const toName = to?.name ?? 'votre lieu'
   const body = `${fromName} souhaite se relier à ${toName}. Acceptez ou refusez depuis cette alerte.`
-  const alertsUrl = `${resolvePublicAppOrigin()}/?page=notifications`
+  const alertsUrl = `${resolvePublicAppOrigin()}/app?page=notifications`
   const mailConfigured = isTransactionalEmailConfigured()
   const { subject, text } = buildPlaceLinkRequestEmailBody({
     fromPlaceName: fromName,

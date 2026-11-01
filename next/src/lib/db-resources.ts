@@ -4,6 +4,7 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import { ensureCommunitiesTables, listCommunitiesForUser } from './db-communities'
+import { notifyPlacesMembers, resolveActorLabel } from './db-place-activity-notify'
 import { removeUpload } from './resource-files'
 import {
   isResourceKind,
@@ -357,6 +358,34 @@ export async function createResource(authorId: number, input: ResourceInput): Pr
   await replaceLinks(id, placeIds, normalizeTags(input.tags), (input.image_paths ?? []).slice(0, MAX_RESOURCE_IMAGES))
   const detail = await getResourceForViewer(id, authorId)
   if (!detail) throw Object.assign(new Error('Ressource introuvable'), { status: 500 })
+
+  const notifyPlaceIds =
+    input.scope === 'places'
+      ? placeIds
+      : input.scope === 'mandala'
+        ? mine.map((c) => c.id)
+        : []
+  if (notifyPlaceIds.length) {
+    void (async () => {
+      try {
+        const actor = await resolveActorLabel(authorId)
+        await notifyPlacesMembers({
+          communityIds: notifyPlaceIds,
+          actorUserId: authorId,
+          type: 'resource_added',
+          titleForPlace: (placeName) => `${actor} a ajouté une ressource pour ${placeName}`,
+          body: title,
+          actionUrl: `mandala:resources`,
+          actionLabel: 'Voir les ressources',
+          sourceType: 'mandala_resource',
+          sourceId: id,
+        })
+      } catch {
+        /* non bloquant */
+      }
+    })()
+  }
+
   return detail
 }
 

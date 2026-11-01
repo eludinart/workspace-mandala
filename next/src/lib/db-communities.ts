@@ -812,6 +812,29 @@ export async function joinCommunity(params: {
   )
   const role = (rows[0]?.role ? String(rows[0].role) : 'member') as CommunityRole
 
+  void import('./db-place-activity-notify')
+    .then(async ({ notifyPlaceMembers, resolveActorLabel }) => {
+      const actor = await resolveActorLabel(params.userId)
+      const placeName = community.name?.trim() || 'votre lieu'
+      const slug = community.slug?.trim()
+      await notifyPlaceMembers({
+        communityId: community.id,
+        actorUserId: params.userId,
+        type: 'member_joined',
+        title: `${actor} a rejoint ${placeName}`,
+        body: null,
+        actionUrl: slug
+          ? `mandala:place-members?community=${encodeURIComponent(slug)}`
+          : 'mandala:place-members',
+        actionLabel: 'Voir les membres',
+        sourceType: 'community_member',
+        sourceId: params.userId,
+      })
+    })
+    .catch(() => {
+      /* non bloquant */
+    })
+
   return { ...community, role }
 }
 
@@ -1090,6 +1113,19 @@ export async function updateCommunityAdmin(
   const updated = await getCommunityById(id)
   if (!updated) throw new Error('Mise à jour impossible')
   return updated
+}
+
+/** Ids membres d’un lieu (notifications d’activité). */
+export async function listCommunityMemberUserIds(communityId: number): Promise<number[]> {
+  if (!communityId) return []
+  await ensureCommunitiesTables()
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${tM} WHERE community_id = ?`,
+    [communityId]
+  )
+  return (rows ?? []).map((r) => Number(r.user_id)).filter((id) => id > 0)
 }
 
 /** Tous les membres d'une communauté (admin, sans filtre profil public). */
@@ -1756,9 +1792,14 @@ export type PublicCommunityCard = Pick<
   | 'listed_public'
   | 'profile_public'
   | 'join_mode'
->
+> & {
+  member_count?: number
+}
 
-function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
+function mapPublicCommunityCard(
+  c: CommunityRecord,
+  memberCount?: number
+): PublicCommunityCard {
   return {
     id: c.id,
     slug: c.slug,
@@ -1780,6 +1821,7 @@ function mapPublicCommunityCard(c: CommunityRecord): PublicCommunityCard {
     listed_public: c.listed_public,
     profile_public: c.profile_public,
     join_mode: c.join_mode,
+    ...(memberCount != null ? { member_count: memberCount } : {}),
   }
 }
 
@@ -1840,11 +1882,17 @@ export async function listPublicCommunitiesForLanding(): Promise<PublicCommunity
   await seedDefaultCommunitiesIfEmpty()
   const pool = getPool()
   const tC = table('mandala_communities')
+  const tM = table('mandala_community_members')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT ${COMMUNITY_COLS}
-     FROM ${tC} WHERE is_active = 1 AND COALESCE(listed_public, 1) = 1 ORDER BY name ASC`
+    `SELECT ${COMMUNITY_COLS},
+            (SELECT COUNT(*) FROM ${tM} m WHERE m.community_id = ${tC}.id) AS member_count
+     FROM ${tC}
+     WHERE is_active = 1 AND COALESCE(listed_public, 1) = 1
+     ORDER BY name ASC`
   )
-  return (rows ?? []).map((r) => mapPublicCommunityCard(mapCommunityRow(r)))
+  return (rows ?? []).map((r) =>
+    mapPublicCommunityCard(mapCommunityRow(r), Number(r.member_count ?? 0))
+  )
 }
 
 export type CharterAcceptanceStatus = {

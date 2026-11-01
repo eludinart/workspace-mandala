@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
+import { placeLinksApi } from '@/api/place-links'
 import { WallFeed } from '@/components/wall/WallFeed'
 import { PlacePublicCard } from '@/components/public/PlacePublicCard'
 import type { WallFeedSort } from '@/lib/wall-feed-types'
@@ -12,15 +13,19 @@ const PlacesMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="h-[min(48vh,24rem)] rounded-2xl border border-slate-800 bg-slate-950 flex items-center justify-center">
+      <div className="h-[min(48vh,22rem)] md:h-[min(58vh,34rem)] rounded-[1.35rem] border border-slate-800 bg-slate-950 flex items-center justify-center">
         <p className="text-sm text-slate-500">Chargement de la carte…</p>
       </div>
     ),
   }
 )
 
+/** Largeur du cadre contenu (comme la photo hero) — carte pleine largeur. */
+const DEFAULT_MAP_HEIGHT =
+  'h-[min(48vh,22rem)] md:h-[min(58vh,34rem)] lg:h-[min(62vh,38rem)]'
+
 export function WallDiscoverSection({
-  mapHeightClass = 'h-[min(40vh,16rem)] sm:h-[min(52vh,28rem)]',
+  mapHeightClass = DEFAULT_MAP_HEIGHT,
   feedLimit = 24,
   showPlacesList = true,
   onEventClick,
@@ -37,6 +42,8 @@ export function WallDiscoverSection({
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const [friendIds, setFriendIds] = useState<number[]>([])
+  const [mapFullscreen, setMapFullscreen] = useState(false)
 
   const loadPlaces = useCallback(async () => {
     setLoading(true)
@@ -54,15 +61,52 @@ export function WallDiscoverSection({
     void loadPlaces()
   }, [loadPlaces])
 
-  const selectPlace = useCallback((slug: string) => {
-    setSelectedSlug(slug)
-    document.getElementById(`mur-lieu-${slug}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  useEffect(() => {
+    if (!selectedSlug) {
+      setFriendIds([])
+      return
+    }
+    const place = places.find((p) => p.slug === selectedSlug)
+    if (!place?.id) {
+      setFriendIds([])
+      return
+    }
+    let cancelled = false
+    void placeLinksApi
+      .friendsOf(place.id)
+      .then((res) => {
+        if (!cancelled) setFriendIds(res.can_view ? res.friend_ids ?? [] : [])
+      })
+      .catch(() => {
+        if (!cancelled) setFriendIds([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedSlug, places])
+
+  useEffect(() => {
+    if (!mapFullscreen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMapFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [mapFullscreen])
+
+  const selectPlaceOnMap = useCallback((slug: string) => {
+    setSelectedSlug(slug || null)
   }, [])
 
   return (
     <div className="space-y-10">
-      <div className="grid lg:grid-cols-5 gap-8 lg:gap-10 items-start">
-        <div className="lg:col-span-2 space-y-4 lg:sticky lg:top-20">
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="m-landing-eyebrow mb-2">Carte</p>
             <h2 className="text-2xl sm:text-3xl text-slate-100">Le réseau</h2>
@@ -72,25 +116,48 @@ export function WallDiscoverSection({
                 : `${places.length} lieu${places.length > 1 ? 'x' : ''} — cliquez pour explorer`}
             </p>
           </div>
-          <div className="overflow-hidden rounded-[1.35rem] border border-slate-800 shadow-xl shadow-black/20">
+          <button
+            type="button"
+            onClick={() => setMapFullscreen(true)}
+            className="md:hidden text-sm px-3 py-2 rounded-xl border border-violet-500/40 bg-violet-950/40 text-violet-100 hover:bg-violet-900/40"
+          >
+            Explorer en plein écran
+          </button>
+          <button
+            type="button"
+            onClick={() => setMapFullscreen(true)}
+            className="hidden md:inline-flex text-sm px-3 py-2 rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-800/80"
+          >
+            Agrandir la carte
+          </button>
+        </div>
+        <div
+          className={`overflow-hidden rounded-[1.35rem] border border-slate-800 shadow-xl shadow-black/20 ${
+            mapFullscreen ? 'invisible h-0 border-0 shadow-none overflow-hidden' : ''
+          }`}
+        >
+          {!mapFullscreen && (
             <PlacesMap
               places={places}
               selectedSlug={selectedSlug}
-              onSelect={selectPlace}
+              friendCommunityIds={friendIds}
+              onSelect={selectPlaceOnMap}
               heightClassName={mapHeightClass}
+              sizeToken="inline"
+              frameClassName="rounded-[1.35rem]"
             />
-          </div>
+          )}
         </div>
+      </section>
 
-        <div className="lg:col-span-3 min-w-0">
-          <WallFeed
-            initialSort={initialSort}
-            limit={feedLimit}
-            onEventClick={onEventClick}
-            onOpenProfile={onOpenProfile}
-          />
-        </div>
-      </div>
+      <section className="min-w-0">
+        <WallFeed
+          initialSort={initialSort}
+          limit={feedLimit}
+          onEventClick={onEventClick}
+          onOpenProfile={onOpenProfile}
+        />
+      </section>
 
       {showPlacesList && places.length > 0 && (
         <section id="lieux" className="space-y-5 pt-6 border-t border-slate-800/70 scroll-mt-16">
@@ -111,6 +178,43 @@ export function WallDiscoverSection({
             ))}
           </div>
         </section>
+      )}
+
+      {mapFullscreen && (
+        <div
+          className="fixed inset-0 z-[80] bg-slate-950 flex flex-col"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Carte des lieux en grand"
+        >
+          <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-2.5 border-b border-slate-800 bg-slate-950/95">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-100 truncate">Le réseau</p>
+              <p className="text-[11px] text-slate-500 truncate">
+                {places.length} lieu{places.length > 1 ? 'x' : ''} — liens entre lieux amis
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMapFullscreen(false)}
+              className="shrink-0 text-sm px-3 py-2 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
+            >
+              Fermer
+            </button>
+          </div>
+          <div className="flex-1 min-h-0">
+            <PlacesMap
+              places={places}
+              selectedSlug={selectedSlug}
+              friendCommunityIds={friendIds}
+              onSelect={selectPlaceOnMap}
+              heightClassName="h-full min-h-[70vh]"
+              sizeToken="fullscreen"
+              frameClassName="rounded-none border-0 h-full shadow-none"
+              hideCaption
+            />
+          </div>
+        </div>
       )}
     </div>
   )

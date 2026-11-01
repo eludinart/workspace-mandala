@@ -23,6 +23,7 @@ export function RelierPlaceButton({
   const [targetIsManaged, setTargetIsManaged] = useState(false)
   const [status, setStatus] = useState<'none' | 'pending' | 'accepted' | string>('none')
   const [managed, setManaged] = useState<ManagedPlaceOption[]>([])
+  const [targetFriends, setTargetFriends] = useState<Array<{ id: number; name: string }>>([])
   const [pickOpen, setPickOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -33,6 +34,7 @@ export function RelierPlaceButton({
       setCanLink(false)
       setTargetIsManaged(false)
       setManaged([])
+      setTargetFriends([])
       setLoading(false)
       return
     }
@@ -43,10 +45,21 @@ export function RelierPlaceButton({
       setTargetIsManaged(Boolean(res.target_is_managed))
       setStatus(res.status || 'none')
       setManaged(res.managed || [])
+      try {
+        const fr = await placeLinksApi.friendsOf(targetCommunityId)
+        setTargetFriends(
+          fr.can_view
+            ? (fr.friends ?? []).map((f) => ({ id: f.id, name: f.name }))
+            : []
+        )
+      } catch {
+        setTargetFriends([])
+      }
     } catch {
       setCanLink(false)
       setTargetIsManaged(false)
       setManaged([])
+      setTargetFriends([])
     } finally {
       setLoading(false)
     }
@@ -112,10 +125,21 @@ export function RelierPlaceButton({
 
   if (status === 'accepted') {
     return (
-      <p className="text-xs text-emerald-400/90">
-        Déjà lieu ami avec {targetName}
-        {soleManaged ? ` (via ${soleManaged.name})` : ' (via l’un de vos lieux)'}.
-      </p>
+      <div className="space-y-1.5">
+        <p className="text-xs text-emerald-400/90 font-medium">
+          {targetName} — lieux déjà reliés
+          {soleManaged ? ` (lien via ${soleManaged.name})` : ''}
+        </p>
+        {targetFriends.length > 0 ? (
+          <ul className="text-xs text-slate-300 space-y-0.5 list-disc list-inside">
+            {targetFriends.map((f) => (
+              <li key={f.id}>{f.name}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-slate-500">Aucun autre lieu ami listé pour l’instant.</p>
+        )}
+      </div>
     )
   }
 
@@ -137,6 +161,16 @@ export function RelierPlaceButton({
 
   return (
     <div className="space-y-2">
+      {targetFriends.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs text-slate-400">Déjà relié à :</p>
+          <ul className="text-xs text-slate-300 space-y-0.5 list-disc list-inside">
+            {targetFriends.map((f) => (
+              <li key={f.id}>{f.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <button
         type="button"
         disabled={busy}

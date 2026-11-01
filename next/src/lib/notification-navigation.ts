@@ -106,6 +106,10 @@ export function parseNotificationTarget(notif: NotificationItem): NotificationNa
     }
   }
   if (type.includes('event')) return { page: 'events' }
+  if (type.includes('agora') || type.includes('post')) return { page: 'home' }
+  if (type.includes('resource')) return { page: 'resources' }
+  if (type.includes('skill')) return { page: 'skills' }
+  if (type.includes('member')) return { page: 'place-members' }
   return null
 }
 

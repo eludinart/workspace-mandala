@@ -22,6 +22,8 @@ export type PublicCommunityCard = {
   listed_public?: boolean
   profile_public?: boolean
   join_mode?: 'open' | 'invite' | 'closed'
+  /** Présent sur le catalogue / carte (hover). */
+  member_count?: number
 }
 
 export type PublicCommunityProfile = PublicCommunityCard & {

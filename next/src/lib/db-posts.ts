@@ -3,7 +3,14 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
-import { canManageCommunityInContext, ensureCommunitiesTables, requireCommunityMembership, type CommunityRole } from './db-communities'
+import {
+  canManageCommunityInContext,
+  ensureCommunitiesTables,
+  getCommunityById,
+  requireCommunityMembership,
+  type CommunityRole,
+} from './db-communities'
+import { notifyPlaceMembers, resolveActorLabel } from './db-place-activity-notify'
 import { ensureWallPublicColumn, parseWallPublic, wallPublicFromRow } from './wall-public'
 
 export type PostType = 'logistics' | 'inspiration'
@@ -123,19 +130,48 @@ export async function createPost(
   const insertId = Number((result as { insertId?: number }).insertId)
   const posts = await getPostsByCommunity(communityId, 1)
   const created = posts.find((p) => p.id === insertId)
-  if (created) return created
-  return {
-    id: insertId,
-    community_id: communityId,
-    author_id: authorId,
-    type: data.type,
-    content,
-    created_at: new Date().toISOString(),
-    author_pseudo: `user_${authorId}`,
-    author_avatar_emoji: '🌸',
-    author_avatar: null,
-    wall_public: parseWallPublic(data.wall_public),
-  }
+  const row =
+    created ??
+    ({
+      id: insertId,
+      community_id: communityId,
+      author_id: authorId,
+      type: data.type,
+      content,
+      created_at: new Date().toISOString(),
+      author_pseudo: `user_${authorId}`,
+      author_avatar_emoji: '🌸',
+      author_avatar: null,
+      wall_public: parseWallPublic(data.wall_public),
+    } satisfies CommunityPostRow)
+
+  void (async () => {
+    try {
+      const [actor, place] = await Promise.all([
+        resolveActorLabel(authorId),
+        getCommunityById(communityId),
+      ])
+      const placeName = place?.name?.trim() || 'votre lieu'
+      const kind = data.type === 'logistics' ? 'logistique' : 'inspiration'
+      const snippet = content.length > 120 ? `${content.slice(0, 117)}…` : content
+      const slug = place?.slug?.trim()
+      await notifyPlaceMembers({
+        communityId,
+        actorUserId: authorId,
+        type: 'agora_post',
+        title: `${actor} a publié dans l’Agora de ${placeName}`,
+        body: `${kind} — ${snippet}`,
+        actionUrl: slug ? `mandala:home?community=${encodeURIComponent(slug)}` : 'mandala:home',
+        actionLabel: 'Voir l’Agora',
+        sourceType: 'mandala_post',
+        sourceId: insertId,
+      })
+    } catch {
+      /* non bloquant */
+    }
+  })()
+
+  return row
 }
 
 function mapPostRow(r: RowDataPacket): CommunityPostRow {

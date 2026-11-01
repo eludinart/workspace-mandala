@@ -25,6 +25,7 @@ import {
   listAcceptedFriendCommunityIds,
 } from './db-place-links'
 import { canAccessFeatureDoor } from './db-feature-doors'
+import { notifyPlaceMembers, resolveActorLabel } from './db-place-activity-notify'
 
 export type { EventPhase }
 
@@ -492,7 +493,32 @@ export async function createEvent(params: {
   const [ins] = await pool.execute<RowDataPacket[]>(`SELECT LAST_INSERT_ID() as id`)
   const id = Number(ins[0]?.id ?? 0)
   if (!id) throw new Error('Création événement échouée')
-  return (await getEventRow(id))!
+  const created = (await getEventRow(id))!
+
+  void (async () => {
+    try {
+      const actor = await resolveActorLabel(params.userId)
+      const placeName = community.name?.trim() || 'votre lieu'
+      const slug = community.slug?.trim()
+      await notifyPlaceMembers({
+        communityId: community.id,
+        actorUserId: params.userId,
+        type: 'event_created',
+        title: `${actor} a créé un événement à ${placeName}`,
+        body: title,
+        actionUrl: slug
+          ? `mandala:events?community=${encodeURIComponent(slug)}`
+          : 'mandala:events',
+        actionLabel: 'Voir l’événement',
+        sourceType: 'event',
+        sourceId: id,
+      })
+    } catch {
+      /* non bloquant */
+    }
+  })()
+
+  return created
 }
 
 export async function updateEvent(params: {

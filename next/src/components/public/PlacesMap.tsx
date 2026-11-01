@@ -1,16 +1,45 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicCommunityCard } from '@/api/communities'
+import { placeLinksApi } from '@/api/place-links'
 
 const FRANCE_CENTER: [number, number] = [46.6, 2.5]
 const DEFAULT_ZOOM = 5.5
+/** Traits lieux amis : contraste fort sur fond OSM (évite verts / marrons du relief). */
+const LINK_LINE_HALO = '#0f172a'
+const LINK_LINE_COLOR = '#e879f9'
 
 type MappablePlace = PublicCommunityCard & { latitude: number; longitude: number }
 type LeafletNS = typeof import('leaflet')
 
 function isMappable(p: PublicCommunityCard): p is MappablePlace {
   return p.latitude != null && p.longitude != null && Number.isFinite(p.latitude) && Number.isFinite(p.longitude)
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function placeTooltipHtml(place: MappablePlace): string {
+  const cityLine = [place.postal_code, place.city]
+    .map((v) => (v ? String(v).trim() : ''))
+    .filter(Boolean)
+    .join(' ')
+  const members =
+    place.member_count != null && Number.isFinite(place.member_count)
+      ? `${place.member_count} membre${place.member_count > 1 ? 's' : ''}`
+      : ''
+  const bits = [
+    `<strong>${escapeHtml(place.name)}</strong>`,
+    cityLine ? `<span style="opacity:0.85">${escapeHtml(cityLine)}</span>` : '',
+    members ? `<span style="opacity:0.75">${escapeHtml(members)}</span>` : '',
+  ].filter(Boolean)
+  return `<div class="m-map-tooltip">${bits.join('<br/>')}</div>`
 }
 
 function syncPlaceMarkers(
@@ -20,7 +49,12 @@ function syncPlaceMarkers(
   markersBySlug: Map<string, import('leaflet').Marker>,
   mappable: MappablePlace[],
   selectedSlug: string | null | undefined,
-  onSelect: ((slug: string) => void) | undefined
+  handlers: {
+    onSelect?: (slug: string) => void
+    onHoverEnter?: (slug: string, communityId: number) => void
+    onHoverLeave?: (slug: string) => void
+  },
+  refitBounds: boolean
 ) {
   layer.clearLayers()
   markersBySlug.clear()
@@ -31,81 +65,177 @@ function syncPlaceMarkers(
     const selected = place.slug === selectedSlug
     const icon = L.divIcon({
       className: 'm-map-marker-wrap',
-      html: `<div class="m-map-marker${selected ? ' m-map-marker--selected' : ''}" style="background:${accent}" title="${place.name.replace(/"/g, '&quot;')}">${place.logo_emoji ?? '🏛️'}</div>`,
+      html: `<div class="m-map-marker${selected ? ' m-map-marker--selected' : ''}" style="background:${accent}">${place.logo_emoji ?? '🏛️'}</div>`,
       iconSize: [36, 36],
       iconAnchor: [18, 18],
     })
     const marker = L.marker([place.latitude, place.longitude], { icon })
-    const line2 = [place.postal_code, place.city].filter((v) => v && String(v).trim()).join(' ')
-    const popupAddr =
-      [place.address, line2, place.country]
-        .map((v) => (v ? String(v).trim() : ''))
-        .filter(Boolean)
-        .join(', ') || place.location || ''
-    const profileHref = `/lieux/${encodeURIComponent(place.slug)}`
-    const profileLink =
-      place.profile_public !== false
-        ? `<br/><a href="${profileHref}" style="display:inline-block;margin-top:6px;color:#7c3aed;font-weight:600">Voir le profil →</a>`
-        : `<br/><span style="display:inline-block;margin-top:6px;opacity:0.6;font-size:12px">Profil privé</span>`
-    marker.bindPopup(
-      `<strong>${place.name}</strong>` +
-        (popupAddr ? `<br/><span style="opacity:0.8">${popupAddr}</span>` : '') +
-        profileLink
-    )
+    marker.bindTooltip(placeTooltipHtml(place), {
+      direction: 'top',
+      offset: [0, -14],
+      opacity: 0.95,
+      className: 'm-map-leaflet-tooltip',
+    })
     marker.on('click', () => {
-      onSelect?.(place.slug)
-      marker.openPopup()
+      handlers.onSelect?.(place.slug)
+    })
+    marker.on('mouseover', () => {
+      handlers.onHoverEnter?.(place.slug, place.id)
+    })
+    marker.on('mouseout', () => {
+      handlers.onHoverLeave?.(place.slug)
     })
     marker.addTo(layer)
     markersBySlug.set(place.slug, marker)
     bounds.extend([place.latitude, place.longitude])
   }
 
-  if (mappable.length === 1) {
-    map.setView([mappable[0].latitude, mappable[0].longitude], 8, { animate: true })
-  } else if (mappable.length > 1) {
-    map.fitBounds(bounds.pad(0.25), { animate: true, maxZoom: 8 })
-  } else {
-    map.setView(FRANCE_CENTER, DEFAULT_ZOOM, { animate: false })
-  }
-
-  if (selectedSlug) {
-    markersBySlug.get(selectedSlug)?.openPopup()
+  if (refitBounds) {
+    if (mappable.length === 1) {
+      map.setView([mappable[0].latitude, mappable[0].longitude], 8, { animate: true })
+    } else if (mappable.length > 1) {
+      map.fitBounds(bounds.pad(0.25), { animate: true, maxZoom: 8 })
+    } else {
+      map.setView(FRANCE_CENTER, DEFAULT_ZOOM, { animate: false })
+    }
   }
 }
 
 type Props = {
   places: PublicCommunityCard[]
   selectedSlug?: string | null
+  /** Ids des lieux amis du lieu sélectionné (traits au clic). */
+  friendCommunityIds?: number[]
   /** Mise en surbrillance sur la carte (sans défilement de page). */
   onSelect?: (slug: string) => void
   /** Hauteur du conteneur carte (classe Tailwind). Défaut : grande carte. */
   heightClassName?: string
   /** Masque la légende du bas (utile en mini-carte). */
   hideCaption?: boolean
+  /** Change quand le conteneur change de taille (plein écran, etc.) → invalidateSize. */
+  sizeToken?: string | number | boolean
+  /** Classes du cadre extérieur (ex. plein écran sans coins). */
+  frameClassName?: string
 }
 
 export function PlacesMap({
   places,
   selectedSlug,
+  friendCommunityIds = [],
   onSelect,
-  heightClassName = 'h-[min(40vh,16rem)] sm:h-[min(52vh,28rem)]',
+  heightClassName = 'h-[min(48vh,22rem)] md:h-[min(58vh,34rem)] lg:h-[min(62vh,38rem)]',
   hideCaption = false,
+  sizeToken,
+  frameClassName = '',
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<import('leaflet').Map | null>(null)
   const markersLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
+  const linksLayerRef = useRef<import('leaflet').LayerGroup | null>(null)
   const markersBySlugRef = useRef<Map<string, import('leaflet').Marker>>(new Map())
   const leafletRef = useRef<LeafletNS | null>(null)
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
+  const friendsCacheRef = useRef<Map<number, number[]>>(new Map())
   const [mapReady, setMapReady] = useState(false)
+  const [hoverSlug, setHoverSlug] = useState<string | null>(null)
+  const [hoverFriendIds, setHoverFriendIds] = useState<number[]>([])
+  const [friendsVersion, setFriendsVersion] = useState(0)
+  const hoverSlugRef = useRef<string | null>(null)
+  const hoverLeaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mappableKeyRef = useRef('')
 
   const mappable = useMemo(() => places.filter(isMappable), [places])
   const mappableRef = useRef(mappable)
   mappableRef.current = mappable
   const selectedSlugRef = useRef(selectedSlug)
   selectedSlugRef.current = selectedSlug
+
+  const selectedPlace = useMemo(
+    () => (selectedSlug ? mappable.find((p) => p.slug === selectedSlug) ?? null : null),
+    [mappable, selectedSlug]
+  )
+
+  const ensureFriends = useCallback(async (communityId: number): Promise<number[]> => {
+    const cached = friendsCacheRef.current.get(communityId)
+    if (cached) return cached
+    try {
+      const res = await placeLinksApi.friendsOf(communityId)
+      const ids = res.can_view ? res.friend_ids ?? [] : []
+      friendsCacheRef.current.set(communityId, ids)
+      setFriendsVersion((v) => v + 1)
+      return ids
+    } catch {
+      friendsCacheRef.current.set(communityId, [])
+      return []
+    }
+  }, [])
+
+  // Cache des amis du lieu sélectionné (prop parent)
+  useEffect(() => {
+    if (!selectedPlace?.id) return
+    friendsCacheRef.current.set(selectedPlace.id, friendCommunityIds)
+    setFriendsVersion((v) => v + 1)
+  }, [selectedPlace?.id, friendCommunityIds])
+
+  const onHoverEnter = useCallback(
+    (slug: string, communityId: number) => {
+      if (hoverLeaveTimerRef.current) {
+        clearTimeout(hoverLeaveTimerRef.current)
+        hoverLeaveTimerRef.current = null
+      }
+      hoverSlugRef.current = slug
+      setHoverSlug(slug)
+      const cached = friendsCacheRef.current.get(communityId)
+      if (cached) {
+        setHoverFriendIds(cached)
+        return
+      }
+      setHoverFriendIds([])
+      void ensureFriends(communityId).then((ids) => {
+        if (hoverSlugRef.current === slug) setHoverFriendIds(ids)
+      })
+    },
+    [ensureFriends]
+  )
+
+  const onHoverLeave = useCallback((slug: string) => {
+    if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current)
+    hoverLeaveTimerRef.current = setTimeout(() => {
+      if (hoverSlugRef.current !== slug) return
+      hoverSlugRef.current = null
+      setHoverSlug(null)
+      setHoverFriendIds([])
+    }, 120)
+  }, [])
+
+  const hoverEnterRef = useRef(onHoverEnter)
+  hoverEnterRef.current = onHoverEnter
+  const hoverLeaveRef = useRef(onHoverLeave)
+  hoverLeaveRef.current = onHoverLeave
+
+  const linkFocusSlug = hoverSlug ?? selectedSlug ?? null
+  const linkFocusPlace = useMemo(
+    () => (linkFocusSlug ? mappable.find((p) => p.slug === linkFocusSlug) ?? null : null),
+    [mappable, linkFocusSlug]
+  )
+  const activeFriendIds = useMemo(() => {
+    if (!linkFocusPlace) return []
+    if (hoverSlug && hoverSlug === linkFocusPlace.slug) {
+      return hoverFriendIds.length
+        ? hoverFriendIds
+        : friendsCacheRef.current.get(linkFocusPlace.id) ?? []
+    }
+    return friendsCacheRef.current.get(linkFocusPlace.id) ?? friendCommunityIds
+    // friendsVersion force le recalcul après cache
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkFocusPlace, hoverSlug, hoverFriendIds, friendCommunityIds, friendsVersion])
+
+  const friendCount = useMemo(() => {
+    if (!linkFocusPlace || activeFriendIds.length === 0) return 0
+    const set = new Set(activeFriendIds)
+    return mappable.filter((p) => p.id !== linkFocusPlace.id && set.has(p.id)).length
+  }, [linkFocusPlace, activeFriendIds, mappable])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
@@ -126,10 +256,13 @@ export function PlacesMap({
       }).addTo(map)
 
       const layer = L.layerGroup().addTo(map)
+      const links = L.layerGroup().addTo(map)
       leafletRef.current = L
       mapRef.current = map
       markersLayerRef.current = layer
-      // Les lieux peuvent déjà être chargés avant la fin de l'import Leaflet.
+      linksLayerRef.current = links
+      const key = mappableRef.current.map((p) => p.slug).join('|')
+      mappableKeyRef.current = key
       syncPlaceMarkers(
         L,
         map,
@@ -137,7 +270,12 @@ export function PlacesMap({
         markersBySlugRef.current,
         mappableRef.current,
         selectedSlugRef.current,
-        onSelectRef.current
+        {
+          onSelect: (slug) => onSelectRef.current?.(slug),
+          onHoverEnter: (slug, id) => hoverEnterRef.current(slug, id),
+          onHoverLeave: (slug) => hoverLeaveRef.current(slug),
+        },
+        true
       )
       setMapReady(true)
       requestAnimationFrame(() => {
@@ -151,6 +289,7 @@ export function PlacesMap({
       mapRef.current?.remove()
       mapRef.current = null
       markersLayerRef.current = null
+      linksLayerRef.current = null
       leafletRef.current = null
       markersBySlugRef.current.clear()
     }
@@ -162,22 +301,133 @@ export function PlacesMap({
     const layer = markersLayerRef.current
     const L = leafletRef.current
     if (!map || !layer || !L) return
-    syncPlaceMarkers(L, map, layer, markersBySlugRef.current, mappable, selectedSlug, onSelectRef.current)
+    const key = mappable.map((p) => `${p.slug}:${p.member_count ?? ''}`).join('|')
+    const refit = key !== mappableKeyRef.current
+    mappableKeyRef.current = key
+    syncPlaceMarkers(
+      L,
+      map,
+      layer,
+      markersBySlugRef.current,
+      mappable,
+      selectedSlug,
+      {
+        onSelect: (slug) => onSelectRef.current?.(slug),
+        onHoverEnter: (slug, id) => hoverEnterRef.current(slug, id),
+        onHoverLeave: (slug) => hoverLeaveRef.current(slug),
+      },
+      refit
+    )
   }, [mapReady, mappable, selectedSlug])
 
-  // Centrage sur le lieu sélectionné (sans quitter la carte)
+  // Traits : survol prioritaire, sinon sélection
+  useEffect(() => {
+    if (!mapReady) return
+    const L = leafletRef.current
+    const linksLayer = linksLayerRef.current
+    if (!L || !linksLayer) return
+    linksLayer.clearLayers()
+    if (!linkFocusPlace || activeFriendIds.length === 0) return
+    const friendSet = new Set(activeFriendIds)
+    const weight = hoverSlug ? 2 : 1.75
+    for (const place of mappable) {
+      if (place.id === linkFocusPlace.id) continue
+      if (!friendSet.has(place.id)) continue
+      const latlngs: [number, number][] = [
+        [linkFocusPlace.latitude, linkFocusPlace.longitude],
+        [place.latitude, place.longitude],
+      ]
+      // Halo sombre pour lisibilité sur tuiles claires / vertes
+      L.polyline(latlngs, {
+        color: LINK_LINE_HALO,
+        weight: weight + 1.5,
+        opacity: 0.85,
+        lineCap: 'round',
+        interactive: false,
+      }).addTo(linksLayer)
+      L.polyline(latlngs, {
+        color: LINK_LINE_COLOR,
+        weight,
+        opacity: 1,
+        dashArray: '7 9',
+        lineCap: 'round',
+        interactive: false,
+      }).addTo(linksLayer)
+    }
+  }, [mapReady, linkFocusPlace, activeFriendIds, mappable, hoverSlug])
+
+  // Au clic : garder le zoom utilisateur, sauf si un lieu ami est hors cadre → élargir seulement.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !selectedSlug) return
-    const place = mappable.find((p) => p.slug === selectedSlug)
-    if (!place) return
-    map.flyTo([place.latitude, place.longitude], Math.max(map.getZoom(), 7), { duration: 0.8 })
-    const marker = markersBySlugRef.current.get(selectedSlug)
-    marker?.openPopup()
-  }, [selectedSlug, mappable])
+    const L = leafletRef.current
+    if (!map || !L || !selectedSlug) return
+    const selected = mappable.find((p) => p.slug === selectedSlug)
+    if (!selected) return
+
+    const ids = friendsCacheRef.current.get(selected.id) ?? friendCommunityIds
+    const friendSet = new Set(ids)
+    const friends = mappable.filter((p) => p.id !== selected.id && friendSet.has(p.id))
+    if (friends.length === 0) return
+
+    const view = map.getBounds()
+    const friendOutside = friends.some((f) => !view.contains(L.latLng(f.latitude, f.longitude)))
+    if (!friendOutside) return
+
+    const bounds = L.latLngBounds([[selected.latitude, selected.longitude]])
+    for (const f of friends) bounds.extend([f.latitude, f.longitude])
+    map.fitBounds(bounds.pad(0.2), {
+      animate: true,
+      // Ne jamais zoomer plus près que le réglage actuel — seulement élargir / recentrer.
+      maxZoom: map.getZoom(),
+      paddingTopLeft: [24, 24],
+      paddingBottomRight: [24, 88],
+    })
+  }, [selectedSlug, friendCommunityIds, mappable, friendsVersion])
+
+  useEffect(() => {
+    if (!mapReady) return
+    const map = mapRef.current
+    if (!map) return
+    const t = window.setTimeout(() => {
+      map.invalidateSize()
+    }, 80)
+    return () => window.clearTimeout(t)
+  }, [mapReady, sizeToken, heightClassName])
+
+  useEffect(() => {
+    if (!mapReady || !containerRef.current) return
+    const el = containerRef.current
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize()
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [mapReady])
+
+  const panelPlace = selectedPlace
+  const cityLine = panelPlace
+    ? [panelPlace.postal_code, panelPlace.city]
+        .map((v) => (v ? String(v).trim() : ''))
+        .filter(Boolean)
+        .join(' ')
+    : ''
+  const panelFriendCount =
+    panelPlace && !hoverSlug
+      ? friendCount
+      : panelPlace
+        ? (() => {
+            const ids = friendsCacheRef.current.get(panelPlace.id) ?? friendCommunityIds
+            const set = new Set(ids)
+            return mappable.filter((p) => p.id !== panelPlace.id && set.has(p.id)).length
+          })()
+        : 0
 
   return (
-    <div className="m-public-map relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner">
+    <div
+      className={`m-public-map relative overflow-hidden border border-slate-800 bg-slate-950 shadow-inner ${
+        frameClassName || 'rounded-2xl'
+      }`}
+    >
       <div ref={containerRef} className={`${heightClassName} w-full z-0`} aria-label="Carte des lieux" />
       {mappable.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-[400] pointer-events-none">
@@ -186,9 +436,63 @@ export function PlacesMap({
           </p>
         </div>
       )}
-      {!hideCaption && (
+      {panelPlace && (
+        <div
+          className="absolute left-2 right-2 bottom-2 z-[450] rounded-xl border border-slate-300/90 px-3 py-2.5 shadow-xl shadow-black/25"
+          style={{ backgroundColor: 'rgba(241, 245, 249, 0.96)' }}
+        >
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p
+                className="text-sm font-semibold leading-snug truncate"
+                style={{ color: '#0f172a' }}
+              >
+                {panelPlace.name}
+              </p>
+              <p
+                className="text-xs mt-0.5 truncate"
+                style={{ color: '#475569' }}
+              >
+                {[cityLine, panelPlace.country].filter(Boolean).join(', ') ||
+                  panelPlace.location ||
+                  '—'}
+                {panelPlace.member_count != null
+                  ? ` · ${panelPlace.member_count} membre${panelPlace.member_count > 1 ? 's' : ''}`
+                  : ''}
+              </p>
+              {panelFriendCount > 0 && (
+                <p className="text-[11px] mt-1" style={{ color: '#6d28d9' }}>
+                  {panelFriendCount} lieu{panelFriendCount > 1 ? 'x' : ''} ami
+                  {panelFriendCount > 1 ? 's' : ''} — survolez un marqueur pour voir les traits
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5">
+              {panelPlace.profile_public !== false && (
+                <a
+                  href={`/lieux/${encodeURIComponent(panelPlace.slug)}`}
+                  className="text-xs px-2.5 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-500"
+                >
+                  Profil
+                </a>
+              )}
+              {onSelect && (
+                <button
+                  type="button"
+                  onClick={() => onSelect('')}
+                  className="text-xs px-2 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                  aria-label="Fermer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {!hideCaption && !panelPlace && (
         <p className="absolute bottom-2 left-2 right-2 z-[400] text-[10px] text-slate-500 text-center pointer-events-none">
-          France · Belgique · Suisse — lieux francophones
+          Survolez un lieu pour voir ses liens · France · Belgique · Suisse
         </p>
       )}
     </div>

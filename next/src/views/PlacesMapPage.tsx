@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
+import { placeLinksApi } from '@/api/place-links'
 import { PlacePublicCard } from '@/components/public/PlacePublicCard'
 
 const PlacesMap = dynamic(
@@ -25,6 +26,7 @@ export function PlacesMapPage() {
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const [friendIds, setFriendIds] = useState<number[]>([])
 
   const loadPlaces = useCallback(async () => {
     setLoading(true)
@@ -42,8 +44,32 @@ export function PlacesMapPage() {
     void loadPlaces()
   }, [loadPlaces])
 
+  useEffect(() => {
+    if (!selectedSlug) {
+      setFriendIds([])
+      return
+    }
+    const place = places.find((p) => p.slug === selectedSlug)
+    if (!place?.id) {
+      setFriendIds([])
+      return
+    }
+    let cancelled = false
+    void placeLinksApi
+      .friendsOf(place.id)
+      .then((res) => {
+        if (!cancelled) setFriendIds(res.can_view ? res.friend_ids ?? [] : [])
+      })
+      .catch(() => {
+        if (!cancelled) setFriendIds([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedSlug, places])
+
   const selectPlaceOnMap = useCallback((slug: string) => {
-    setSelectedSlug(slug)
+    setSelectedSlug(slug || null)
   }, [])
 
   return (
@@ -73,7 +99,12 @@ export function PlacesMapPage() {
         </p>
       )}
 
-      <PlacesMap places={places} selectedSlug={selectedSlug} onSelect={selectPlaceOnMap} />
+      <PlacesMap
+        places={places}
+        selectedSlug={selectedSlug}
+        friendCommunityIds={friendIds}
+        onSelect={selectPlaceOnMap}
+      />
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Les lieux inscrits</h2>
