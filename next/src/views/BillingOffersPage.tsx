@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { billingApi, type BillingProduct } from '@/api/billing'
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { useCommunity } from '@/contexts/CommunityContext'
+import { useManagedPlaces } from '@/hooks/useManagedPlaces'
 import {
   isPlayBillingAvailable,
   purchasePlaySubscription,
@@ -16,6 +18,7 @@ import {
 
 type Props = {
   onNavigate: MandalaNavigate
+  /** Lieu pré-sélectionné (ex. depuis les réglages) ; sinon lieu actif / premier géré. */
   communityId?: number | null
 }
 
@@ -25,6 +28,8 @@ function formatPrice(cents: number, unit: string): string {
 }
 
 export function BillingOffersPage({ onNavigate, communityId }: Props) {
+  const { active } = useCommunity()
+  const { managedPlaces, loadingManagedPlaces } = useManagedPlaces()
   const [products, setProducts] = useState<BillingProduct[]>([])
   const [canSee, setCanSee] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -32,11 +37,41 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
   const [error, setError] = useState('')
   const [memberCovered, setMemberCovered] = useState(false)
   const [coveredCount, setCoveredCount] = useState<number | null>(null)
+  const [placeStatus, setPlaceStatus] = useState<string | null>(null)
+  const [placePeriodEnd, setPlacePeriodEnd] = useState<string | null>(null)
   const [paymentSurface, setPaymentSurface] = useState<PaymentSurface>('web')
   const [playBillingOk, setPlayBillingOk] = useState(false)
+  const [selectedCommunityId, setSelectedCommunityId] = useState<number | null>(
+    communityId ?? null
+  )
 
   const onPlaySurface = paymentSurface === 'play'
   const allowStripe = paymentSurfaceAllowsStripe(paymentSurface)
+
+  const placeChoices = useMemo(() => {
+    return managedPlaces.map((p) => ({ id: p.id, name: p.name, slug: p.slug }))
+  }, [managedPlaces])
+
+  // Préselection : prop → Sïvana (smoke paiement) → lieu actif géré → premier géré
+  useEffect(() => {
+    if (loadingManagedPlaces) return
+    if (placeChoices.length === 0) {
+      setSelectedCommunityId(null)
+      return
+    }
+    setSelectedCommunityId((prev) => {
+      if (communityId && placeChoices.some((p) => p.id === communityId)) {
+        return communityId
+      }
+      if (prev && placeChoices.some((p) => p.id === prev)) return prev
+      const sivana = placeChoices.find((p) => p.slug === 'sivana')
+      if (sivana) return sivana.id
+      if (active?.id && placeChoices.some((p) => p.id === active.id)) {
+        return active.id
+      }
+      return placeChoices[0]?.id ?? null
+    })
+  }, [communityId, active?.id, placeChoices, loadingManagedPlaces])
 
   useEffect(() => {
     let cancelled = false
@@ -54,12 +89,20 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
         setMemberCovered(Boolean(access.member_covered))
         setPaymentSurface(surface)
         setPlayBillingOk(playOk)
-        if (communityId) {
+        if (selectedCommunityId) {
           const place = (access.places || []).find(
-            (p) => Number(p.communityId ?? p.community_id) === communityId
+            (p) =>
+              Number(p.communityId ?? p.community_id) === selectedCommunityId
           )
           const n = place?.coveredMemberCount ?? place?.covered_member_count
           setCoveredCount(n != null ? Number(n) : null)
+          setPlaceStatus(place?.status != null ? String(place.status) : null)
+          const end = place?.currentPeriodEnd ?? place?.current_period_end
+          setPlacePeriodEnd(end != null ? String(end) : null)
+        } else {
+          setCoveredCount(null)
+          setPlaceStatus(null)
+          setPlacePeriodEnd(null)
         }
       } catch {
         if (!cancelled) setError('Impossible de charger les offres')
@@ -70,14 +113,18 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
     return () => {
       cancelled = true
     }
-  }, [communityId])
+  }, [selectedCommunityId])
 
   async function startCheckout(product: BillingProduct, family: 'place' | 'pro') {
     setError('')
     setCheckoutId(product.product_id)
     try {
-      if (family === 'place' && !communityId) {
-        setError('Choisissez un lieu dans les réglages pour souscrire à l’offre Lieu.')
+      if (family === 'place' && !selectedCommunityId) {
+        setError(
+          placeChoices.length === 0
+            ? 'Vous devez être gestionnaire d’un lieu pour souscrire à l’offre Lieu.'
+            : 'Choisissez le lieu à abonner.'
+        )
         return
       }
 
@@ -99,7 +146,8 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
         await billingApi.acknowledgePlayPurchase({
           product_id: product.product_id,
           purchase_token: purchase.purchaseToken,
-          community_id: family === 'place' ? communityId ?? undefined : undefined,
+          community_id:
+            family === 'place' ? selectedCommunityId ?? undefined : undefined,
         })
         setError('')
         window.location.href = '/app?checkout=success&provider=play'
@@ -118,7 +166,8 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
 
       const { url } = await billingApi.createCheckoutSession({
         product_id: product.product_id,
-        community_id: family === 'place' ? communityId ?? undefined : undefined,
+        community_id:
+          family === 'place' ? selectedCommunityId ?? undefined : undefined,
       })
       if (!url) throw new Error('URL checkout manquante')
       window.location.href = url
@@ -132,6 +181,17 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
 
   const placeProducts = products.filter((p) => p.plan_family === 'place')
   const proProducts = products.filter((p) => p.plan_family === 'pro')
+  const placeAlreadyActive =
+    placeStatus === 'active' || placeStatus === 'trialing'
+  const placePeriodLabel = placePeriodEnd
+    ? new Date(placePeriodEnd).toLocaleDateString('fr-FR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null
+  const canCheckoutPlace =
+    Boolean(selectedCommunityId) && placeChoices.length > 0
 
   if (loading) {
     return <p className="text-slate-400 p-6">Chargement des offres…</p>
@@ -215,10 +275,46 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
             <li>Tous les membres couverts</li>
             <li>Outils d’organisation du lieu</li>
           </ul>
+          {placeChoices.length > 0 ? (
+            <label className="block space-y-1.5 pt-1">
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                Lieu à abonner
+              </span>
+              <select
+                className="w-full rounded-xl border border-slate-600 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                value={selectedCommunityId ?? ''}
+                onChange={(e) => {
+                  const id = parseInt(e.target.value, 10)
+                  setSelectedCommunityId(Number.isFinite(id) && id > 0 ? id : null)
+                }}
+              >
+                {placeChoices.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            !loadingManagedPlaces && (
+              <p className="text-xs text-amber-200/80">
+                Aucun lieu en gestion sur ce compte — seul un gestionnaire peut
+                souscrire l’offre Lieu.
+              </p>
+            )
+          )}
           {coveredCount != null && (
             <p className="text-sm font-medium text-emerald-300">
               {coveredCount} membre{coveredCount > 1 ? 's' : ''} couvert
               {coveredCount > 1 ? 's' : ''} en gratuité
+            </p>
+          )}
+          {placeAlreadyActive && (
+            <p className="text-sm text-emerald-400/90">
+              Offre Lieu déjà active
+              {placePeriodLabel ? ` jusqu’au ${placePeriodLabel}` : ''}
+              {' '}
+              (cadeau ou abonnement en cours).
             </p>
           )}
           <div className="flex flex-col gap-2 pt-2">
@@ -230,20 +326,24 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
                 <button
                   key={p.product_id}
                   type="button"
-                  disabled={!ready || checkoutId === p.product_id || !communityId}
+                  disabled={
+                    !ready ||
+                    checkoutId === p.product_id ||
+                    !canCheckoutPlace ||
+                    placeAlreadyActive
+                  }
                   onClick={() => void startCheckout(p, 'place')}
                   className="rounded-xl bg-amber-600/90 px-4 py-2.5 text-sm font-medium text-slate-950 disabled:opacity-40"
                 >
                   {p.label} — {formatPrice(p.amount_cents, p.unit)}
-                  {!ready ? ' (bientôt)' : ''}
+                  {!ready
+                    ? ' (bientôt)'
+                    : placeAlreadyActive
+                      ? ' (déjà actif)'
+                      : ''}
                 </button>
               )
             })}
-            {!communityId && (
-              <p className="text-xs text-slate-500">
-                Ouvre les réglages d’un lieu pour souscrire à l’offre Lieu.
-              </p>
-            )}
           </div>
         </section>
 

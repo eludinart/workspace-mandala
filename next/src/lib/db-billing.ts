@@ -350,6 +350,10 @@ export async function markSubscriptionStatus(
   return sub
 }
 
+/** Abonnement encore dans sa période (NULL = pas de fin connue, ex. partner synchro Stripe). */
+const PERIOD_OPEN_SQL =
+  `(current_period_end IS NULL OR current_period_end > UTC_TIMESTAMP())`
+
 export async function getActivePlaceSubscription(
   communityId: number
 ): Promise<BillingSubRow | null> {
@@ -359,7 +363,9 @@ export async function getActivePlaceSubscription(
   const t = table('mandala_billing_subscriptions')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT * FROM ${t}
-     WHERE community_id = ? AND plan_family = 'place' AND status IN ('active','trialing')
+     WHERE community_id = ? AND plan_family = 'place'
+       AND status IN ('active','trialing')
+       AND ${PERIOD_OPEN_SQL}
      ORDER BY updated_at DESC LIMIT 1`,
     [communityId]
   )
@@ -375,11 +381,94 @@ export async function getActiveProSubscription(
   const t = table('mandala_billing_subscriptions')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT * FROM ${t}
-     WHERE user_id = ? AND plan_family = 'pro' AND status IN ('active','trialing')
+     WHERE user_id = ? AND plan_family = 'pro'
+       AND status IN ('active','trialing')
+       AND ${PERIOD_OPEN_SQL}
      ORDER BY updated_at DESC LIMIT 1`,
     [userId]
   )
   return rows[0] ? mapSub(rows[0]) : null
+}
+
+/**
+ * Cadeau / comp lieu (hors Stripe) : status trialing jusqu’à current_period_end.
+ * Clé synthétique `comp:place:{id}` — ré-entrant (prolonge depuis max(now, fin actuelle)).
+ */
+export async function grantComplimentaryPlaceSubscription(opts: {
+  communityId: number
+  userId: number
+  months: number
+  planId?: string
+}): Promise<BillingSubRow | null> {
+  const months = Math.max(1, Math.min(36, Math.floor(opts.months)))
+  if (!isDbConfigured() || opts.communityId <= 0 || opts.userId <= 0) return null
+  await ensureBillingTables()
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  const compKey = `comp:place:${opts.communityId}`.slice(0, 255)
+  const planId = (opts.planId || 'place_yearly').slice(0, 40)
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT current_period_end FROM ${t}
+     WHERE stripe_subscription_id = ? LIMIT 1`,
+    [compKey]
+  )
+  const prevEnd = existing[0]?.current_period_end
+    ? new Date(existing[0].current_period_end)
+    : null
+  const base =
+    prevEnd && prevEnd.getTime() > Date.now() ? prevEnd : new Date()
+  const periodEnd = new Date(base)
+  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + months)
+
+  await pool.execute(
+    `INSERT INTO ${t}
+      (user_id, community_id, plan_family, plan_id, status, stripe_subscription_id,
+       stripe_price_id, payment_provider, current_period_end, cancel_at_period_end)
+     VALUES (?, ?, 'place', ?, 'trialing', ?, NULL, 'comp', ?, 1)
+     ON DUPLICATE KEY UPDATE
+       user_id = VALUES(user_id),
+       community_id = VALUES(community_id),
+       plan_family = 'place',
+       plan_id = VALUES(plan_id),
+       status = 'trialing',
+       payment_provider = 'comp',
+       current_period_end = VALUES(current_period_end),
+       cancel_at_period_end = 1`,
+    [opts.userId, opts.communityId, planId, compKey, periodEnd]
+  )
+
+  await setCommunityFeatured(opts.communityId, true)
+  return getActivePlaceSubscription(opts.communityId)
+}
+
+/** Première gestionnaire (admin puis organizer) du lieu — pour rattacher un cadeau. */
+export async function findPlaceManagerUserId(
+  communityId: number
+): Promise<number | null> {
+  if (!isDbConfigured() || communityId <= 0) return null
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id FROM ${tM}
+     WHERE community_id = ? AND role IN ('admin','organizer')
+     ORDER BY FIELD(role,'admin','organizer'), user_id ASC
+     LIMIT 1`,
+    [communityId]
+  )
+  const id = rows[0]?.user_id
+  return id != null ? Number(id) : null
+}
+
+/** Tous les lieux actifs (is_active=1) — pour cadeau early partners. */
+export async function listActiveCommunityIds(): Promise<number[]> {
+  if (!isDbConfigured()) return []
+  const pool = getPool()
+  const t = table('mandala_communities')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id FROM ${t} WHERE is_active = 1 ORDER BY id ASC`
+  )
+  return rows.map((r) => Number(r.id)).filter((n) => n > 0)
 }
 
 export async function listPlaceSubscriptionsForUser(
@@ -631,7 +720,9 @@ export async function userMemberOfCoveredPlace(userId: number): Promise<boolean>
      FROM ${tM} m
      INNER JOIN ${tC} c ON c.id = m.community_id
      LEFT JOIN ${tS} s
-       ON s.community_id = c.id AND s.plan_family = 'place' AND s.status IN ('active','trialing')
+       ON s.community_id = c.id AND s.plan_family = 'place'
+      AND s.status IN ('active','trialing')
+      AND ${PERIOD_OPEN_SQL}
      WHERE m.user_id = ? AND (c.billing_partner = 1 OR s.id IS NOT NULL)
      LIMIT 1`,
     [userId]
@@ -653,7 +744,9 @@ export async function getProBoostFlagsForUsers(
   const tP = table('mandala_pro_profiles')
   const [subRows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_id FROM ${tS}
-     WHERE plan_family = 'pro' AND status IN ('active','trialing') AND user_id IN (${placeholders})`,
+     WHERE plan_family = 'pro' AND status IN ('active','trialing')
+       AND ${PERIOD_OPEN_SQL}
+       AND user_id IN (${placeholders})`,
     userIds
   )
   for (const r of subRows) {
