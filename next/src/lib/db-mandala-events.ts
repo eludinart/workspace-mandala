@@ -22,6 +22,7 @@ import {
 } from './open-to-friend-places'
 import {
   arePlacesFriends,
+  communityHasAcceptedFriendLink,
   listAcceptedFriendCommunityIds,
 } from './db-place-links'
 import { canAccessFeatureDoor } from './db-feature-doors'
@@ -384,6 +385,7 @@ export async function getEventDetail(
   tasks: EventTaskRow[]
   media: EventMediaRow[]
   can_manage: boolean
+  can_offer_friend_signup: boolean
   via_friend_place: boolean
   host_slug: string | null
   host_name: string | null
@@ -441,6 +443,10 @@ export async function getEventDetail(
   )
 
   const isCreator = event.created_by === userId
+  const canManage = !viaFriend && (canManageEvents(role, isAppAdmin) || isCreator)
+  const canOfferFriendSignup = canManage
+    ? await communityHasAcceptedFriendLink(event.community_id)
+    : false
 
   return {
     event,
@@ -467,7 +473,8 @@ export async function getEventDetail(
       caption: r.caption != null ? String(r.caption) : null,
       sort_order: Number(r.sort_order ?? 0),
     })),
-    can_manage: !viaFriend && (canManageEvents(role, isAppAdmin) || isCreator),
+    can_manage: canManage,
+    can_offer_friend_signup: canOfferFriendSignup,
     via_friend_place: viaFriend,
     host_slug: hostCommunity?.slug ?? null,
     host_name: hostCommunity?.name ?? null,
@@ -610,8 +617,15 @@ export async function updateEvent(params: {
     values.push(parseWallPublic(p.wall_public) ? 1 : 0)
   }
   if (p.open_to_friend_places !== undefined) {
+    const wantOpen = parseOpenToFriendPlaces(p.open_to_friend_places)
+    if (wantOpen && !(await communityHasAcceptedFriendLink(event.community_id))) {
+      throw Object.assign(
+        new Error('Reliez au moins un lieu ami avant d’ouvrir aux lieux amis'),
+        { status: 422 }
+      )
+    }
     fields.push('open_to_friend_places = ?')
-    values.push(parseOpenToFriendPlaces(p.open_to_friend_places) ? 1 : 0)
+    values.push(wantOpen ? 1 : 0)
   }
 
   if (fields.length === 0) return event

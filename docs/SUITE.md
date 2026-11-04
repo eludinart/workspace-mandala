@@ -20,7 +20,7 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 
 ## À faire
 
-- [ ] **Ouvrir un événement ou une ressource.** Une ligne « Les lieux amis peuvent s’inscrire », seulement s’il existe déjà un lien. Même ligne sur une ressource. Sans lien, la ligne n’est pas affichée.
+- [x] **Ouvrir un événement ou une ressource.** Une ligne « Les lieux amis peuvent s’inscrire », seulement s’il existe déjà un lien. Même ligne sur une ressource. Sans lien, la ligne n’est pas affichée.
 - [ ] **Conversation au premier message.** Bouton « Écrire aux gestionnaires » sur le lieu relié. Le fil apparaît dans Messages au premier envoi, nommé par les deux lieux. Pas de groupe vide créé à l’acceptation.
 - [ ] **Traits sur la carte.** Uniquement les liens du lieu touché, et seulement les liens que la personne a le droit de voir.
 - [ ] **Ville, une fois.** Après la charte, « Vous venez de quelle ville ? », on peut passer. Aussi pour les comptes déjà créés, une seule fois. Les gestionnaires voient des totaux par ville. Derrière la porte `carte_membres` pour l’affichage ; la question elle-même derrière `aide_contextuelle` ou la même porte, fermée par défaut.
@@ -36,6 +36,7 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 
 ## Fait
 
+- [x] **2026-11-04 — Ouvrir événement / ressource aux lieux amis.** Toggle « Les lieux amis peuvent s’inscrire » (événements + ressources scope lieux), visible seulement si lien accepted ; colonne `open_to_friend_places` ressources (`022_…`) ; garde serveur 422 sans lien.
 - [x] **2026-11-01 — Stripe — config + smoke.** 4 prix Live créés (script), webhook Mandala, env Coolify + recreate conteneur, `/api/billing/products` 4× configured, porte `MANDALA_BILLING_PUBLIC=0`. Portail Compte + `GET /api/admin/billing/smoke` (à déployer avec le prochain push). Doc `docs/STRIPE-SETUP-MANDALA.md`. Checkout carte manuel encore à valider une fois (admin).
 - [x] **2026-11-01 — Play Store readiness (socle).** Pages `/cgu` `/cgv` `/confidentialite`, acceptation CGU à l’inscription + gate comptes existants, signalement UGC + admin Modération, blocage messagerie 1:1, dual checkout Stripe/Play (Digital Goods + `/api/billing/play/acknowledge`), SW offline + `assetlinks.json` placeholder. Spec `docs/superpowers/specs/2026-11-01-play-store-readiness-design.md`, schéma `021_mandala_play_readiness.sql`.
 - [x] **2026-11-01 — Vocabulaire Mandala.** Direction verrouillée (`docs/VOCABULAIRE.md`) : à l’écran lien / message / conversation / lieu ami. Copy « Graines / Jardinier » retirée de Messages ; erreurs API alignées. Tables/routes legacy (`prairie_*`, seeds) non renommées.

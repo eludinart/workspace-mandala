@@ -4,7 +4,16 @@
 import type { ResultSetHeader, RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from './db'
 import { ensureCommunitiesTables, listCommunitiesForUser } from './db-communities'
+import {
+  anyCommunityHasAcceptedFriendLink,
+  listAcceptedFriendCommunityIds,
+} from './db-place-links'
 import { notifyPlacesMembers, resolveActorLabel } from './db-place-activity-notify'
+import {
+  ensureOpenToFriendPlacesColumn,
+  openToFriendPlacesFromRow,
+  parseOpenToFriendPlaces,
+} from './open-to-friend-places'
 import { removeUpload } from './resource-files'
 import {
   isResourceKind,
@@ -47,6 +56,8 @@ export type ResourceDetail = ResourceCard & {
   body_text: string
   image_ids: number[]
   places: Array<{ id: number; slug: string; name: string }>
+  open_to_friend_places: boolean
+  can_offer_friend_signup?: boolean
 }
 
 async function ensureResourceTables(): Promise<void> {
@@ -105,6 +116,7 @@ async function ensureResourceTables(): Promise<void> {
       KEY idx_resource (resource_id, sort_order)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
+  await ensureOpenToFriendPlacesColumn(pool, t)
   _ensured = true
 }
 
@@ -123,6 +135,7 @@ type Stored = {
   file_name: string | null
   file_size: number | null
   place_ids: number[]
+  open_to_friend_places: boolean
   tags: string[]
   images: Array<{ id: number; file_path: string; sort_order: number }>
   created_at: string | null
@@ -164,6 +177,7 @@ async function loadStored(id: number): Promise<Stored | null> {
     file_name: r.file_name ? String(r.file_name) : null,
     file_size: r.file_size != null ? Number(r.file_size) : null,
     place_ids: (placeRows ?? []).map((p) => Number(p.community_id)),
+    open_to_friend_places: openToFriendPlacesFromRow(r as Record<string, unknown>),
     tags: (tagRows ?? []).map((t) => String(t.label)),
     images: (imageRows ?? []).map((img) => ({
       id: Number(img.id),
@@ -221,12 +235,43 @@ function toCard(row: Stored, viewerId: number, identity: { pseudo: string; avata
   }
 }
 
-function canSee(row: Stored, viewerId: number, viewerPlaceIds: Set<number>): boolean {
+async function canSee(
+  row: Stored,
+  viewerId: number,
+  viewerPlaceIds: Set<number>
+): Promise<boolean> {
   if (viewerId > 0 && row.author_id === viewerId) return true
   if (row.scope === 'hidden') return false
   if (row.scope === 'mandala') return true
   if (viewerId <= 0) return false
-  return row.place_ids.some((id) => viewerPlaceIds.has(id))
+  if (row.place_ids.some((id) => viewerPlaceIds.has(id))) return true
+  if (!row.open_to_friend_places || row.scope !== 'places') return false
+  for (const placeId of row.place_ids) {
+    const friends = await listAcceptedFriendCommunityIds(placeId)
+    if (friends.some((f) => viewerPlaceIds.has(f))) return true
+  }
+  return false
+}
+
+async function assertOpenToFriendPlacesAllowed(
+  wantOpen: boolean,
+  scope: ResourceScope,
+  placeIds: number[]
+): Promise<boolean> {
+  if (!wantOpen) return false
+  if (scope !== 'places' || !placeIds.length) {
+    throw Object.assign(
+      new Error('Ouvrir aux lieux amis nécessite une ressource partagée avec au moins un lieu'),
+      { status: 422 }
+    )
+  }
+  if (!(await anyCommunityHasAcceptedFriendLink(placeIds))) {
+    throw Object.assign(
+      new Error('Reliez au moins un lieu ami avant d’ouvrir aux lieux amis'),
+      { status: 422 }
+    )
+  }
+  return true
 }
 
 export async function getResourceForViewer(resourceId: number, viewerId: number): Promise<ResourceDetail | null> {
@@ -234,7 +279,13 @@ export async function getResourceForViewer(resourceId: number, viewerId: number)
   if (!row) return null
   const mine = viewerId > 0 ? await listCommunitiesForUser(viewerId) : []
   const viewerPlaceIds = new Set(mine.map((c) => c.id))
-  if (row.scope === 'places' && row.author_id !== viewerId && !canSee(row, viewerId, viewerPlaceIds)) return null
+  if (
+    row.scope === 'places' &&
+    row.author_id !== viewerId &&
+    !(await canSee(row, viewerId, viewerPlaceIds))
+  ) {
+    return null
+  }
   if (row.scope === 'hidden' && row.author_id !== viewerId) return null
   if (row.scope === 'mandala' && viewerId <= 0) {
     /* public */
@@ -245,11 +296,17 @@ export async function getResourceForViewer(resourceId: number, viewerId: number)
     row.scope === 'places'
       ? mine.filter((c) => row.place_ids.includes(c.id)).map((c) => ({ id: c.id, slug: c.slug, name: c.name }))
       : []
+  const canOffer =
+    row.author_id === viewerId && row.scope === 'places' && row.place_ids.length > 0
+      ? await anyCommunityHasAcceptedFriendLink(row.place_ids)
+      : false
   return {
     ...toCard(row, viewerId, identity),
     body_text: row.body_text,
     image_ids: row.images.map((img) => img.id),
     places,
+    open_to_friend_places: row.open_to_friend_places,
+    can_offer_friend_signup: canOffer,
   }
 }
 
@@ -264,7 +321,7 @@ export async function getResourceMedia(
   const mine = viewerId > 0 ? await listCommunitiesForUser(viewerId) : []
   const viewerPlaceIds = new Set(mine.map((c) => c.id))
   const publicOk = row.scope === 'mandala'
-  const memberOk = viewerId > 0 && canSee(row, viewerId, viewerPlaceIds)
+  const memberOk = viewerId > 0 && (await canSee(row, viewerId, viewerPlaceIds))
   if (!publicOk && !memberOk) return null
   if (which === 'cover' && row.cover_path) {
     return { path: row.cover_path, mime: 'image/jpeg', name: 'couverture', downloadable: false, author_id: row.author_id }
@@ -309,6 +366,7 @@ export type ResourceInput = {
   downloadable: boolean
   place_ids: number[]
   tags: string[]
+  open_to_friend_places?: boolean
   cover_path?: string | null
   file_path?: string | null
   file_mime?: string | null
@@ -334,11 +392,16 @@ export async function createResource(authorId: number, input: ResourceInput): Pr
   if (input.scope === 'places' && !placeIds.length) {
     throw Object.assign(new Error('Cochez au moins un lieu'), { status: 400 })
   }
+  const openFriends = await assertOpenToFriendPlacesAllowed(
+    parseOpenToFriendPlaces(input.open_to_friend_places),
+    input.scope,
+    placeIds
+  )
   const pool = getPool()
   const [res] = await pool.execute<ResultSetHeader>(
     `INSERT INTO ${table('mandala_resources')}
-      (author_id, kind, title, summary, body_text, scope, downloadable, cover_path, file_path, file_mime, file_name, file_size)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (author_id, kind, title, summary, body_text, scope, downloadable, open_to_friend_places, cover_path, file_path, file_mime, file_name, file_size)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       authorId,
       input.kind,
@@ -347,6 +410,7 @@ export async function createResource(authorId: number, input: ResourceInput): Pr
       meta.mode === 'text' ? input.body_text.trim().slice(0, MAX_RESOURCE_BODY) : input.summary.trim().slice(0, MAX_RESOURCE_SUMMARY),
       input.scope,
       input.downloadable ? 1 : 0,
+      openFriends ? 1 : 0,
       input.cover_path ?? null,
       input.file_path ?? null,
       input.file_mime ?? null,
@@ -439,6 +503,11 @@ export async function updateResource(
   if (input.scope === 'places' && !placeIds.length) {
     throw Object.assign(new Error('Cochez au moins un lieu'), { status: 400 })
   }
+  const openFriends = await assertOpenToFriendPlacesAllowed(
+    parseOpenToFriendPlaces(input.open_to_friend_places),
+    input.scope,
+    placeIds
+  )
 
   let coverPath = row.cover_path
   if (input.clear_cover) {
@@ -467,6 +536,7 @@ export async function updateResource(
   await pool.execute(
     `UPDATE ${table('mandala_resources')}
      SET title = ?, summary = ?, body_text = ?, scope = ?, downloadable = ?,
+         open_to_friend_places = ?,
          cover_path = ?, file_path = ?, file_mime = ?, file_name = ?, file_size = ?
      WHERE id = ? AND author_id = ?`,
     [
@@ -475,6 +545,7 @@ export async function updateResource(
       body,
       input.scope,
       input.downloadable ? 1 : 0,
+      openFriends ? 1 : 0,
       coverPath,
       filePath,
       fileMime,
@@ -579,19 +650,44 @@ export async function listResourcesForViewer(params: {
     const communityId = params.communityId
     if (!communityId) return []
     if (!params.publicAccess && !viewerPlaceIds.has(communityId)) return []
-    const visibility = params.publicAccess
-      ? `r.scope = 'mandala'`
-      : `r.scope = 'mandala' OR (r.scope = 'places' AND EXISTS (
-           SELECT 1 FROM ${tPlaces} rp WHERE rp.resource_id = r.id AND rp.community_id = ?
-         ))`
-    const sqlParams = params.publicAccess ? [communityId] : [communityId, communityId]
-    const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT r.id FROM ${t} r
-       JOIN ${tM} m ON m.user_id = r.author_id AND m.community_id = ?
-       WHERE ${visibility}`,
-      sqlParams
-    )
-    ids = (rows ?? []).map((r) => Number(r.id))
+    const tLinks = table('mandala_place_links')
+    if (params.publicAccess) {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT r.id FROM ${t} r
+         JOIN ${tM} m ON m.user_id = r.author_id AND m.community_id = ?
+         WHERE r.scope = 'mandala'`,
+        [communityId]
+      )
+      ids = (rows ?? []).map((r) => Number(r.id))
+    } else {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT DISTINCT r.id FROM ${t} r
+         WHERE (
+           EXISTS (SELECT 1 FROM ${tM} m WHERE m.user_id = r.author_id AND m.community_id = ?)
+           AND (
+             r.scope = 'mandala'
+             OR (r.scope = 'places' AND EXISTS (
+               SELECT 1 FROM ${tPlaces} rp WHERE rp.resource_id = r.id AND rp.community_id = ?
+             ))
+           )
+         )
+         OR (
+           r.scope = 'places'
+           AND COALESCE(r.open_to_friend_places, 0) = 1
+           AND EXISTS (
+             SELECT 1 FROM ${tPlaces} rp
+             INNER JOIN ${tLinks} l ON l.status = 'accepted'
+               AND (
+                 (l.community_a_id = rp.community_id AND l.community_b_id = ?)
+                 OR (l.community_b_id = rp.community_id AND l.community_a_id = ?)
+               )
+             WHERE rp.resource_id = r.id
+           )
+         )`,
+        [communityId, communityId, communityId, communityId]
+      )
+      ids = (rows ?? []).map((r) => Number(r.id))
+    }
   }
   return cardsFromIds(ids, params.viewerId)
 }
@@ -613,7 +709,7 @@ export async function listVisibleResourcesByAuthor(
   for (const r of rows ?? []) {
     const stored = await loadStored(Number(r.id))
     if (!stored || stored.scope === 'hidden') continue
-    if (!canSee(stored, viewerId, viewerPlaceIds)) continue
+    if (!(await canSee(stored, viewerId, viewerPlaceIds))) continue
     ids.push(stored.id)
   }
   return cardsFromIds(ids, viewerId)

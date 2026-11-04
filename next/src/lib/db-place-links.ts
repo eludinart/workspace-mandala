@@ -112,6 +112,25 @@ export async function listAcceptedFriendCommunityIds(
   return friends.map((f) => f.id)
 }
 
+/** True s’il existe au moins un lien accepted pour ce lieu. */
+export async function communityHasAcceptedFriendLink(
+  communityId: number
+): Promise<boolean> {
+  if (!communityId) return false
+  const ids = await listAcceptedFriendCommunityIds(communityId)
+  return ids.length > 0
+}
+
+/** True si au moins un des lieux a un ami accepted. */
+export async function anyCommunityHasAcceptedFriendLink(
+  communityIds: number[]
+): Promise<boolean> {
+  for (const id of communityIds) {
+    if (await communityHasAcceptedFriendLink(id)) return true
+  }
+  return false
+}
+
 export type AcceptedFriendBrief = {
   id: number
   slug: string

@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { resourcesApi, type ResourceDetail, type ResourceDraft } from '@/api/resources'
+import { OpenToFriendPlacesToggle } from '@/components/place/OpenToFriendPlacesToggle'
 import { useCommunity } from '@/contexts/CommunityContext'
-import { ApiError } from '@/lib/api-client'
+import { ApiError, api } from '@/lib/api-client'
 import {
   formatByteLimit,
   isAllowedFileMime,
@@ -31,6 +32,7 @@ const empty = (kind: ResourceKind): ResourceDraft => ({
   body_text: '',
   scope: 'hidden',
   downloadable: false,
+  open_to_friend_places: false,
   place_ids: [],
   tags: [],
   file: null,
@@ -62,6 +64,7 @@ export function ResourceComposer({
           body_text: editing.body_text,
           scope: editing.scope,
           downloadable: editing.downloadable,
+          open_to_friend_places: !!editing.open_to_friend_places,
           place_ids: editing.places.map((p) => p.id),
           tags: editing.tags,
         }
@@ -71,6 +74,37 @@ export function ResourceComposer({
   const [useFileAsCover, setUseFileAsCover] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [canOfferFriends, setCanOfferFriends] = useState(
+    () => !!editing?.can_offer_friend_signup
+  )
+
+  const placeIdsKey = draft.place_ids.slice().sort((a, b) => a - b).join(',')
+
+  useEffect(() => {
+    if (draft.scope !== 'places' || !placeIdsKey) {
+      setCanOfferFriends(false)
+      setDraft((d) => (d.open_to_friend_places ? { ...d, open_to_friend_places: false } : d))
+      return
+    }
+    let cancelled = false
+    void api
+      .get(`/api/place-links/accepted-any?community_ids=${placeIdsKey}`)
+      .then((raw) => {
+        if (cancelled) return
+        const res = raw as { has_accepted_friend?: boolean }
+        const ok = Boolean(res.has_accepted_friend)
+        setCanOfferFriends(ok)
+        if (!ok) {
+          setDraft((d) => (d.open_to_friend_places ? { ...d, open_to_friend_places: false } : d))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCanOfferFriends(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [draft.scope, placeIdsKey])
   const meta = resourceKindMeta(draft.kind)
   const fileLimit = useMemo(() => {
     if (meta.mode !== 'file') return formatByteLimit(MAX_IMAGE_BYTES)
@@ -353,6 +387,13 @@ export function ResourceComposer({
               </ul>
             )}
             <p className="text-sm text-slate-300">{scopeSentence}</p>
+            {canOfferFriends && (
+              <OpenToFriendPlacesToggle
+                id="open-friends-resource"
+                checked={draft.open_to_friend_places}
+                onChange={(next) => setDraft((d) => ({ ...d, open_to_friend_places: next }))}
+              />
+            )}
             <label className="flex items-start gap-2 text-sm">
               <input
                 type="checkbox"

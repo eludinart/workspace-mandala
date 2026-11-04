@@ -24,6 +24,8 @@ export type ResourceDetail = ResourceCard & {
   body_text: string
   image_ids: number[]
   places: Array<{ id: number; slug: string; name: string }>
+  open_to_friend_places?: boolean
+  can_offer_friend_signup?: boolean
 }
 
 export function resourceMediaUrl(
@@ -44,6 +46,7 @@ export type ResourceDraft = {
   body_text: string
   scope: ResourceScope
   downloadable: boolean
+  open_to_friend_places: boolean
   place_ids: number[]
   tags: string[]
   file: File | null
@@ -61,6 +64,7 @@ function draftForm(draft: ResourceDraft): FormData {
   form.set('body_text', draft.body_text)
   form.set('scope', draft.scope)
   form.set('downloadable', draft.downloadable ? '1' : '0')
+  form.set('open_to_friend_places', draft.open_to_friend_places ? '1' : '0')
   form.set('place_ids', JSON.stringify(draft.place_ids))
   form.set('tags', JSON.stringify(draft.tags))
   form.set('clear_cover', draft.clear_cover ? '1' : '0')

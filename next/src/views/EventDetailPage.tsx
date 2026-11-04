@@ -6,6 +6,7 @@ import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
 import { formatEventDateRange } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
 import { WallPublicToggle } from '@/components/wall/WallPublicToggle'
+import { OpenToFriendPlacesToggle } from '@/components/place/OpenToFriendPlacesToggle'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 
 type DetailTab = 'overview' | 'team' | 'tasks' | 'photos'
@@ -22,6 +23,7 @@ type EventDetail = {
     status: string
     cover_image?: string | null
     wall_public?: boolean
+    open_to_friend_places?: boolean
   }
   staff: Array<{
     id: number
@@ -38,6 +40,7 @@ type EventDetail = {
   }>
   media: Array<{ id: number; image_data: string; caption: string | null }>
   can_manage: boolean
+  can_offer_friend_signup?: boolean
 }
 
 type Member = { user_id: number; pseudo: string }
@@ -92,6 +95,7 @@ export function EventDetailPage({
   const [editEnds, setEditEnds] = useState('')
   const [editStatus, setEditStatus] = useState('')
   const [editWallPublic, setEditWallPublic] = useState(false)
+  const [editOpenToFriends, setEditOpenToFriends] = useState(false)
 
   const emitEventsChanged = useCallback(() => {
     if (typeof window === 'undefined') return
@@ -115,6 +119,7 @@ export function EventDetailPage({
       setEditEnds(d.event.ends_at?.slice(0, 16).replace(' ', 'T') ?? '')
       setEditStatus(d.event.status ?? 'draft')
       setEditWallPublic(!!d.event.wall_public)
+      setEditOpenToFriends(!!d.event.open_to_friend_places)
       if (d.can_manage) {
         const m = (await eventsApi.communityMembers(communitySlug)) as { members?: Member[] }
         setMembers(m.members ?? [])
@@ -353,6 +358,7 @@ export function EventDetailPage({
                     ends_at: editEnds ? editEnds.replace('T', ' ') : null,
                     status: editStatus,
                     wall_public: editWallPublic,
+                    open_to_friend_places: editOpenToFriends,
                   })
                   .then(async () => {
                     await load()
@@ -436,6 +442,13 @@ export function EventDetailPage({
                 checked={editWallPublic}
                 onChange={setEditWallPublic}
               />
+              {data.can_offer_friend_signup && (
+                <OpenToFriendPlacesToggle
+                  id="open-friends-event"
+                  checked={editOpenToFriends}
+                  onChange={setEditOpenToFriends}
+                />
+              )}
               <button
                 type="submit"
                 className="px-4 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-medium hover:bg-violet-400"

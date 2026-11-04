@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
       body_text: String(form.get('body_text') ?? ''),
       scope,
       downloadable: String(form.get('downloadable') ?? '') === '1',
+      open_to_friend_places: String(form.get('open_to_friend_places') ?? '') === '1',
       place_ids: placeIds,
       tags,
       cover_path: cover?.path ?? (file && file.mime.startsWith('image/') ? file.path : null),
