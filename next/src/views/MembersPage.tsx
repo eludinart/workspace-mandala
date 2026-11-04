@@ -18,6 +18,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { queueSkillFiche } from '@/components/skills/SkillsDirectory'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
+import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { WeatherBadge } from '@/components/community/WeatherBadge'
 import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 
@@ -238,6 +239,12 @@ export function MembersPage({
           Rafraîchir
         </button>
       </div>
+
+      {active && !organisationMode && !directoryMode && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 m-user-form">
+          <HeartWeatherPicker />
+        </div>
+      )}
 
       <div className={`flex flex-wrap gap-3 items-end ${organisationMode ? '' : 'm-user-form'}`}>
         <label className="flex-1 min-w-[180px] block text-xs text-slate-400">

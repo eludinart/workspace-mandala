@@ -20,7 +20,6 @@ import {
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
 import { formatPlaceMembershipLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
-import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { DeleteAccountConfirmDialog } from '@/components/account/DeleteAccountConfirmDialog'
 import { MyEvaluationsSection } from '@/components/returns/MyEvaluationsSection'
@@ -57,7 +56,7 @@ function resolveAccountSection(raw: string | null | undefined): AccountSectionId
 }
 
 export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
-  const { user, refreshUser, isRealAdmin, logout } = useAuth()
+  const { user, refreshUser, logout } = useAuth()
   const { communities, refresh: refreshCommunities, setActiveSlug } = useCommunity()
   const u = user as {
     email?: string
@@ -319,15 +318,6 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               {s.label}
             </button>
           ))}
-          {isRealAdmin && onNavigate && (
-            <button
-              type="button"
-              onClick={() => onNavigate('admin')}
-              className="px-2.5 py-1 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-950/40 text-sm"
-            >
-              Administration
-            </button>
-          )}
         </nav>
       </header>
 
@@ -338,10 +328,6 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
           <p className="text-sm text-slate-500">Email : {u?.email ?? '—'}</p>
-
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-            <HeartWeatherPicker />
-          </div>
 
           <div className="flex items-center gap-4">
             {avatarPreview ? (

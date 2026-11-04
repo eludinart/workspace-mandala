@@ -19,6 +19,7 @@ import {
 import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 import { AgoraFeed } from '@/components/community/AgoraFeed'
+import { HeartWeatherHomeCard } from '@/components/community/HeartWeatherHomeCard'
 import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncementsSection'
 import { TodayBoard } from '@/components/place/TodayBoard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
@@ -190,6 +191,8 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
           </div>
         </div>
       </section>
+
+      <HeartWeatherHomeCard />
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-16 pt-10">
         <section className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
