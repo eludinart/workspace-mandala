@@ -17,10 +17,11 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin(req)
+    const { userId: adminUserId } = await requireAdmin(req)
     const body = (await req.json().catch(() => ({}))) as {
       months?: number
       community_ids?: number[]
+      all_active?: boolean
     }
     const months = Number(body.months ?? 6)
     if (!Number.isFinite(months) || months < 1 || months > 36) {
@@ -30,7 +31,15 @@ export async function POST(req: NextRequest) {
     const ids =
       Array.isArray(body.community_ids) && body.community_ids.length > 0
         ? body.community_ids.map((n) => Number(n)).filter((n) => n > 0)
-        : await listActiveCommunityIds()
+        : body.all_active
+          ? await listActiveCommunityIds()
+          : []
+    if (!ids.length) {
+      return NextResponse.json(
+        { error: 'community_ids requis (ou all_active: true)' },
+        { status: 422 }
+      )
+    }
 
     const granted: Array<{
       community_id: number
@@ -39,8 +48,9 @@ export async function POST(req: NextRequest) {
       place?: Awaited<ReturnType<typeof resolvePlaceBilling>>
     }> = []
 
+    const adminUid = parseInt(adminUserId, 10) || 0
     for (const communityId of ids) {
-      const managerId = await findPlaceManagerUserId(communityId)
+      const managerId = (await findPlaceManagerUserId(communityId)) || adminUid
       if (!managerId) {
         granted.push({
           community_id: communityId,

@@ -7,6 +7,7 @@ export type AdminTabId =
   | 'communications'
   | 'telemetry'
   | 'places'
+  | 'billing'
   | 'doors'
   | 'support'
   | 'evaluations'
@@ -180,6 +181,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: '🏛️',
     adminTab: 'places',
     description: 'Tous les sites enregistrés',
+  },
+  {
+    id: 'admin-billing',
+    label: 'Abonnements',
+    icon: '💳',
+    adminTab: 'billing',
+    description: 'Cadeaux Lieu, partenaires, smoke Stripe',
   },
   {
     id: 'admin-doors',

@@ -15,6 +15,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
 import { assignableAppRole } from '@/lib/app-roles'
 import { ProEndorseQueue } from '@/components/billing/ProEndorseQueue'
+import { AdminPlaceGiftPanel } from '@/components/billing/AdminPlaceGiftPanel'
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
 
@@ -58,6 +59,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'communications', label: 'Communications' },
   { id: 'telemetry', label: 'Télémétrie' },
   { id: 'places', label: 'Lieux & communautés' },
+  { id: 'billing', label: 'Abonnements' },
   { id: 'doors', label: 'Portes' },
   { id: 'evaluations', label: 'Évaluations' },
   { id: 'moderation', label: 'Modération' },
@@ -657,6 +659,13 @@ export function AdminPage({
       {tab === 'moderation' && <AdminContentReportsTab />}
       {tab === 'support' && <AdminSupportTab />}
       {tab === 'evaluations' && <AdminEvaluationsTab />}
+
+      {tab === 'billing' && (
+        <div className="space-y-4">
+          <AdminPlaceGiftPanel />
+          <ProEndorseQueue />
+        </div>
+      )}
 
       {tab === 'places' && (
         <section className="space-y-3">

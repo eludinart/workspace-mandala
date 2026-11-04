@@ -26,6 +26,25 @@ export const billingApi = {
       member_covered: boolean
       pro: Record<string, unknown>
       places: Array<Record<string, unknown>>
+      comp_alerts?: Array<{
+        community_id: number
+        place_name: string
+        kind: 'warn' | 'grace'
+        period_end: string
+        grace_ends_at: string
+      }>
+    }>,
+
+  grantPlaceComp: (body: { months: number; community_ids: number[] }) =>
+    api.post('/api/admin/billing/place/comp', body) as Promise<{
+      ok: boolean
+      months: number
+      granted: Array<{
+        community_id: number
+        ok: boolean
+        error?: string
+        place?: Record<string, unknown>
+      }>
     }>,
 
   createCheckoutSession: (body: {

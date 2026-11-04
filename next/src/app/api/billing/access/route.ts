@@ -14,6 +14,10 @@ import {
   listManagedCommunityIds,
   listPlaceSubscriptionsForUser,
 } from '@/lib/db-billing'
+import {
+  listOpenCompAlertsForManager,
+  processCompPlaceExpiryReminders,
+} from '@/lib/billing-comp-lifecycle'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,11 +35,15 @@ export async function GET(req: NextRequest) {
       /* ignore */
     }
 
-    const [pro, memberCovered, managedIds, placeSubs] = await Promise.all([
+    // Déclenche les rappels dus (idempotent) sans bloquer la réponse si ça échoue.
+    void processCompPlaceExpiryReminders().catch(() => {})
+
+    const [pro, memberCovered, managedIds, placeSubs, compAlerts] = await Promise.all([
       resolveProBilling(uid),
       userHasPlaceCoveredFree(uid),
       listManagedCommunityIds(uid),
       listPlaceSubscriptionsForUser(uid),
+      listOpenCompAlertsForManager(uid),
     ])
 
     const communityIds = new Set<number>(managedIds)
@@ -53,6 +61,7 @@ export async function GET(req: NextRequest) {
       member_covered: memberCovered,
       pro,
       places,
+      comp_alerts: compAlerts,
     })
   } catch (err: unknown) {
     const e = err as Error & { status?: number }

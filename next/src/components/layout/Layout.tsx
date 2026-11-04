@@ -8,6 +8,7 @@ import { socialApi } from '@/api/social'
 import { useSocialStore } from '@/store/useSocialStore'
 import { AppHeader } from '@/components/layout/AppHeader'
 import { PlaceSwitchBanner } from '@/components/layout/PlaceSwitchBanner'
+import { BillingCompExpiryBanner } from '@/components/billing/BillingCompExpiryBanner'
 import { AdminActingRoleBar } from '@/components/AdminActingRoleBar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
@@ -100,6 +101,7 @@ export function Layout({
           </button>
         )}
         <PlaceSwitchBanner />
+        <BillingCompExpiryBanner onNavigate={onNavigate} />
         <AdminActingRoleBar />
         <InstallAppPrompt />
         <PushNotificationPriming />

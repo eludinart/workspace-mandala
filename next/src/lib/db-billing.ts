@@ -108,6 +108,12 @@ export async function ensureBillingTables(): Promise<void> {
       await pool.execute(
         `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS play_order_id VARCHAR(128) NULL`
       )
+      await pool.execute(
+        `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS comp_warn_for_end DATETIME NULL`
+      )
+      await pool.execute(
+        `ALTER TABLE ${prefix}mandala_billing_subscriptions ADD COLUMN IF NOT EXISTS comp_grace_for_end DATETIME NULL`
+      )
     } catch {
       /* colonnes déjà présentes */
     }
@@ -350,7 +356,25 @@ export async function markSubscriptionStatus(
   return sub
 }
 
-/** Abonnement encore dans sa période (NULL = pas de fin connue, ex. partner synchro Stripe). */
+/** Grâce après fin de cadeau lieu (jours) — accès maintenu. */
+export const COMP_PLACE_GRACE_DAYS = 7
+/** Alerte gestionnaires N jours avant current_period_end. */
+export const COMP_PLACE_WARN_DAYS_BEFORE = 7
+
+/** Stripe / Play : fin stricte. Cadeau (`comp`) : période + grâce. */
+const PLACE_PERIOD_OPEN_SQL = `(
+  current_period_end IS NULL
+  OR (
+    payment_provider = 'comp'
+    AND DATE_ADD(current_period_end, INTERVAL ${COMP_PLACE_GRACE_DAYS} DAY) > UTC_TIMESTAMP()
+  )
+  OR (
+    IFNULL(payment_provider, 'stripe') <> 'comp'
+    AND current_period_end > UTC_TIMESTAMP()
+  )
+)`
+
+/** Pro / générique : pas de grâce cadeau. */
 const PERIOD_OPEN_SQL =
   `(current_period_end IS NULL OR current_period_end > UTC_TIMESTAMP())`
 
@@ -365,7 +389,7 @@ export async function getActivePlaceSubscription(
     `SELECT * FROM ${t}
      WHERE community_id = ? AND plan_family = 'place'
        AND status IN ('active','trialing')
-       AND ${PERIOD_OPEN_SQL}
+       AND ${PLACE_PERIOD_OPEN_SQL}
      ORDER BY updated_at DESC LIMIT 1`,
     [communityId]
   )
@@ -388,6 +412,81 @@ export async function getActiveProSubscription(
     [userId]
   )
   return rows[0] ? mapSub(rows[0]) : null
+}
+
+export type CompPlaceSubRow = BillingSubRow & {
+  payment_provider: string
+  comp_warn_for_end: Date | null
+  comp_grace_for_end: Date | null
+  community_name: string | null
+}
+
+/** Cadeaux lieu encore dans période ou grâce, candidats aux alertes. */
+export async function listCompPlaceSubsNeedingLifecycle(): Promise<CompPlaceSubRow[]> {
+  if (!isDbConfigured()) return []
+  await ensureBillingTables()
+  const pool = getPool()
+  const tS = table('mandala_billing_subscriptions')
+  const tC = table('mandala_communities')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT s.*, c.name AS community_name
+     FROM ${tS} s
+     LEFT JOIN ${tC} c ON c.id = s.community_id
+     WHERE s.plan_family = 'place'
+       AND s.payment_provider = 'comp'
+       AND s.status IN ('active','trialing')
+       AND s.current_period_end IS NOT NULL
+       AND DATE_ADD(s.current_period_end, INTERVAL ${COMP_PLACE_GRACE_DAYS} DAY) > UTC_TIMESTAMP()
+       AND s.current_period_end <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL ${COMP_PLACE_WARN_DAYS_BEFORE} DAY)`
+  )
+  return rows.map((r) => ({
+    ...mapSub(r),
+    payment_provider: String(r.payment_provider ?? 'comp'),
+    comp_warn_for_end: r.comp_warn_for_end ? new Date(r.comp_warn_for_end) : null,
+    comp_grace_for_end: r.comp_grace_for_end ? new Date(r.comp_grace_for_end) : null,
+    community_name: r.community_name != null ? String(r.community_name) : null,
+  }))
+}
+
+export async function markCompPlaceWarnSent(
+  subscriptionId: number,
+  periodEnd: Date
+): Promise<void> {
+  if (!isDbConfigured() || subscriptionId <= 0) return
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  await pool.execute(`UPDATE ${t} SET comp_warn_for_end = ? WHERE id = ?`, [
+    periodEnd,
+    subscriptionId,
+  ])
+}
+
+export async function markCompPlaceGraceSent(
+  subscriptionId: number,
+  periodEnd: Date
+): Promise<void> {
+  if (!isDbConfigured() || subscriptionId <= 0) return
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  await pool.execute(`UPDATE ${t} SET comp_grace_for_end = ? WHERE id = ?`, [
+    periodEnd,
+    subscriptionId,
+  ])
+}
+
+export async function listPlaceManagerUserIds(
+  communityId: number
+): Promise<number[]> {
+  if (!isDbConfigured() || communityId <= 0) return []
+  const pool = getPool()
+  const tM = table('mandala_community_members')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT DISTINCT user_id FROM ${tM}
+     WHERE community_id = ? AND role IN ('admin','organizer')
+     ORDER BY user_id ASC`,
+    [communityId]
+  )
+  return rows.map((r) => Number(r.user_id)).filter((n) => n > 0)
 }
 
 /**
@@ -424,8 +523,9 @@ export async function grantComplimentaryPlaceSubscription(opts: {
   await pool.execute(
     `INSERT INTO ${t}
       (user_id, community_id, plan_family, plan_id, status, stripe_subscription_id,
-       stripe_price_id, payment_provider, current_period_end, cancel_at_period_end)
-     VALUES (?, ?, 'place', ?, 'trialing', ?, NULL, 'comp', ?, 1)
+       stripe_price_id, payment_provider, current_period_end, cancel_at_period_end,
+       comp_warn_for_end, comp_grace_for_end)
+     VALUES (?, ?, 'place', ?, 'trialing', ?, NULL, 'comp', ?, 1, NULL, NULL)
      ON DUPLICATE KEY UPDATE
        user_id = VALUES(user_id),
        community_id = VALUES(community_id),
@@ -434,7 +534,9 @@ export async function grantComplimentaryPlaceSubscription(opts: {
        status = 'trialing',
        payment_provider = 'comp',
        current_period_end = VALUES(current_period_end),
-       cancel_at_period_end = 1`,
+       cancel_at_period_end = 1,
+       comp_warn_for_end = NULL,
+       comp_grace_for_end = NULL`,
     [opts.userId, opts.communityId, planId, compKey, periodEnd]
   )
 
@@ -722,7 +824,7 @@ export async function userMemberOfCoveredPlace(userId: number): Promise<boolean>
      LEFT JOIN ${tS} s
        ON s.community_id = c.id AND s.plan_family = 'place'
       AND s.status IN ('active','trialing')
-      AND ${PERIOD_OPEN_SQL}
+      AND ${PLACE_PERIOD_OPEN_SQL}
      WHERE m.user_id = ? AND (c.billing_partner = 1 OR s.id IS NOT NULL)
      LIMIT 1`,
     [userId]
