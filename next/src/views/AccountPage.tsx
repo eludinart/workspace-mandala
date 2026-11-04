@@ -39,9 +39,22 @@ const SECTIONS = [
   { id: 'competences', label: 'Compétences' },
   { id: 'ressources', label: 'Ressources' },
   { id: 'communautes', label: 'Mes communautés' },
+  { id: 'abonnements', label: 'Abonnements' },
   { id: 'alertes', label: 'Préférences alertes' },
   { id: 'danger', label: 'Zone sensible' },
 ] as const
+
+type AccountSectionId = (typeof SECTIONS)[number]['id']
+
+const SECTION_IDS = new Set<string>(SECTIONS.map((s) => s.id))
+
+function resolveAccountSection(raw: string | null | undefined): AccountSectionId {
+  const h = (raw || '').replace(/^#/, '').trim().toLowerCase()
+  if (h === 'mandala-pro' || h === 'billing') return 'abonnements'
+  if (h === 'legal') return 'danger'
+  if (SECTION_IDS.has(h)) return h as AccountSectionId
+  return 'profil'
+}
 
 export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { user, refreshUser, isRealAdmin, logout } = useAuth()
@@ -78,8 +91,19 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [iosHomeScreen, setIosHomeScreen] = useState(false)
   const [pushUiReady, setPushUiReady] = useState(false)
   const [paymentSurface, setPaymentSurface] = useState<PaymentSurface>('web')
+  const [activeSection, setActiveSection] = useState<AccountSectionId>('profil')
 
   const allowStripePortal = paymentSurfaceAllowsStripe(paymentSurface)
+
+  const selectSection = useCallback((id: AccountSectionId) => {
+    setActiveSection(id)
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', `#${id}`)
+      const main = document.querySelector('main')
+      if (main instanceof HTMLElement) main.scrollTo({ top: 0, behavior: 'smooth' })
+      else window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [])
 
   const load = useCallback(async () => {
     try {
@@ -129,11 +153,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (sessionStorage.getItem(ACCOUNT_SKILLS_ANCHOR) !== 'competences') return
-    sessionStorage.removeItem(ACCOUNT_SKILLS_ANCHOR)
-    window.setTimeout(() => {
-      document.getElementById('competences')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 50)
+    if (sessionStorage.getItem(ACCOUNT_SKILLS_ANCHOR) === 'competences') {
+      sessionStorage.removeItem(ACCOUNT_SKILLS_ANCHOR)
+      setActiveSection('competences')
+      window.history.replaceState(null, '', '#competences')
+    } else {
+      setActiveSection(resolveAccountSection(window.location.hash))
+    }
+    const onHash = () => setActiveSection(resolveAccountSection(window.location.hash))
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
   const onPhoto = async (file: File | null) => {
@@ -263,26 +292,38 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
     }
   }
 
+  const navPillClass = (active: boolean) =>
+    [
+      'px-2.5 py-1 rounded-lg border text-sm transition-colors',
+      active
+        ? 'border-violet-500/70 bg-violet-600/20 text-violet-100'
+        : 'border-slate-700 text-slate-300 hover:border-violet-500/50 hover:text-violet-200',
+    ].join(' ')
+
   return (
     <div className="m-user-form w-full space-y-6">
-      <header>
-        <p className="m-user-eyebrow mb-1">Espace personnel</p>
-        <h1 className="m-user-title text-3xl">Mon compte</h1>
-        <nav className="mt-3 flex flex-wrap gap-2 text-sm" aria-label="Sections du compte">
+      <header className="sticky top-0 z-20 -mx-1 space-y-3 border-b border-slate-800/70 bg-slate-950/95 px-1 pb-3 pt-1 backdrop-blur-md">
+        <div>
+          <p className="m-user-eyebrow mb-1">Espace personnel</p>
+          <h1 className="m-user-title text-3xl">Mon compte</h1>
+        </div>
+        <nav className="flex flex-wrap gap-2" aria-label="Sections du compte">
           {SECTIONS.map((s) => (
-            <a
+            <button
               key={s.id}
-              href={`#${s.id}`}
-              className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300 hover:border-violet-500/50 hover:text-violet-200"
+              type="button"
+              aria-current={activeSection === s.id ? 'page' : undefined}
+              onClick={() => selectSection(s.id)}
+              className={navPillClass(activeSection === s.id)}
             >
               {s.label}
-            </a>
+            </button>
           ))}
           {isRealAdmin && onNavigate && (
             <button
               type="button"
               onClick={() => onNavigate('admin')}
-              className="px-2.5 py-1 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-950/40"
+              className="px-2.5 py-1 rounded-lg border border-violet-700/50 text-violet-200 hover:bg-violet-950/40 text-sm"
             >
               Administration
             </button>
@@ -290,8 +331,11 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </nav>
       </header>
 
-      <section id="profil" className="scroll-mt-20 space-y-4">
-        <h2 className="text-lg font-semibold text-slate-200">Profil</h2>
+      {activeSection === 'profil' && (
+      <section id="profil" className="space-y-4" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Profil
+        </h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
           <p className="text-sm text-slate-500">Email : {u?.email ?? '—'}</p>
 
@@ -418,21 +462,26 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           </button>
         </div>
       </section>
+      )}
 
-      {onNavigate && (
-        <section id="mandala-pro" className="scroll-mt-20 space-y-3">
-          <h2 className="text-lg font-semibold text-slate-200">Mandala Pro &amp; Lieu</h2>
+      {activeSection === 'abonnements' && (
+        <section id="abonnements" className="space-y-3" aria-labelledby="account-section-title">
+          <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+            Abonnements
+          </h2>
           <div className="rounded-xl border border-violet-800/50 bg-slate-900/50 p-4 space-y-2">
             <p className="text-sm text-slate-400">
               Fais rayonner ton lieu ou ta pratique. Les membres restent en gratuité.
             </p>
-            <button
-              type="button"
-              onClick={() => onNavigate('billing-offers')}
-              className="w-full py-2 rounded-lg bg-violet-600/90 text-white text-sm font-medium hover:bg-violet-500"
-            >
-              Voir les offres
-            </button>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('billing-offers')}
+                className="w-full py-2 rounded-lg bg-violet-600/90 text-white text-sm font-medium hover:bg-violet-500"
+              >
+                Voir les offres
+              </button>
+            )}
             {allowStripePortal ? (
               <button
                 type="button"
@@ -467,27 +516,45 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
                 l’appareil.
               </p>
             )}
+            {err && activeSection === 'abonnements' && (
+              <p className="text-red-400 text-sm">{err}</p>
+            )}
           </div>
         </section>
       )}
 
-      <section id="evaluations" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Évaluations</h2>
+      {activeSection === 'evaluations' && (
+      <section id="evaluations" className="space-y-3" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Évaluations
+        </h2>
         <MyEvaluationsSection />
       </section>
+      )}
 
-      <section id="competences" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Compétences</h2>
+      {activeSection === 'competences' && (
+      <section id="competences" className="space-y-3" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Compétences
+        </h2>
         <SkillsProfileSection />
       </section>
+      )}
 
-      <section id="ressources" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Mes ressources</h2>
+      {activeSection === 'ressources' && (
+      <section id="ressources" className="space-y-3" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Mes ressources
+        </h2>
         <MyResourcesSection />
       </section>
+      )}
 
-      <section id="communautes" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Mes communautés</h2>
+      {activeSection === 'communautes' && (
+      <section id="communautes" className="space-y-3" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Mes communautés
+        </h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           {communities.length === 0 && (
             <p className="text-sm text-slate-500 italic">Aucune communauté pour le moment.</p>
@@ -530,9 +597,13 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           </p>
         </div>
       </section>
+      )}
 
-      <section id="alertes" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Préférences alertes</h2>
+      {activeSection === 'alertes' && (
+      <section id="alertes" className="space-y-3" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
+          Préférences alertes
+        </h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           <p className="text-sm text-slate-400 leading-relaxed">
             Activez les notifications push pour recevoir les messages même lorsque Mandala est en
@@ -573,35 +644,13 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           </p>
         </div>
       </section>
+      )}
 
-      <section id="legal" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-slate-200">Documents légaux</h2>
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400 space-y-2">
-          <p>
-            <a href="/cgu" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
-              Conditions générales d’utilisation
-            </a>
-          </p>
-          <p>
-            <a href="/cgv" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
-              Conditions générales de vente
-            </a>
-          </p>
-          <p>
-            <a
-              href="/confidentialite"
-              className="text-violet-300 hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Politique de confidentialité
-            </a>
-          </p>
-        </div>
-      </section>
-
-      <section id="danger" className="scroll-mt-20 space-y-3">
-        <h2 className="text-lg font-semibold text-red-300">Zone sensible</h2>
+      {activeSection === 'danger' && (
+      <section id="danger" className="space-y-4" aria-labelledby="account-section-title">
+        <h2 id="account-section-title" className="text-lg font-semibold text-red-300">
+          Zone sensible
+        </h2>
         <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4 space-y-4">
           <div className="space-y-2">
             <p className="text-sm font-medium text-slate-200">Quitter un lieu</p>
@@ -624,18 +673,30 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             </button>
           </div>
         </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400 space-y-2">
+          <p className="text-sm font-medium text-slate-200">Documents légaux</p>
+          <p>
+            <a href="/cgu" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
+              Conditions générales d’utilisation
+            </a>
+          </p>
+          <p>
+            <a href="/cgv" className="text-violet-300 hover:underline" target="_blank" rel="noreferrer">
+              Conditions générales de vente
+            </a>
+          </p>
+          <p>
+            <a
+              href="/confidentialite"
+              className="text-violet-300 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Politique de confidentialité
+            </a>
+          </p>
+        </div>
       </section>
-
-      {isRealAdmin && onNavigate && (
-        <section id="admin" className="scroll-mt-20">
-          <button
-            type="button"
-            onClick={() => onNavigate('admin')}
-            className="text-sm text-violet-300 hover:text-violet-200 underline"
-          >
-            Ouvrir l&apos;administration →
-          </button>
-        </section>
       )}
 
       {leaveSlug && (
