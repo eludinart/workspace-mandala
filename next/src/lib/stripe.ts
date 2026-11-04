@@ -90,6 +90,22 @@ export async function fetchStripeSubscription(
   return stripeFetch('GET', `/subscriptions/${subscriptionId}`)
 }
 
+/** Récupère un Price Stripe (montant catalogue). */
+export async function fetchStripePrice(
+  priceId: string
+): Promise<{ unit_amount: number | null; currency: string | null } | null> {
+  const id = String(priceId || '').trim()
+  if (!id.startsWith('price_')) return null
+  const data = await stripeFetch('GET', `/prices/${encodeURIComponent(id)}`)
+  if (!data) return null
+  const raw = data.unit_amount
+  const unit_amount =
+    typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+  const currency =
+    typeof data.currency === 'string' ? data.currency.toLowerCase() : null
+  return { unit_amount, currency }
+}
+
 /** Portail client Stripe (résiliation / moyens de paiement). */
 export async function createBillingPortalSession(params: {
   customerId: string

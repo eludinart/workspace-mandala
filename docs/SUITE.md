@@ -33,9 +33,12 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 - [ ] **Asset links + TWA (AAB).** Remplir `assetlinks.json`, déployer, Bubblewrap/PWABuilder → AAB, upload piste interne/fermée. §4–5 roadmap.
 - [ ] **Fiche store + Data safety + test fermé.** Textes, 13+, confidentialité, UGC déclaré, 12 testeurs / 14 j si compte perso. §6–7 roadmap.
 - [ ] **Soumission production Play.** Revue Google, soft launch, monitoring Stripe/Play. §8 roadmap. Checklist complète : `docs/PLAY-STORE-ROADMAP.md`.
+- [x] **Landing — tarifs & comparaison.** Section `#tarifs` + nav Offres : Lieu / Pro, habitants gratuits, prix via catalogue Stripe-hydraté. Spec `docs/superpowers/specs/2026-11-04-landing-offres-design.md`.
+- [ ] **Élargissement lieu → cercle / projet.** Positionnement et produit : un « lieu » peut être un cercle d’humains ou un projet sans adresse physique (même outils : mur, charte, agenda, messages). Vocabulaire, landing, fiche communauté, offre Lieu. Chantier distinct des tarifs landing.
 
 ## Fait
 
+- [x] **2026-11-04 — Landing Offres + polish.** Section `#tarifs` (Lieu / Pro, habitants gratuits), `listBillingProductsHydrated` Stripe, nav Offres, hero / projet / CTA plus soignés.
 - [x] **2026-11-04 — Ouvrir événement / ressource aux lieux amis.** Toggle « Les lieux amis peuvent s’inscrire » (événements + ressources scope lieux), visible seulement si lien accepted ; colonne `open_to_friend_places` ressources (`022_…`) ; garde serveur 422 sans lien.
 - [x] **2026-11-01 — Stripe — config + smoke.** 4 prix Live créés (script), webhook Mandala, env Coolify + recreate conteneur, `/api/billing/products` 4× configured, porte `MANDALA_BILLING_PUBLIC=0`. Portail Compte + `GET /api/admin/billing/smoke` (à déployer avec le prochain push). Doc `docs/STRIPE-SETUP-MANDALA.md`. Checkout carte manuel encore à valider une fois (admin).
 - [x] **2026-11-01 — Play Store readiness (socle).** Pages `/cgu` `/cgv` `/confidentialite`, acceptation CGU à l’inscription + gate comptes existants, signalement UGC + admin Modération, blocage messagerie 1:1, dual checkout Stripe/Play (Digital Goods + `/api/billing/play/acknowledge`), SW offline + `assetlinks.json` placeholder. Spec `docs/superpowers/specs/2026-11-01-play-store-readiness-design.md`, schéma `021_mandala_play_readiness.sql`.

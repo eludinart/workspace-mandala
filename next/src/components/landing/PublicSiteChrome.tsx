@@ -88,6 +88,9 @@ export function PublicSiteChrome({
           <a href="/#projet" onClick={(event) => onLandingAnchor(event, 'projet')}>
             Le projet
           </a>
+          <a href="/#tarifs" onClick={(event) => onLandingAnchor(event, 'tarifs')}>
+            Offres
+          </a>
           <a href="/#lieux" onClick={(event) => onLandingAnchor(event, 'lieux')}>
             Lieux
           </a>

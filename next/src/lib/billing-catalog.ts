@@ -2,6 +2,16 @@
  * Catalogue billing Mandala — le client n'envoie qu'un product_id.
  */
 import billingProducts from '@/data/billing-products.json'
+import { fetchStripePrice } from '@/lib/stripe'
+
+const PRICE_CACHE_TTL_MS = 10 * 60 * 1000
+
+type PriceCacheEntry = {
+  amount_cents: number
+  expiresAt: number
+}
+
+const stripeAmountCache = new Map<string, PriceCacheEntry>()
 
 export type PlanFamily = 'place' | 'pro'
 
@@ -97,7 +107,7 @@ export function resolveBillingProductMeta(productId: string): {
   }
 }
 
-/** Liste publique (pas de price_id). */
+/** Liste publique synchrone (JSON + env) — pas de price_id. */
 export function listBillingProducts(): PublicBillingProduct[] {
   const subs =
     (billingProducts as { subscriptions?: Record<string, CatalogSub> }).subscriptions ?? {}
@@ -116,6 +126,49 @@ export function listBillingProducts(): PublicBillingProduct[] {
       play_sku: playSku,
     }
   })
+}
+
+async function resolveStripeAmountCents(priceId: string): Promise<number | null> {
+  const id = String(priceId || '').trim()
+  if (!id) return null
+
+  const cached = stripeAmountCache.get(id)
+  if (cached && cached.expiresAt > Date.now()) return cached.amount_cents
+
+  const price = await fetchStripePrice(id)
+  const amount =
+    price?.unit_amount != null && Number.isFinite(price.unit_amount)
+      ? Math.round(price.unit_amount)
+      : null
+  if (amount == null || amount < 0) return null
+
+  stripeAmountCache.set(id, {
+    amount_cents: amount,
+    expiresAt: Date.now() + PRICE_CACHE_TTL_MS,
+  })
+  return amount
+}
+
+/**
+ * Liste publique hydratée : montant Stripe si price_id configuré,
+ * sinon amount_cents JSON (secours catalogue).
+ */
+export async function listBillingProductsHydrated(): Promise<PublicBillingProduct[]> {
+  const base = listBillingProducts()
+  const subs =
+    (billingProducts as { subscriptions?: Record<string, CatalogSub> }).subscriptions ?? {}
+
+  return Promise.all(
+    base.map(async (product) => {
+      const sub = subs[product.product_id]
+      const priceId = sub ? envPrice(sub.price_id_env) : ''
+      if (!priceId) return product
+
+      const fromStripe = await resolveStripeAmountCents(priceId)
+      if (fromStripe == null) return product
+      return { ...product, amount_cents: fromStripe }
+    })
+  )
 }
 
 /** Anti open-redirect : ré-ancre le chemin sur la base publique. */
