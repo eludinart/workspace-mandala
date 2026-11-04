@@ -73,10 +73,12 @@ Les digital goods in-app **doivent** passer par Play Billing dans l’app store.
   - `PLAY_SKU_PRO_YEARLY`
   - `PLAY_PACKAGE_NAME=art.eludein.mandala` (ou le package retenu)
 - [ ] **Ne pas** laisser `PLAY_BILLING_STUB_ACK=1` en prod
-- [ ] Compte de service Google Cloud + API **Google Play Android Developer**
+- [ ] Compte de service Google Cloud + API **Google Play Android Developer** — procédure `docs/PLAY-STORE-API.md`
+- [ ] JSON local : `nogit/play-certs/play-api-sa.json` (hors git)
+- [ ] Lier le compte de service à la Play Console (présence store ; + droits financiers pour billing plus tard)
+- [ ] Push fiche : `.\scripts\play-store-sync.ps1` (Node) — metadata `android-twa/fastlane/`
 - [ ] Brancher la vérif réelle dans `next/src/lib/play-billing-verify.ts` (remplacer le stub)
 - [ ] Secret Coolify : JSON compte de service (`GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` ou fichier + `GOOGLE_APPLICATION_CREDENTIALS`)
-- [ ] Lier le compte de service à la Play Console (droits financiers / accès app)
 
 ---
 
@@ -107,9 +109,9 @@ Sans ça, la TWA s’ouvre avec la barre Chrome (souvent rejet / mauvaise UX).
 
 ## 6. Fiche store & politiques Play
 
-- [ ] Titre, description courte / longue (FR)
-- [ ] Captures téléphone (+ tablette si déclarée)
-- [ ] Icône 512, bannière feature graphic
+- [ ] Titre, description courte / longue (FR) — textes prêts ; sync API `play-store-sync.ps1`
+- [ ] Captures téléphone (+ tablette si déclarée) — assets dans `nogit/play-store-assets/`
+- [ ] Icône 512, bannière feature graphic — idem
 - [ ] Classification contenu / âge **13+** (pas Families / enfants)
 - [ ] Questionnaire Data safety (compte, messages, notifs, paiement via Stripe/Play)
 - [ ] URL politique de confidentialité : `https://mandala.eludein.art/confidentialite`

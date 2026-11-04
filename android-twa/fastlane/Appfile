@@ -1,0 +1,4 @@
+# Mandala TWA — Google Play
+# JSON hors git : nogit/play-certs/play-api-sa.json
+json_key_file(ENV["GOOGLE_PLAY_JSON_KEY"] || File.expand_path("../../nogit/play-certs/play-api-sa.json", __dir__))
+package_name("art.eludein.mandala")

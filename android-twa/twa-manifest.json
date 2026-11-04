@@ -1,0 +1,54 @@
+{
+  "packageId": "art.eludein.mandala",
+  "host": "mandala.eludein.art",
+  "name": "Mandala",
+  "launcherName": "Mandala",
+  "display": "standalone",
+  "themeColor": "#7C3AED",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#020617",
+  "enableNotifications": true,
+  "startUrl": "/app?dist=play",
+  "iconUrl": "https://mandala.eludein.art/icon-512.png",
+  "maskableIconUrl": "https://mandala.eludein.art/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "C:\\workspace-mandala\\nogit\\mandala-upload.keystore",
+    "alias": "mandala"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "unknown",
+  "webManifestUrl": "https://mandala.eludein.art/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": true
+    },
+    "locationDelegation": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://mandala.eludein.art/",
+  "minSdkVersion": 24,
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

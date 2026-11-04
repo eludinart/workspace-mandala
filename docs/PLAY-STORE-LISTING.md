@@ -1,11 +1,13 @@
 # Mandala — textes fiche Google Play
 
-> **Usage :** copier-coller dans Play Console → Présence sur le Store.  
+> **Usage :** sync API (`docs/PLAY-STORE-API.md`, `.\scripts\play-store-sync.ps1`) — metadata `android-twa/fastlane/metadata/android/fr-FR/`.  
 > **Langue :** français (FR).  
-> **Statut :** brouillon prêt · ne pas soumettre en prod tant que compte / AAB / Data safety ne sont pas prêts.  
-> **Package prévu :** `art.eludein.mandala`  
+> **Statut :** textes + assets prêts · TWA téléphone OK (2026-11-03) · push via Play API (compte de service).  
+> **Package :** `art.eludein.mandala`  
 > **Confidentialité :** https://mandala.eludein.art/confidentialite  
-> **CGU / CGV :** https://mandala.eludein.art/cgu · https://mandala.eludein.art/cgv
+> **CGU / CGV :** https://mandala.eludein.art/cgu · https://mandala.eludein.art/cgv  
+> **Data safety / UGC :** `docs/PLAY-STORE-DATA-SAFETY.md` (toujours Console)  
+> **Assets locaux :** `nogit/play-store-assets/` (icône 512 + captures téléphone)
 
 Compteurs de caractères = longueur du texte collé (espaces inclus).
 

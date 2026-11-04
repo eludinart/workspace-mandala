@@ -12,3 +12,12 @@ next/tsconfig.tsbuildinfo
 next/certificates/
 data/uploads/
 next/data/uploads/
+# Images générées depuis nogit/play-store-assets (script play-store-sync)
+android-twa/fastlane/metadata/android/*/images/
+android-twa/.gradle/
+android-twa/**/build/
+android-twa/*.aab
+android-twa/*.apk
+android-twa/*.idsig
+android-twa/local.properties
+scripts/play-store/node_modules/
