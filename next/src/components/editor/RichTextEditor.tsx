@@ -62,7 +62,8 @@ export function RichTextEditor({
   disabled,
   placeholder = 'Écrivez ici…',
   features,
-  minHeightClass = 'min-h-[22rem]',
+  minHeightClass = 'min-h-[14rem]',
+  maxHeightClass = 'max-h-[min(70dvh,36rem)]',
 }: {
   value: string
   onChange: (html: string) => void
@@ -70,6 +71,8 @@ export function RichTextEditor({
   placeholder?: string
   features?: RichTextFeatures
   minHeightClass?: string
+  /** Hauteur max du bloc éditeur : la barre d’outils reste fixe, le texte défile dessous. */
+  maxHeightClass?: string
 }) {
   const f = { ...DEFAULT_FEATURES, ...features }
   const lastEmitted = useRef(value)
@@ -111,7 +114,8 @@ export function RichTextEditor({
     },
     editorProps: {
       attributes: {
-        class: `m-rich-text m-rich-text-editor outline-none px-3 py-3 text-sm leading-relaxed text-slate-100 ${minHeightClass}`,
+        class:
+          'm-rich-text m-rich-text-editor outline-none px-3 py-3 text-sm leading-relaxed text-slate-100 min-h-full',
       },
     },
   })
@@ -139,8 +143,10 @@ export function RichTextEditor({
   }
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950/50 overflow-hidden">
-      <div className="flex flex-wrap gap-1 border-b border-slate-800 bg-slate-900/60 px-2 py-1.5">
+    <div
+      className={`rounded-xl border border-slate-700 bg-slate-950/50 flex flex-col overflow-hidden ${minHeightClass} ${maxHeightClass}`}
+    >
+      <div className="shrink-0 sticky top-0 z-10 flex flex-wrap gap-1 border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-2 py-1.5">
         {f.headings && (
           <>
             <ToolbarButton
@@ -258,7 +264,9 @@ export function RichTextEditor({
           </>
         )}
       </div>
-      <EditorContent editor={editor} />
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <EditorContent editor={editor} />
+      </div>
     </div>
   )
 }
