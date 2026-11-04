@@ -9,7 +9,6 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import { ApiError } from '@/lib/api-client'
-import type { CharterBlock } from '@/lib/community-charter'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 
@@ -48,7 +47,7 @@ export function PlaceSettingsPage({
   const [color, setColor] = useState('#7c3aed')
   const [avatar, setAvatar] = useState<string | null>(null)
   const [loadedAvatar, setLoadedAvatar] = useState<string | null>(null)
-  const [charter, setCharter] = useState<CharterBlock[]>([])
+  const [charter, setCharter] = useState('')
   const [listedPublic, setListedPublic] = useState(true)
   const [profilePublic, setProfilePublic] = useState(true)
   const [joinMode, setJoinMode] = useState<'open' | 'invite' | 'closed'>('open')
@@ -77,7 +76,7 @@ export function PlaceSettingsPage({
     setColor(s.accent_color ?? '#7c3aed')
     setLoadedAvatar(isAvatarImageUrl(s.avatar) ? s.avatar : null)
     setAvatar(null)
-    setCharter(s.charter ?? [])
+    setCharter(s.charter ?? '')
     setListedPublic(s.listed_public !== false)
     setProfilePublic(s.profile_public !== false)
     setJoinMode(s.join_mode === 'invite' || s.join_mode === 'closed' ? s.join_mode : 'open')
@@ -564,9 +563,9 @@ export function PlaceSettingsPage({
             </button>
           </div>
           {preview ? (
-            <CharterPreview blocks={charter} />
+            <CharterPreview html={charter} />
           ) : (
-            <CharterEditor blocks={charter} onChange={setCharter} disabled={saving} />
+            <CharterEditor html={charter} onChange={setCharter} disabled={saving} />
           )}
         </div>
       )}

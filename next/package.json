@@ -12,6 +12,12 @@
     "test:billing": "tsx --test src/lib/billing-entitlements.test.ts"
   },
   "dependencies": {
+    "@tiptap/extension-image": "^3.32.2",
+    "@tiptap/extension-link": "^3.32.2",
+    "@tiptap/extension-placeholder": "^3.32.2",
+    "@tiptap/pm": "^3.32.2",
+    "@tiptap/react": "^3.32.2",
+    "@tiptap/starter-kit": "^3.32.2",
     "@types/bcryptjs": "^2.4.6",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
@@ -21,6 +27,7 @@
     "nodemailer": "^8.0.11",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sanitize-html": "^2.18.1",
     "sharp": "0.35.5",
     "web-push": "^3.6.7",
     "zustand": "^5.0.12"
@@ -32,6 +39,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
+    "@types/sanitize-html": "^2.16.2",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.0.0",

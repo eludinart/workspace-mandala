@@ -1,5 +1,4 @@
 import { api } from '@/lib/api-client'
-import type { CharterBlock } from '@/lib/community-charter'
 
 export type PublicCommunityCard = {
   id: number
@@ -28,7 +27,8 @@ export type PublicCommunityCard = {
 
 export type PublicCommunityProfile = PublicCommunityCard & {
   member_count: number
-  charter: CharterBlock[]
+  /** HTML sanitizé de la charte. */
+  charter: string
 }
 
 export type MemberCharterView = {
@@ -38,7 +38,8 @@ export type MemberCharterView = {
   logo_emoji: string | null
   accent_color: string | null
   avatar: string | null
-  charter: CharterBlock[]
+  /** HTML sanitizé de la charte. */
+  charter: string
   accepted: boolean
   accepted_at: string | null
   requires_acceptance: boolean
@@ -63,7 +64,8 @@ export type CommunityManagerSettings = {
   logo_emoji: string | null
   avatar: string | null
   has_avatar?: boolean
-  charter: CharterBlock[]
+  /** HTML sanitizé de la charte. */
+  charter: string
   listed_public: boolean
   profile_public: boolean
   join_mode?: 'open' | 'invite' | 'closed'

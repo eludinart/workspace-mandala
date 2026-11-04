@@ -5,10 +5,9 @@ import { createHash, randomBytes, timingSafeEqual } from 'crypto'
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, isDbConfigured, table } from './db'
 import {
-  charterRequiresAcceptance,
-  parseCharterBlocks,
-  serializeCharterBlocks,
-  type CharterBlock,
+  charterHtmlRequiresAcceptance,
+  parseCharterToHtml,
+  serializeCharterHtml,
 } from './community-charter'
 import {
   isCommunityManagerRole,
@@ -45,11 +44,14 @@ export type CommunityRecord = {
   profile_public: boolean
   /** open = libre · invite = code requis · closed = gestionnaires seulement */
   join_mode: 'open' | 'invite' | 'closed'
-  charter?: CharterBlock[]
+  /** HTML sanitizé de la charte (éditeur riche). */
+  charter?: string
+  /** Valeur brute DB — hash d’acceptation stable tant que non réenregistrée. */
+  charter_raw?: string
 }
 
 export type CommunityManagerRecord = CommunityRecord & {
-  charter: CharterBlock[]
+  charter: string
   invite_code: string | null
 }
 
@@ -84,12 +86,13 @@ function parseCommunityCoord(v: unknown, field: 'latitude' | 'longitude'): numbe
 }
 
 function mapCommunityRow(r: RowDataPacket): CommunityRecord {
-  let charter: CharterBlock[] | undefined
-  if (r.charter != null && String(r.charter).trim()) {
+  const raw = r.charter != null ? String(r.charter).trim() : ''
+  let charter: string | undefined
+  if (raw) {
     try {
-      charter = parseCharterBlocks(String(r.charter))
+      charter = parseCharterToHtml(raw)
     } catch {
-      charter = []
+      charter = ''
     }
   }
   return {
@@ -113,7 +116,7 @@ function mapCommunityRow(r: RowDataPacket): CommunityRecord {
     listed_public: parseBoolFlag(r.listed_public, true),
     profile_public: parseBoolFlag(r.profile_public, true),
     join_mode: parseJoinMode(r.join_mode),
-    ...(charter !== undefined ? { charter } : {}),
+    ...(charter !== undefined ? { charter, charter_raw: raw } : {}),
   }
 }
 
@@ -127,7 +130,7 @@ function mapCommunityManagerRow(r: RowDataPacket): CommunityManagerRecord {
   const base = mapCommunityRow(r)
   return {
     ...base,
-    charter: base.charter ?? [],
+    charter: base.charter ?? '',
     invite_code: r.invite_code != null ? String(r.invite_code) : null,
   }
 }
@@ -1728,9 +1731,10 @@ export async function updateCommunitySettingsForManager(
     values.push(parseCommunityAvatarInput(body.avatar) ?? null)
   }
   if (body.charter !== undefined) {
-    const blocks = parseCharterBlocks(body.charter)
+    const html = parseCharterToHtml(body.charter)
+    const stored = html ? serializeCharterHtml(html) : ''
     updates.push('charter = ?')
-    values.push(blocks.length ? serializeCharterBlocks(blocks) : null)
+    values.push(stored || null)
   }
   if (body.listed_public !== undefined) {
     if (body.listed_public && !current.listed_public) {
@@ -1842,7 +1846,7 @@ export async function getPublicCommunityBySlug(slug: string): Promise<PublicComm
 
 export type PublicCommunityProfile = PublicCommunityCard & {
   member_count: number
-  charter: CharterBlock[]
+  charter: string
 }
 
 /** Profil public détaillé d'un lieu (carte + charte + statistiques). */
@@ -1871,7 +1875,7 @@ export async function getPublicCommunityProfileBySlug(
   return {
     ...mapPublicCommunityCard(community),
     member_count: memberCount,
-    charter: community.charter ?? [],
+    charter: community.charter ?? '',
   }
 }
 
@@ -1921,21 +1925,23 @@ async function getCharterAcceptance(
   }
 }
 
-function communityCharterBlocks(community: CommunityRecord): CharterBlock[] {
-  return community.charter ?? []
+function communityCharterHtml(community: CommunityRecord): string {
+  return community.charter ?? ''
 }
 
-function charterContentHash(blocks: CharterBlock[]): string {
-  const serialized = blocks.length ? serializeCharterBlocks(blocks) : ''
-  return createHash('sha256').update(serialized).digest('hex').slice(0, 32)
+function charterContentHash(community: CommunityRecord): string {
+  const raw =
+    community.charter_raw ??
+    (community.charter ? serializeCharterHtml(community.charter) : '')
+  return createHash('sha256').update(raw).digest('hex').slice(0, 32)
 }
 
 export function userNeedsCharterAcceptance(
-  blocks: CharterBlock[],
+  community: CommunityRecord,
   acceptance: CharterAcceptanceStatus
 ): boolean {
-  if (!charterRequiresAcceptance(blocks)) return false
-  const hash = charterContentHash(blocks)
+  if (!charterHtmlRequiresAcceptance(communityCharterHtml(community))) return false
+  const hash = charterContentHash(community)
   return !acceptance.accepted || acceptance.charter_hash !== hash
 }
 
@@ -1998,9 +2004,8 @@ export async function getOnboardingStatus(userId: number): Promise<OnboardingSta
   for (const m of memberships) {
     const full = await getCommunityBySlug(m.slug)
     if (!full) continue
-    const blocks = communityCharterBlocks(full)
     const acceptance = await getCharterAcceptance(userId, full.id)
-    if (userNeedsCharterAcceptance(blocks, acceptance)) {
+    if (userNeedsCharterAcceptance(full, acceptance)) {
       pending_charter_slugs.push(m.slug)
     }
   }
@@ -2015,7 +2020,7 @@ export type MemberCharterView = {
   logo_emoji: string | null
   accent_color: string | null
   avatar: string | null
-  charter: CharterBlock[]
+  charter: string
   accepted: boolean
   accepted_at: string | null
   requires_acceptance: boolean
@@ -2029,9 +2034,8 @@ export async function getCommunityCharterForMember(
   if (!community) throw Object.assign(new Error('Lieu introuvable'), { status: 404 })
   await requireCommunityMembership(userId, community.id)
 
-  const blocks = communityCharterBlocks(community)
   const acceptance = await getCharterAcceptance(userId, community.id)
-  const requires_acceptance = userNeedsCharterAcceptance(blocks, acceptance)
+  const requires_acceptance = userNeedsCharterAcceptance(community, acceptance)
 
   return {
     slug: community.slug,
@@ -2040,7 +2044,7 @@ export async function getCommunityCharterForMember(
     logo_emoji: community.logo_emoji,
     accent_color: community.accent_color,
     avatar: community.avatar,
-    charter: blocks,
+    charter: communityCharterHtml(community),
     accepted: acceptance.accepted && !requires_acceptance,
     accepted_at: acceptance.accepted_at,
     requires_acceptance,
@@ -2055,12 +2059,11 @@ export async function acceptCommunityCharter(
   if (!community) throw Object.assign(new Error('Lieu introuvable'), { status: 404 })
   await requireCommunityMembership(userId, community.id)
 
-  const blocks = communityCharterBlocks(community)
-  if (!charterRequiresAcceptance(blocks)) {
+  if (!charterHtmlRequiresAcceptance(communityCharterHtml(community))) {
     throw Object.assign(new Error('Ce lieu n’a pas publié de charte'), { status: 400 })
   }
 
-  const hash = charterContentHash(blocks)
+  const hash = charterContentHash(community)
   const pool = getPool()
   const tA = table('mandala_charter_acceptances')
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ')

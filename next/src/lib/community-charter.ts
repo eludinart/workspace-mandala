@@ -1,8 +1,16 @@
+import { richHtmlHasContent, sanitizeRichHtml } from './sanitize-rich-html'
+
 export type CharterBlock =
   | { id: string; type: 'heading'; level: 1 | 2; text: string }
   | { id: string; type: 'paragraph'; text: string }
   | { id: string; type: 'list'; items: string[] }
   | { id: string; type: 'image'; src: string; caption?: string }
+
+/** Document charte v2 — HTML sanitizé (éditeur riche). */
+export type CharterHtmlDocument = {
+  format: 'html'
+  html: string
+}
 
 export const MAX_CHARTER_BLOCKS = 200
 export const MAX_CHARTER_IMAGE_BYTES = 200_000
@@ -12,6 +20,93 @@ export const MAX_CHARTER_PARAGRAPH = 100_000
 export const MAX_CHARTER_LIST_ITEM = 2_000
 export const MAX_CHARTER_LIST_ITEMS = 80
 export const MAX_CHARTER_CAPTION = 500
+
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function escapeHtmlAttr(text: string): string {
+  return escapeHtmlText(text).replace(/'/g, '&#39;')
+}
+
+/** Convertit d’anciens blocs charte en HTML pour l’éditeur riche. */
+export function charterBlocksToHtml(blocks: CharterBlock[]): string {
+  const parts: string[] = []
+  for (const block of blocks) {
+    if (block.type === 'heading') {
+      const tag = block.level === 1 ? 'h1' : 'h2'
+      const text = escapeHtmlText(stripWrappingMdEmphasis(block.text))
+      if (text) parts.push(`<${tag}>${text}</${tag}>`)
+    } else if (block.type === 'paragraph') {
+      const text = escapeHtmlText(stripWrappingMdEmphasis(block.text)).replace(/\n/g, '<br>')
+      if (text) parts.push(`<p>${text}</p>`)
+    } else if (block.type === 'list') {
+      const items = block.items
+        .map((item) => stripWrappingMdEmphasis(item).trim())
+        .filter(Boolean)
+        .map((item) => `<li>${escapeHtmlText(item)}</li>`)
+      if (items.length) parts.push(`<ul>${items.join('')}</ul>`)
+    } else if (block.type === 'image' && block.src) {
+      const alt = escapeHtmlAttr(block.caption ?? '')
+      parts.push(`<img src="${escapeHtmlAttr(block.src)}" alt="${alt}">`)
+    }
+  }
+  return sanitizeRichHtml(parts.join(''))
+}
+
+/**
+ * Normalise toute valeur stockée / API en HTML sanitizé.
+ * Accepte : document `{format:'html'}`, tableau de blocs legacy, HTML brut, JSON string.
+ */
+export function parseCharterToHtml(raw: unknown): string {
+  if (raw == null || raw === '') return ''
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (!trimmed) return ''
+    if (trimmed.startsWith('<')) return sanitizeRichHtml(trimmed)
+    try {
+      return parseCharterToHtml(JSON.parse(trimmed))
+    } catch {
+      return sanitizeRichHtml(
+        `<p>${escapeHtmlText(trimmed).replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>')}</p>`,
+      )
+    }
+  }
+
+  if (Array.isArray(raw)) {
+    return charterBlocksToHtml(parseCharterBlocks(raw))
+  }
+
+  if (typeof raw === 'object') {
+    const o = raw as Record<string, unknown>
+    if (o.format === 'html' || typeof o.html === 'string') {
+      return sanitizeRichHtml(String(o.html ?? ''))
+    }
+  }
+
+  throw new Error('Charte invalide')
+}
+
+/** Sérialise le HTML pour stockage DB (`charter` LONGTEXT). */
+export function serializeCharterHtml(html: string): string {
+  const clean = sanitizeRichHtml(html)
+  if (!richHtmlHasContent(clean)) return ''
+  const doc: CharterHtmlDocument = { format: 'html', html: clean }
+  const json = JSON.stringify(doc)
+  if (json.length > MAX_CHARTER_JSON_BYTES) {
+    throw new Error('Charte trop volumineuse — réduisez le texte ou les images')
+  }
+  return json
+}
+
+export function charterHtmlRequiresAcceptance(html: string): boolean {
+  return richHtmlHasContent(html)
+}
 
 export function newCharterBlockId(): string {
   return `b_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -28,6 +123,84 @@ export function emptyCharterBlock(type: CharterBlock['type']): CharterBlock {
       return { id, type: 'list', items: [''] }
     case 'image':
       return { id, type: 'image', src: '', caption: '' }
+    default: {
+      const _exhaustive: never = type
+      return _exhaustive
+    }
+  }
+}
+
+/** Retire un wrapping Markdown gras (`**…**` / `__…__`) sur tout le texte. */
+export function stripWrappingMdEmphasis(text: string): string {
+  let t = text.trim()
+  for (let i = 0; i < 3; i += 1) {
+    const bold = t.match(/^\*\*([\s\S]+)\*\*$/) ?? t.match(/^__([\s\S]+)__$/)
+    if (!bold) break
+    t = bold[1].trim()
+  }
+  return t
+}
+
+function blockPlainText(block: CharterBlock): string {
+  switch (block.type) {
+    case 'heading':
+      return stripWrappingMdEmphasis(block.text)
+    case 'paragraph':
+      return stripWrappingMdEmphasis(block.text)
+    case 'list':
+      return block.items.map((item) => stripWrappingMdEmphasis(item)).filter(Boolean).join('\n')
+    case 'image':
+      return stripWrappingMdEmphasis(block.caption ?? '')
+    default: {
+      const _exhaustive: never = block
+      return _exhaustive
+    }
+  }
+}
+
+/** Change le type d’un bloc en conservant le contenu textuel autant que possible. */
+export function convertCharterBlock(
+  block: CharterBlock,
+  nextType: CharterBlock['type'],
+): CharterBlock {
+  if (block.type === nextType) return block
+  const id = block.id
+  const text = blockPlainText(block)
+
+  switch (nextType) {
+    case 'heading':
+      return {
+        id,
+        type: 'heading',
+        level: block.type === 'heading' ? block.level : 2,
+        text: text.slice(0, MAX_CHARTER_HEADING),
+      }
+    case 'paragraph':
+      return {
+        id,
+        type: 'paragraph',
+        text: text.slice(0, MAX_CHARTER_PARAGRAPH),
+      }
+    case 'list': {
+      const items = text
+        .split('\n')
+        .map((line) => line.replace(/^[-*+]\s+/, '').trim())
+        .filter(Boolean)
+        .slice(0, MAX_CHARTER_LIST_ITEMS)
+        .map((item) => item.slice(0, MAX_CHARTER_LIST_ITEM))
+      return { id, type: 'list', items: items.length ? items : [''] }
+    }
+    case 'image':
+      return {
+        id,
+        type: 'image',
+        src: block.type === 'image' ? block.src : '',
+        caption: text.slice(0, MAX_CHARTER_CAPTION),
+      }
+    default: {
+      const _exhaustive: never = nextType
+      return _exhaustive
+    }
   }
 }
 
@@ -75,18 +248,18 @@ export function parseCharterBlocks(raw: unknown): CharterBlock[] {
         id,
         type: 'heading',
         level,
-        text: String(o.text ?? '').slice(0, MAX_CHARTER_HEADING),
+        text: stripWrappingMdEmphasis(String(o.text ?? '')).slice(0, MAX_CHARTER_HEADING),
       })
     } else if (type === 'paragraph') {
       blocks.push({
         id,
         type: 'paragraph',
-        text: String(o.text ?? '').slice(0, MAX_CHARTER_PARAGRAPH),
+        text: stripWrappingMdEmphasis(String(o.text ?? '')).slice(0, MAX_CHARTER_PARAGRAPH),
       })
     } else if (type === 'list') {
       const items = Array.isArray(o.items)
         ? o.items
-            .map((x) => String(x ?? '').slice(0, MAX_CHARTER_LIST_ITEM))
+            .map((x) => stripWrappingMdEmphasis(String(x ?? '')).slice(0, MAX_CHARTER_LIST_ITEM))
             .filter(Boolean)
             .slice(0, MAX_CHARTER_LIST_ITEMS)
         : []
@@ -98,7 +271,10 @@ export function parseCharterBlocks(raw: unknown): CharterBlock[] {
           id,
           type: 'image',
           src,
-          caption: o.caption != null ? String(o.caption).slice(0, MAX_CHARTER_CAPTION) : '',
+          caption:
+            o.caption != null
+              ? stripWrappingMdEmphasis(String(o.caption)).slice(0, MAX_CHARTER_CAPTION)
+              : '',
         })
       }
     }
@@ -114,8 +290,10 @@ export function serializeCharterBlocks(blocks: CharterBlock[]): string {
   return json
 }
 
-export function charterRequiresAcceptance(blocks: CharterBlock[]): boolean {
-  return blocks.length > 0
+/** @deprecated Prefer `charterHtmlRequiresAcceptance` — conservé pour les appels blocs legacy. */
+export function charterRequiresAcceptance(htmlOrBlocks: string | CharterBlock[]): boolean {
+  if (Array.isArray(htmlOrBlocks)) return htmlOrBlocks.length > 0
+  return charterHtmlRequiresAcceptance(htmlOrBlocks)
 }
 
 /** Convertit les blocs charte en Markdown éditable. */
@@ -176,7 +354,7 @@ export function markdownToCharterBlocks(md: string): CharterBlock[] {
   let i = 0
 
   const pushParagraph = (buf: string[]) => {
-    const joined = buf.join('\n').trim()
+    const joined = stripWrappingMdEmphasis(buf.join('\n').trim())
     if (!joined) return
     // Une seule ligne courte type titre → heading
     if (buf.length === 1) {
@@ -200,7 +378,7 @@ export function markdownToCharterBlocks(md: string): CharterBlock[] {
 
   const pushList = (items: string[]) => {
     const cleaned = items
-      .map((x) => x.slice(0, MAX_CHARTER_LIST_ITEM))
+      .map((x) => stripWrappingMdEmphasis(x).slice(0, MAX_CHARTER_LIST_ITEM))
       .filter(Boolean)
       .slice(0, MAX_CHARTER_LIST_ITEMS)
     if (!cleaned.length) return
@@ -223,7 +401,7 @@ export function markdownToCharterBlocks(md: string): CharterBlock[] {
         id: newCharterBlockId(),
         type: 'heading',
         level,
-        text: heading[2].trim().slice(0, MAX_CHARTER_HEADING),
+        text: stripWrappingMdEmphasis(heading[2]).slice(0, MAX_CHARTER_HEADING),
       })
       i += 1
       continue
@@ -263,7 +441,8 @@ export function markdownToCharterBlocks(md: string): CharterBlock[] {
     }
 
     // Titre implicite isolé (ligne courte puis suite du texte)
-    const implicit = looksLikeImplicitHeading(trimmed)
+    const implicitLine = stripWrappingMdEmphasis(trimmed)
+    const implicit = looksLikeImplicitHeading(implicitLine)
     if (implicit) {
       const nextNonEmpty = lines.slice(i + 1).find((l) => l.trim())
       if (nextNonEmpty != null) {
@@ -271,7 +450,7 @@ export function markdownToCharterBlocks(md: string): CharterBlock[] {
           id: newCharterBlockId(),
           type: 'heading',
           level: implicit,
-          text: trimmed.slice(0, MAX_CHARTER_HEADING),
+          text: implicitLine.slice(0, MAX_CHARTER_HEADING),
         })
         i += 1
         continue

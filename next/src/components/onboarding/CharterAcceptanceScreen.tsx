@@ -121,7 +121,7 @@ export function CharterAcceptanceScreen({ slug, initial, onAccepted }: Props) {
 
       <div className="flex-1 min-h-0 overflow-y-auto py-5 px-1">
         <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:p-5">
-          <CharterPreview blocks={data.charter} />
+          <CharterPreview html={data.charter} />
         </div>
       </div>
 

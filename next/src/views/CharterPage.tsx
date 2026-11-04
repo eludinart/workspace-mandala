@@ -93,7 +93,7 @@ export function CharterPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
 
       {!loading && !error && data && (
         <article className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 sm:p-6">
-          <CharterPreview blocks={data.charter} />
+          <CharterPreview html={data.charter} />
         </article>
       )}
     </div>

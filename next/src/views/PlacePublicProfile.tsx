@@ -6,6 +6,7 @@ import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
 import { RelierPlaceButton } from '@/components/place/RelierPlaceButton'
+import { richHtmlHasContent } from '@/lib/sanitize-rich-html'
 import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
 import { ResourceLibrary } from '@/components/resources/ResourceLibrary'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
@@ -60,7 +61,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
   const directions = directionsUrl(place)
   const hasGeo = place.latitude != null && place.longitude != null
   const region = [place.city, place.country].filter((v) => v && String(v).trim()).join(', ')
-  const hasCharter = place.charter && place.charter.length > 0
+  const hasCharter = richHtmlHasContent(place.charter ?? '')
 
   return (
     <PublicSiteChrome user={user} authLoading={authLoading}>
@@ -155,7 +156,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
               <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Charte &amp; valeurs</h2>
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6">
-                  <CharterPreview blocks={place.charter} />
+                  <CharterPreview html={place.charter} />
                 </div>
               </section>
             )}

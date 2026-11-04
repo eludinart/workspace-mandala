@@ -20,10 +20,11 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const { isAppSiteManager } = await resolveCommunityManagerAccess(uid)
     const { slug } = await ctx.params
     const settings = await getCommunitySettingsForManager(slug, uid, isAppSiteManager)
+    const { charter_raw: _raw, ...safeSettings } = settings
     return NextResponse.json({
       settings: {
-        ...settings,
-        has_avatar: !!(settings.avatar && settings.avatar.length > 20),
+        ...safeSettings,
+        has_avatar: !!(safeSettings.avatar && safeSettings.avatar.length > 20),
       },
     })
   } catch (err: unknown) {
@@ -65,10 +66,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       join_mode: body.join_mode,
       rotate_invite_code: body.rotate_invite_code,
     })
+    const { charter_raw: _rawUpdated, ...safeUpdated } = updated
     return NextResponse.json({
       settings: {
-        ...updated,
-        has_avatar: !!(updated.avatar && updated.avatar.length > 20),
+        ...safeUpdated,
+        has_avatar: !!(safeUpdated.avatar && safeUpdated.avatar.length > 20),
       },
     })
   } catch (err: unknown) {
