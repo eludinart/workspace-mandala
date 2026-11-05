@@ -21,6 +21,31 @@ function pricesForFamily(
     .filter(Boolean)
 }
 
+const FREE_FEATURES = [
+  'Compte & profil — identité, bio, préférences de visibilité',
+  'Rejoindre un lieu — charte, cercle, vie communautaire',
+  'Mur vivant — annonces, événements, fil du lieu',
+  'Messages & chat — échanges, réactions, sondages de groupe',
+  'Annuaire & compétences — proposer / chercher, carte des membres',
+  'Bibliothèque — lire et partager textes, recettes, médias',
+  'Calendrier du lieu — dates et rendez-vous communautaires',
+  'Découvrir le réseau — carte publique des lieux listés',
+] as const
+
+const PLACE_FEATURES = [
+  'Badge lieu vérifié / listé',
+  'Présence catalogue et carte publique',
+  'Mise en avant possible',
+  'Membres couverts sans abo individuel',
+] as const
+
+const PRO_FEATURES = [
+  'Carte Pro complète',
+  'Mise en avant dans l’annuaire',
+  'CTA Contacter',
+  'Accès au parcours de vérification',
+] as const
+
 export function LandingOffersSection() {
   const { user } = useAuth()
   const [products, setProducts] = useState<BillingProduct[]>([])
@@ -48,85 +73,67 @@ export function LandingOffersSection() {
   const ctaHref = user ? '/app' : '/app?mode=register'
 
   return (
-    <section id="tarifs" className="scroll-mt-16 py-16 sm:py-20">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-12">
-        <div className="text-center max-w-2xl mx-auto space-y-3">
+    <section id="tarifs" className="m-landing-offers scroll-mt-20">
+      <div className="m-landing-offers-inner">
+        <header className="m-landing-offers-intro">
           <p className="m-landing-eyebrow">Offres</p>
-          <h2 className="text-3xl sm:text-4xl">Soutenir les lieux et les pratiques</h2>
-          <p className="text-slate-400 text-sm sm:text-base leading-relaxed">
+          <h2 className="m-landing-offers-title">Soutenir les lieux et les pratiques</h2>
+          <p className="m-landing-offers-lede">
             La vie du lieu — mur, messages, événements — reste ouverte à tous les membres. Les
             offres ci-dessous aident les lieux et les pratiques à être visibles dans le Mandala
             public.
           </p>
-        </div>
+        </header>
 
-        <article className="m-landing-card p-6 sm:p-8 space-y-5">
-          <div className="space-y-2">
+        <article className="m-landing-offer m-landing-offer--free">
+          <div className="m-landing-offer-head">
             <p className="m-landing-eyebrow">Gratuit · pour toujours</p>
-            <h3 className="text-2xl">S’inscrire, c’est déjà beaucoup</h3>
-            <p className="text-sm text-slate-400 leading-relaxed">
+            <h3 className="m-landing-offer-name">S’inscrire, c’est déjà beaucoup</h3>
+            <p className="m-landing-offer-desc">
               L’abonnement n’est pas requis pour vivre un lieu. Dès l’inscription, chaque membre
               dispose du cœur de Mandala — sans carte bancaire.
             </p>
           </div>
-          <ul className="grid gap-2.5 sm:grid-cols-2 text-sm text-slate-300">
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Compte &amp; profil — identité, bio, préférences de visibilité
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Rejoindre un lieu — charte, cercle, vie communautaire
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Mur vivant — annonces, événements, fil du lieu
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Messages &amp; chat — échanges, réactions, sondages de groupe
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Annuaire &amp; compétences — proposer / chercher, carte des membres
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Bibliothèque — lire et partager textes, recettes, médias
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Calendrier du lieu — dates et rendez-vous communautaires
-            </li>
-            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
-              Découvrir le réseau — carte publique des lieux listés
-            </li>
+          <ul className="m-landing-offer-grid">
+            {FREE_FEATURES.map((line) => (
+              <li key={line} className="m-landing-offer-feature">
+                <span className="m-landing-offer-dot" aria-hidden />
+                <span>{line}</span>
+              </li>
+            ))}
           </ul>
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="m-landing-offer-note">
             Les offres Lieu et Mandala Pro ci-dessous ajoutent de la visibilité publique et des
             mises en avant — elles ne débloquent pas la vie interne du lieu.
           </p>
-          <div>
-            <Link href={ctaHref} className="m-landing-btn !py-2.5 !px-4 text-[10px]">
+          <div className="m-landing-offer-cta">
+            <Link href={ctaHref} className="m-landing-btn">
               {user ? 'Ouvrir mon espace' : 'Créer un compte gratuit'}
             </Link>
           </div>
         </article>
 
-        <div className="grid gap-6 md:grid-cols-2 md:gap-8">
-          <article className="m-landing-card p-6 sm:p-8 space-y-5">
-            <div className="space-y-2">
-              <h3 className="text-2xl">Offre Lieu</h3>
-              <p className="text-sm text-slate-400 leading-relaxed">
+        <div className="m-landing-offers-paid">
+          <article className="m-landing-offer m-landing-offer--paid">
+            <div className="m-landing-offer-head">
+              <p className="m-landing-eyebrow">Visibilité lieu</p>
+              <h3 className="m-landing-offer-name">Offre Lieu</h3>
+              <p className="m-landing-offer-desc">
                 Pour qui fait vivre un lieu et souhaite le faire figurer dans le Mandala public.
               </p>
             </div>
-            <ul className="text-sm text-slate-300 space-y-2.5 list-disc pl-4">
-              <li>Badge lieu vérifié / listé</li>
-              <li>Présence catalogue et carte publique</li>
-              <li>Mise en avant possible</li>
-              <li>Membres couverts sans abo individuel</li>
+            <ul className="m-landing-offer-list">
+              {PLACE_FEATURES.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
             </ul>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="m-landing-offer-note">
               Sans cette offre, le lieu vit pour ses membres ; il n’apparaît pas comme présence
               officielle dans le Mandala public.
             </p>
-            <div className="pt-2 min-h-[3rem] space-y-1">
+            <div className="m-landing-offer-prices" aria-live="polite">
               {loading ? (
-                <p className="text-sm text-slate-500">Chargement des montants…</p>
+                <p className="m-landing-offer-price-fallback">Chargement des montants…</p>
               ) : placePrices.length > 0 ? (
                 placePrices.map((line) => (
                   <p key={line} className="m-landing-offer-price">
@@ -134,31 +141,31 @@ export function LandingOffersSection() {
                   </p>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Montants disponibles dans l’app</p>
+                <p className="m-landing-offer-price-fallback">Montants disponibles dans l’app</p>
               )}
             </div>
           </article>
 
-          <article className="m-landing-card p-6 sm:p-8 space-y-5">
-            <div className="space-y-2">
-              <h3 className="text-2xl">Mandala Pro</h3>
-              <p className="text-sm text-slate-400 leading-relaxed">
+          <article className="m-landing-offer m-landing-offer--paid">
+            <div className="m-landing-offer-head">
+              <p className="m-landing-eyebrow">Pratique</p>
+              <h3 className="m-landing-offer-name">Mandala Pro</h3>
+              <p className="m-landing-offer-desc">
                 Pour qui propose une pratique au service des lieux et souhaite être trouvé·e.
               </p>
             </div>
-            <ul className="text-sm text-slate-300 space-y-2.5 list-disc pl-4">
-              <li>Carte Pro complète</li>
-              <li>Mise en avant dans l’annuaire</li>
-              <li>CTA Contacter</li>
-              <li>Accès au parcours de vérification</li>
+            <ul className="m-landing-offer-list">
+              {PRO_FEATURES.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
             </ul>
-            <p className="text-xs text-slate-500 leading-relaxed">
+            <p className="m-landing-offer-note">
               Le badge Mandala Pro demande un abonnement actif et une validation humaine — ce n’est
               pas un sticker acheté seul.
             </p>
-            <div className="pt-2 min-h-[3rem] space-y-1">
+            <div className="m-landing-offer-prices" aria-live="polite">
               {loading ? (
-                <p className="text-sm text-slate-500">Chargement des montants…</p>
+                <p className="m-landing-offer-price-fallback">Chargement des montants…</p>
               ) : proPrices.length > 0 ? (
                 proPrices.map((line) => (
                   <p key={line} className="m-landing-offer-price">
@@ -166,23 +173,20 @@ export function LandingOffersSection() {
                   </p>
                 ))
               ) : (
-                <p className="text-sm text-slate-500">Montants disponibles dans l’app</p>
+                <p className="m-landing-offer-price-fallback">Montants disponibles dans l’app</p>
               )}
             </div>
           </article>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-1">
+        <footer className="m-landing-offers-foot">
           <Link href={ctaHref} className="m-landing-btn m-landing-btn--ghost">
             Voir dans l’app
           </Link>
-          <Link
-            href="/cgv"
-            className="text-xs text-slate-500 hover:text-[rgb(var(--accent-400))] underline underline-offset-4"
-          >
+          <Link href="/cgv" className="m-landing-offers-cgv">
             CGV
           </Link>
-        </div>
+        </footer>
       </div>
     </section>
   )
