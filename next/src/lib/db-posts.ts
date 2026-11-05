@@ -141,15 +141,15 @@ export async function createPost(
     throw Object.assign(new Error('Type de brève invalide'), { status: 400 })
   }
   const content = String(data.content ?? '').trim()
-  if (!content) {
-    throw Object.assign(new Error('Le contenu est requis'), { status: 400 })
-  }
   if (content.length > 2000) {
     throw Object.assign(new Error('Brève trop longue (2000 caractères max.)'), { status: 400 })
   }
   const image = normalizePostImageData(data.image_data ?? null)
   if (data.image_data != null && data.image_data !== '' && image === undefined) {
     throw Object.assign(new Error('Image invalide (JPEG, PNG, WebP ou GIF)'), { status: 400 })
+  }
+  if (!content && !image) {
+    throw Object.assign(new Error('Ajoutez un texte ou une image'), { status: 400 })
   }
 
   const pool = getPool()
@@ -187,14 +187,20 @@ export async function createPost(
       ])
       const placeName = place?.name?.trim() || 'votre lieu'
       const kind = data.type === 'logistics' ? 'logistique' : 'inspiration'
-      const snippet = content.length > 120 ? `${content.slice(0, 117)}…` : content
+      const snippet = content
+        ? content.length > 120
+          ? `${content.slice(0, 117)}…`
+          : content
+        : image
+          ? 'photo jointe'
+          : ''
       const slug = place?.slug?.trim()
       await notifyPlaceMembers({
         communityId,
         actorUserId: authorId,
         type: 'agora_post',
         title: `${actor} a publié dans l’Agora de ${placeName}`,
-        body: `${kind} — ${snippet}`,
+        body: snippet ? `${kind} — ${snippet}` : kind,
         actionUrl: slug ? `mandala:home?community=${encodeURIComponent(slug)}` : 'mandala:home',
         actionLabel: 'Voir l’Agora',
         sourceType: 'mandala_post',

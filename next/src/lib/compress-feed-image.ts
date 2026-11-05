@@ -1,19 +1,70 @@
 /**
  * Redimensionne / recadre une image pour le fil Agora (bandeau ~16:10, JPEG léger).
  */
+
+function looksLikeImage(file: File): boolean {
+  if (file.type.startsWith('image/')) return true
+  // iOS / certains OS laissent type vide — on se fie à l’extension.
+  return /\.(jpe?g|png|webp|gif|heic|heif|bmp|avif)$/i.test(file.name || '')
+}
+
+async function loadBitmap(file: File): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file)
+  } catch {
+    const dataUrl = await readFileAsDataUrl(file)
+    const img = await loadHtmlImage(dataUrl)
+    try {
+      return await createImageBitmap(img)
+    } finally {
+      img.src = ''
+    }
+  }
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') resolve(reader.result)
+      else reject(new Error('Lecture image impossible'))
+    }
+    reader.onerror = () => reject(new Error('Lecture image impossible'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function loadHtmlImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Image illisible'))
+    img.src = src
+  })
+}
+
 export async function compressFeedImage(
   file: File,
   opts?: { maxBytes?: number; targetWidth?: number; targetHeight?: number }
 ): Promise<{ dataUrl: string; error?: string }> {
-  if (!file.type.startsWith('image/')) {
-    return { dataUrl: '', error: 'Fichier image requis' }
+  if (!looksLikeImage(file)) {
+    return { dataUrl: '', error: 'Fichier image requis (JPEG, PNG, WebP ou GIF)' }
   }
 
   const maxBytes = opts?.maxBytes ?? 450_000
   const targetW = opts?.targetWidth ?? 1200
   const targetH = opts?.targetHeight ?? 750
 
-  const bitmap = await createImageBitmap(file)
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await loadBitmap(file)
+  } catch {
+    return {
+      dataUrl: '',
+      error: 'Impossible de lire cette image — essayez JPEG ou PNG',
+    }
+  }
+
   const srcW = bitmap.width
   const srcH = bitmap.height
   const srcRatio = srcW / srcH
@@ -55,4 +106,25 @@ export async function compressFeedImage(
     dataUrl: '',
     error: 'Image trop lourde même après compression — choisissez une photo plus légère',
   }
+}
+
+/** Extrait le premier fichier image d’un événement presse-papiers ou drop. */
+export function imageFileFromDataTransfer(data: DataTransfer | null | undefined): File | null {
+  if (!data) return null
+  if (data.files?.length) {
+    for (let i = 0; i < data.files.length; i++) {
+      const f = data.files.item(i)
+      if (f && looksLikeImage(f)) return f
+    }
+  }
+  const items = data.items
+  if (!items) return null
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item?.kind === 'file' && typeof item.type === 'string' && item.type.startsWith('image/')) {
+      const f = item.getAsFile()
+      if (f) return f
+    }
+  }
+  return null
 }

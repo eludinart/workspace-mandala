@@ -6,7 +6,7 @@ import type { PostType } from '@/lib/db-posts'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
-import { compressFeedImage } from '@/lib/compress-feed-image'
+import { compressFeedImage, imageFileFromDataTransfer } from '@/lib/compress-feed-image'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ExplainCard } from '@/components/help/ExplainCard'
@@ -40,6 +40,7 @@ export function AgoraFeed() {
   const [wallPublic, setWallPublic] = useState(false)
   const [imageData, setImageData] = useState<string | null>(null)
   const [imageBusy, setImageBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -72,10 +73,12 @@ export function AgoraFeed() {
     void load()
   }, [load])
 
-  const pickImage = async (file: File | null) => {
+  const pickImage = useCallback(async (file: File | null) => {
     if (!file) return
+    setComposerOpen(true)
     setImageBusy(true)
     setError(null)
+    setMsg(null)
     try {
       const res = await compressFeedImage(file)
       if (res.error || !res.dataUrl) {
@@ -88,17 +91,20 @@ export function AgoraFeed() {
     } finally {
       setImageBusy(false)
     }
-  }
+  }, [])
 
   const resetComposer = () => {
     setComposerOpen(false)
     setDraft('')
     setWallPublic(false)
     setImageData(null)
+    setDragOver(false)
   }
 
+  const canPublish = Boolean(draft.trim() || imageData)
+
   const publish = async () => {
-    if (!active?.id || !draft.trim()) return
+    if (!active?.id || !canPublish || imageBusy) return
     setSubmitting(true)
     setMsg(null)
     setError(null)
@@ -185,8 +191,35 @@ export function AgoraFeed() {
           </button>
         </div>
 
-        {(composerOpen || draft) && (
-          <div className="space-y-3 pt-1 border-t border-slate-800">
+        {(composerOpen || draft || imageData) && (
+          <div
+            className={`space-y-3 pt-1 border-t border-slate-800 rounded-xl transition-colors ${
+              dragOver ? 'bg-violet-950/30 ring-2 ring-violet-500/50' : ''
+            }`}
+            onDragEnter={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragOver(true)
+            }}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragOver(true)
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return
+              setDragOver(false)
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setDragOver(false)
+              const file = imageFileFromDataTransfer(e.dataTransfer)
+              void pickImage(file)
+            }}
+          >
             <div className="flex gap-2">
               <button
                 type="button"
@@ -214,13 +247,19 @@ export function AgoraFeed() {
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
+              onPaste={(e) => {
+                const file = imageFileFromDataTransfer(e.clipboardData)
+                if (!file) return
+                e.preventDefault()
+                void pickImage(file)
+              }}
               rows={3}
               maxLength={2000}
               autoFocus
               placeholder={
                 postType === 'logistics'
-                  ? 'Horaires, lieu, consignes pratiques…'
-                  : 'Une pensée, une nouvelle, une inspiration…'
+                  ? 'Horaires, lieu, consignes pratiques… (Ctrl+V pour coller une image)'
+                  : 'Une pensée, une nouvelle… (Ctrl+V ou glisser une image)'
               }
               className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-base resize-none"
             />
@@ -228,7 +267,7 @@ export function AgoraFeed() {
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/jpeg,image/png,image/webp,image/gif,image/*"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null
@@ -254,6 +293,9 @@ export function AgoraFeed() {
                   Retirer l’image
                 </button>
               )}
+              <span className="text-[11px] text-slate-500">
+                Coller, glisser-déposer, ou choisir un fichier
+              </span>
             </div>
             {imageData && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -274,7 +316,7 @@ export function AgoraFeed() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled={submitting || imageBusy || !draft.trim()}
+                disabled={submitting || imageBusy || !canPublish}
                 onClick={() => void publish()}
                 className="text-sm font-medium px-5 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
               >
