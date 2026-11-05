@@ -3,16 +3,45 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api-client'
 import { useFeatureDoors } from '@/hooks/useFeatureDoors'
+import { isAvatarImageUrl } from '@/lib/user-avatar'
 
 type Pin = {
   user_id: number
   display_name: string
+  avatar?: string | null
+  avatar_emoji?: string | null
   city: string
   latitude: number
   longitude: number
 }
 
 const FRANCE_CENTER: [number, number] = [46.6, 2.5]
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+}
+
+function pinIconHtml(pin: Pin): string {
+  const title = escapeHtml(pin.display_name || '')
+  const base = 'm-map-marker m-map-marker--practice'
+  if (isAvatarImageUrl(pin.avatar)) {
+    return `<div class="${base} m-map-marker--photo" title="${title}"><img src="${escapeAttr(String(pin.avatar))}" alt="" class="m-map-marker-photo" /></div>`
+  }
+  const emoji = String(pin.avatar_emoji ?? '').trim()
+  if (emoji) {
+    return `<div class="${base} m-map-marker--emoji" title="${title}">${escapeHtml(emoji)}</div>`
+  }
+  const initial = (pin.display_name || '?').trim().slice(0, 1).toUpperCase() || '·'
+  return `<div class="${base}" title="${title}">${escapeHtml(initial)}</div>`
+}
 
 export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) {
   const { can, loading: doorsLoading } = useFeatureDoors()
@@ -72,19 +101,6 @@ export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !can('carte_membres')) return
-    void import('leaflet').then((L) => {
-      map.eachLayer((layer) => {
-        if ((layer as import('leaflet').Marker).getLatLng) {
-          map.removeLayer(layer)
-        }
-      })
-      // keep tile layer — re-add tiles if wiped: simpler clear markers via group
-    })
-  }, [pins, can])
-
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !can('carte_membres')) return
     let cancelled = false
     void import('leaflet').then((L) => {
       if (cancelled || mapRef.current !== map) return
@@ -97,13 +113,13 @@ export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) 
         const marker = L.marker([pin.latitude, pin.longitude], {
           icon: L.divIcon({
             className: 'm-map-marker-wrap',
-            html: `<div class="m-map-marker m-map-marker--practice">${pin.display_name.slice(0, 1).toUpperCase()}</div>`,
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
+            html: pinIconHtml(pin),
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
           }),
         })
         marker.bindTooltip(
-          `<div class="m-map-tooltip"><strong>${pin.display_name}</strong><br/>${pin.city}</div>`,
+          `<div class="m-map-tooltip"><strong>${escapeHtml(pin.display_name)}</strong><br/>${escapeHtml(pin.city)}</div>`,
           { className: 'm-map-leaflet-tooltip', direction: 'top', offset: [0, -12] }
         )
         marker.addTo(layer)
