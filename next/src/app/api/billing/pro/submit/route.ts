@@ -6,6 +6,7 @@ import { ApiError, requireAuth } from '@/lib/api-auth'
 import { authMe } from '@/lib/db-auth'
 import { assertBillingCtaAllowed } from '@/lib/billing-door'
 import { upsertProProfileSubmit } from '@/lib/db-billing'
+import { seedSkillOfferFromPro } from '@/lib/db-skills'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,12 +24,18 @@ export async function POST(req: NextRequest) {
     assertBillingCtaAllowed(isAdmin)
 
     const body = await req.json().catch(() => ({}))
-    const profile = await upsertProProfileSubmit(parseInt(userId, 10), {
+    const uid = parseInt(userId, 10)
+    const profile = await upsertProProfileSubmit(uid, {
       tagline: String(body.tagline ?? ''),
       modalities: String(body.modalities ?? ''),
       service_area: String(body.service_area ?? ''),
       external_url: String(body.external_url ?? ''),
     })
+    await seedSkillOfferFromPro(uid, {
+      tagline: String(body.tagline ?? ''),
+      modalities: String(body.modalities ?? ''),
+      service_area: String(body.service_area ?? ''),
+    }).catch(() => {})
 
     return NextResponse.json({ ok: true, profile })
   } catch (err: unknown) {

@@ -210,10 +210,61 @@ export function SkillsProfileSection() {
     }
   }
 
+  const [stats, setStats] = useState<{
+    views_30d: number
+    verification: string
+    endorsement_place_name: string | null
+    pro_status: string
+  } | null>(null)
+
+  useEffect(() => {
+    void skillsApi
+      .stats()
+      .then((s) =>
+        setStats({
+          views_30d: s.views_30d,
+          verification: s.verification,
+          endorsement_place_name: s.endorsement_place_name,
+          pro_status: s.pro_status,
+        })
+      )
+      .catch(() => setStats(null))
+  }, [])
+
   if (loading) return <p className="text-sm text-slate-500">Chargement de la fiche…</p>
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-5">
+      {stats && (
+        <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2 space-y-1 text-xs text-slate-400">
+          <p>
+            <span className="text-slate-200 font-medium">{stats.views_30d}</span> vue
+            {stats.views_30d > 1 ? 's' : ''} de votre fiche (30 jours)
+          </p>
+          {stats.pro_status !== 'none' && (
+            <p>
+              Mandala Pro : {stats.pro_status}
+              {stats.verification === 'verified'
+                ? stats.endorsement_place_name
+                  ? ` · badge endossé par ${stats.endorsement_place_name}`
+                  : ' · badge vérifié'
+                : stats.verification === 'pending'
+                  ? ' · endossement en attente'
+                  : stats.verification === 'rejected'
+                    ? ' · endossement refusé — mettez à jour votre demande'
+                    : ''}
+            </p>
+          )}
+          <a
+            href={`/competences/${profile.user_id}`}
+            className="text-violet-300 underline underline-offset-2"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Aperçu page publique
+          </a>
+        </div>
+      )}
       <p className="text-sm text-slate-400">
         Dites ce que vous savez faire, ce que vous proposez au collectif, et ce que vous cherchez. La fiche reste cachée tant que vous ne choisissez pas qui peut la voir.
       </p>
