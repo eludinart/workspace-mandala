@@ -42,6 +42,12 @@ export type SkillCard = {
   skills_visible?: boolean
   pro_boost?: boolean
   pro_verified?: boolean
+  pro_tagline?: string | null
+  pro_modalities?: string | null
+  pro_service_area?: string | null
+  pro_external_url?: string | null
+  pro_endorsement_place?: string | null
+  profile_views_30d?: number
 }
 
 export type SkillNote = {
@@ -85,6 +91,20 @@ export const skillsApi = {
   },
   card: (userId: number) =>
     api.get(`/api/skills/members/${userId}`) as Promise<{ card: SkillCard }>,
+  stats: () =>
+    api.get('/api/skills/stats') as Promise<{
+      views_30d: number
+      pro_status: string
+      plan_id: string | null
+      verification: string
+      reject_reason: string | null
+      endorsement_place_name: string | null
+      tagline: string | null
+    }>,
+  notifyContactLead: (proUserId: number) =>
+    api.post('/api/skills/contact-lead', { pro_user_id: proUserId }) as Promise<{
+      ok: boolean
+    }>,
   notes: (limit = 40) =>
     api.get(`/api/skills/notes?limit=${limit}`) as Promise<{ notes: SkillNote[] }>,
   createNote: (content: string) =>

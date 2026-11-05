@@ -18,7 +18,26 @@ import {
   type SkillScope,
 } from './skill-constants'
 import { compareSkillBoost } from './billing-entitlements'
-import { getProBoostFlagsForUsers } from './db-billing'
+import {
+  getProBoostFlagsForUsers,
+  type ProDirectoryFlags,
+} from './db-billing'
+import { createNotification } from './db-notifications'
+
+function applyProFlags(card: SkillCard, flags: ProDirectoryFlags | undefined): void {
+  if (!flags) return
+  card.pro_boost = Boolean(flags.proBoost)
+  card.pro_verified = Boolean(flags.proBoost && flags.proVerified)
+  if (flags.proBoost) {
+    card.pro_tagline = flags.tagline
+    card.pro_modalities = flags.modalities
+    card.pro_service_area = flags.service_area
+    card.pro_external_url = flags.external_url
+    if (flags.proVerified) {
+      card.pro_endorsement_place = flags.endorsement_place_name
+    }
+  }
+}
 
 let _ensured = false
 
@@ -75,6 +94,15 @@ export type SkillCard = {
   pro_boost?: boolean
   /** Badge Mandala Pro (abo + verified). */
   pro_verified?: boolean
+  /** Accroche / modalités Pro (profil billing). */
+  pro_tagline?: string | null
+  pro_modalities?: string | null
+  pro_service_area?: string | null
+  pro_external_url?: string | null
+  /** Lieu ayant endossé le badge. */
+  pro_endorsement_place?: string | null
+  /** Vues de fiche (propriétaire seulement, 30 j). */
+  profile_views_30d?: number
 }
 
 export type SkillNote = {
@@ -174,6 +202,18 @@ async function ensureSkillTables(): Promise<void> {
   if (!existing.has('frame_text')) {
     await exec(pool, `ALTER TABLE ${tP} ADD COLUMN frame_text VARCHAR(2000) NOT NULL DEFAULT ''`)
   }
+  const tViews = table('mandala_skill_profile_views')
+  await exec(
+    pool,
+    `CREATE TABLE IF NOT EXISTS ${tViews} (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      subject_user_id INT NOT NULL,
+      viewer_user_id INT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_subject_created (subject_user_id, created_at),
+      KEY idx_viewer_day (subject_user_id, viewer_user_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  )
   _ensured = true
 }
 
@@ -472,6 +512,27 @@ async function readSharedBio(userId: number, viewerId: number): Promise<string> 
   return bio
 }
 
+/** Fiche publique (scope mandala) pour SEO / partage. */
+export async function getPublicSkillCard(subjectId: number): Promise<SkillCard | null> {
+  if (!subjectId) return null
+  const profile = await loadProfile(subjectId)
+  if (profile.scope !== 'mandala') return null
+  const identities = await displayIdentity([subjectId])
+  const identity = identities.get(subjectId)
+  if (!identity) return null
+  const theirs = await listCommunitiesForUser(subjectId)
+  const bio = await readBio(subjectId)
+  const card = cardFromProfile(profile, identity, 0, toPlaceRefs(theirs), {
+    bio,
+    skillsVisible: true,
+    resources: [],
+  })
+  const proFlags = await getProBoostFlagsForUsers([subjectId])
+  applyProFlags(card, proFlags.get(subjectId))
+  void recordSkillProfileView(subjectId, null).catch(() => {})
+  return card
+}
+
 export async function getVisibleSkillCard(viewerId: number, subjectId: number): Promise<SkillCard | null> {
   const profile = await loadProfile(subjectId)
   const mine = await listCommunitiesForUser(viewerId)
@@ -508,6 +569,14 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
   })
   card.shares_place = memberShares
   card.shared_place_slug = shared?.slug ?? null
+  const proFlags = await getProBoostFlagsForUsers([subjectId])
+  applyProFlags(card, proFlags.get(subjectId))
+  if (viewerId > 0 && viewerId !== subjectId) {
+    void recordSkillProfileView(subjectId, viewerId).catch(() => {})
+  }
+  if (viewerId === subjectId) {
+    card.profile_views_30d = await countSkillProfileViews(subjectId, 30)
+  }
   return card
 }
 
@@ -589,9 +658,7 @@ export async function listSkillDirectory(params: {
     const card = cardFromProfile(profile, identity, params.viewerId, places)
     card.shares_place = params.viewerId !== userId && !!shared
     card.shared_place_slug = shared?.slug ?? null
-    const flags = proFlags.get(userId)
-    card.pro_boost = Boolean(flags?.proBoost)
-    card.pro_verified = Boolean(flags?.proBoost && flags?.proVerified)
+    applyProFlags(card, proFlags.get(userId))
     cards.push(card)
   }
 
@@ -740,6 +807,101 @@ export async function listVisibleSkillNotes(
   return notes
 }
 
+/** Une vue par spectateur et par jour (évite le spam). */
+export async function recordSkillProfileView(
+  subjectUserId: number,
+  viewerUserId: number | null
+): Promise<void> {
+  if (!isDbConfigured() || subjectUserId <= 0) return
+  if (viewerUserId != null && viewerUserId === subjectUserId) return
+  await ensureSkillTables()
+  const pool = getPool()
+  const tViews = table('mandala_skill_profile_views')
+  if (viewerUserId != null && viewerUserId > 0) {
+    const [dup] = await pool.execute<RowDataPacket[]>(
+      `SELECT id FROM ${tViews}
+       WHERE subject_user_id = ? AND viewer_user_id = ?
+         AND created_at >= CURDATE()
+       LIMIT 1`,
+      [subjectUserId, viewerUserId]
+    )
+    if (dup[0]) return
+  }
+  await pool.execute(
+    `INSERT INTO ${tViews} (subject_user_id, viewer_user_id) VALUES (?, ?)`,
+    [subjectUserId, viewerUserId != null && viewerUserId > 0 ? viewerUserId : null]
+  )
+}
+
+export async function countSkillProfileViews(
+  subjectUserId: number,
+  days = 30
+): Promise<number> {
+  if (!isDbConfigured() || subjectUserId <= 0) return 0
+  await ensureSkillTables()
+  const pool = getPool()
+  const tViews = table('mandala_skill_profile_views')
+  const d = Math.min(Math.max(days, 1), 365)
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT COUNT(*) AS n FROM ${tViews}
+     WHERE subject_user_id = ?
+       AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+    [subjectUserId, d]
+  )
+  return Number(rows[0]?.n ?? 0) || 0
+}
+
+/** Préremplit l’offre compétences depuis le profil Pro (si vide). */
+export async function seedSkillOfferFromPro(
+  userId: number,
+  fields: { tagline?: string; modalities?: string; service_area?: string }
+): Promise<void> {
+  if (!isDbConfigured() || userId <= 0) return
+  await ensureSkillTables()
+  const profile = await loadProfile(userId)
+  if (profile.offer_text.trim()) return
+  const parts = [fields.tagline, fields.modalities, fields.service_area]
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean)
+  if (!parts.length) return
+  const offer = parts.join('\n\n').slice(0, MAX_SKILL_TEXT)
+  const pool = getPool()
+  const tP = table('mandala_skill_profiles')
+  await pool.execute(
+    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text, frame_text)
+     VALUES (?, 'mandala', ?, '', '')
+     ON DUPLICATE KEY UPDATE
+       offer_text = IF(TRIM(offer_text) = '', VALUES(offer_text), offer_text),
+       scope = IF(scope = 'hidden', 'mandala', scope)`,
+    [userId, offer]
+  )
+}
+
+/** Notifie un Pro qu’un membre a tenté un contact depuis l’annuaire. */
+export async function notifyProSkillContact(opts: {
+  proUserId: number
+  fromUserId: number
+  fromLabel: string
+}): Promise<void> {
+  if (opts.proUserId <= 0 || opts.fromUserId <= 0 || opts.proUserId === opts.fromUserId) {
+    return
+  }
+  const flags = await getProBoostFlagsForUsers([opts.proUserId])
+  const f = flags.get(opts.proUserId)
+  if (!f?.proBoost) return
+  await createNotification({
+    type: 'skill_pro_lead',
+    title: 'Nouveau contact sur votre fiche Pro',
+    body: `${opts.fromLabel} vous a contacté depuis l’annuaire des compétences.`,
+    action_url: '/app?page=skills',
+    action_label: 'Voir l’annuaire',
+    recipient_type: 'user',
+    recipient_id: opts.proUserId,
+    created_by: opts.fromUserId,
+    priority: 'normal',
+  })
+}
+
 export async function deleteSkillDataForUser(userId: number): Promise<void> {
   if (!isDbConfigured() || !userId) return
   await ensureSkillTables()
@@ -762,4 +924,8 @@ export async function deleteSkillDataForUser(userId: number): Promise<void> {
   await pool.execute(`DELETE FROM ${table('mandala_skill_traits')} WHERE user_id = ?`, [userId])
   await pool.execute(`DELETE FROM ${table('mandala_skill_profile_places')} WHERE user_id = ?`, [userId])
   await pool.execute(`DELETE FROM ${table('mandala_skill_profiles')} WHERE user_id = ?`, [userId])
+  await pool.execute(
+    `DELETE FROM ${table('mandala_skill_profile_views')} WHERE subject_user_id = ? OR viewer_user_id = ?`,
+    [userId, userId]
+  )
 }
