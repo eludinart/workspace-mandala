@@ -28,8 +28,8 @@ export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) 
     let cancelled = false
     void api
       .get(`/api/members/city?community_slug=${encodeURIComponent(communitySlug)}`)
-      .then((res: { pins?: Pin[] }) => {
-        if (!cancelled) setPins(res.pins ?? [])
+      .then((raw) => {
+        if (!cancelled) setPins((raw as { pins?: Pin[] }).pins ?? [])
       })
       .catch(() => {
         if (!cancelled) setPins([])

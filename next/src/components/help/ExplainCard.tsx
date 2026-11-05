@@ -5,7 +5,7 @@ import { api } from '@/lib/api-client'
 import {
   EXPLAIN_COPY,
   type ExplainScreen,
-} from '@/lib/db-explain-cards'
+} from '@/lib/explain-card-constants'
 import { useFeatureDoors } from '@/hooks/useFeatureDoors'
 
 export function ExplainCard({ screen }: { screen: ExplainScreen }) {
@@ -22,8 +22,9 @@ export function ExplainCard({ screen }: { screen: ExplainScreen }) {
     let cancelled = false
     void api
       .get('/api/explain-cards')
-      .then((res: { door_open?: boolean; dismissed?: string[] }) => {
+      .then((raw) => {
         if (cancelled) return
+        const res = raw as { door_open?: boolean; dismissed?: string[] }
         const dismissed = new Set(res.dismissed ?? [])
         setVisible(Boolean(res.door_open) && !dismissed.has(screen))
       })
