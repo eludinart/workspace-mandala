@@ -20,6 +20,9 @@ import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
 import { HeartWeatherPicker } from '@/components/community/HeartWeatherPicker'
 import { WeatherBadge } from '@/components/community/WeatherBadge'
+import { ExplainCard } from '@/components/help/ExplainCard'
+import { MemberCityPrompt } from '@/components/members/MemberCityPrompt'
+import { MembersCitiesMap } from '@/components/members/MembersCitiesMap'
 import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 
 type MemberCardData = CommunityMember | MemberDirectoryEntry
@@ -240,10 +243,19 @@ export function MembersPage({
         </button>
       </div>
 
+      {!organisationMode && <ExplainCard screen="members" />}
+
       {active && !organisationMode && !directoryMode && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 m-user-form">
           <HeartWeatherPicker />
         </div>
+      )}
+
+      {!organisationMode && !directoryMode && (
+        <>
+          <MemberCityPrompt />
+          <MembersCitiesMap communitySlug={activeSlug} />
+        </>
       )}
 
       <div className={`flex flex-wrap gap-3 items-end ${organisationMode ? '' : 'm-user-form'}`}>

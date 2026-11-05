@@ -5,6 +5,7 @@ import { resourcesApi, resourceMediaUrl, type ResourceCard, type ResourceDetail 
 import { ResourceComposer } from '@/components/resources/ResourceComposer'
 import { ResourceReader } from '@/components/resources/ResourceReader'
 import { ApiError } from '@/lib/api-client'
+import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { RESOURCE_KINDS, resourceKindMeta, type ResourceKind } from '@/lib/resource-constants'
 
 export function ResourceLibrary({
@@ -155,12 +156,16 @@ export function ResourceLibrary({
         {visible.map((card) => (
           <li key={card.id}>
             <button type="button" onClick={() => void openCard(card)} className="w-full text-left rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
-              {card.has_cover ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={resourceMediaUrl(card.id, 'cover')} alt="" className="w-full h-36 object-cover bg-slate-950" />
-              ) : (
-                <div className="h-24 bg-slate-950/80" />
-              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  card.has_cover
+                    ? resourceMediaUrl(card.id, 'cover')
+                    : resourceDefaultCoverUrl(card.kind)
+                }
+                alt=""
+                className="w-full h-36 object-cover bg-slate-950"
+              />
               <div className="p-3 space-y-1">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-violet-300">{resourceKindMeta(card.kind).label}</p>
                 <p className="font-medium text-slate-100">{card.title}</p>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api-client'
 import {
   FEATURE_DOOR_AUDIENCES,
+  FEATURE_DOOR_HELP,
   type FeatureDoorAudience,
   type FeatureDoorKey,
 } from '@/lib/feature-door-constants'
@@ -100,6 +101,9 @@ export function AdminFeatureDoorsTab() {
             <div>
               <h3 className="text-sm font-semibold text-slate-100">{door.label}</h3>
               <p className="text-[11px] font-mono text-slate-500 mt-0.5">{door.feature_key}</p>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                {FEATURE_DOOR_HELP[door.feature_key]}
+              </p>
             </div>
             <label className="block text-xs text-slate-400">
               Public

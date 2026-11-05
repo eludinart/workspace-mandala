@@ -25,6 +25,18 @@ export const FEATURE_DOOR_LABELS: Record<FeatureDoorKey, string> = {
   aide_contextuelle: 'Cartes d’explication',
 }
 
+/** Texte d’aide admin — ce que la porte contrôle dans l’app. */
+export const FEATURE_DOOR_HELP: Record<FeatureDoorKey, string> = {
+  lieux_lies:
+    'Ouvre Relier / lieux amis : proposer ou accepter un lien entre lieux, voir le graphe des amis, et accéder aux calendriers / événements partagés entre lieux amis. Déjà branchée dans l’app.',
+  seuil:
+    'Autorise d’ouvrir un message 1:1 avec quelqu’un d’un lieu ami si conversation déjà ouverte, ou présence calendrier commune récente sur un lieu ami — pas de DM libre hors lieu. Branchée sur l’ouverture de canal.',
+  carte_membres:
+    'Affiche la carte des villes des membres du lieu (après qu’ils aient indiqué leur ville et accepté d’y figurer). Prompt une fois + carte sur la page Membres.',
+  aide_contextuelle:
+    'Cartes d’explication une fois par personne et par écran (accueil, membres, messages, calendrier, annuaire). Bouton « Compris » pour ne plus les revoir.',
+}
+
 export function isFeatureDoorKey(v: unknown): v is FeatureDoorKey {
   return FEATURE_DOOR_KEYS.includes(v as FeatureDoorKey)
 }

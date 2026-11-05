@@ -11,6 +11,7 @@ import { eventsApi } from '@/api/events'
 import { CalendarMonthGrid } from '@/components/calendar/CalendarMonthGrid'
 import { CalendarWeekView } from '@/components/calendar/CalendarWeekView'
 import { CalendarDayPanel, type DayDetailData } from '@/components/calendar/CalendarDayPanel'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import {
   type CalendarViewMode,
   type DayEvent,
@@ -390,6 +391,7 @@ export function CalendarPage() {
 
   return (
     <div className="w-full space-y-4 pb-2">
+      <ExplainCard screen="calendar" />
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="min-w-0">

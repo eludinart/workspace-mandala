@@ -60,12 +60,51 @@ export function LandingOffersSection() {
           </p>
         </div>
 
-        <div className="m-landing-habitants space-y-1.5 pb-5">
-          <p className="text-sm text-slate-200 font-medium tracking-wide">Habitants</p>
-          <p className="text-sm text-slate-400 leading-relaxed">
-            Mur, messages, événements et compétences de base restent gratuits — sans abonnement.
+        <article className="m-landing-card p-6 sm:p-8 space-y-5">
+          <div className="space-y-2">
+            <p className="m-landing-eyebrow">Gratuit · pour toujours</p>
+            <h3 className="text-2xl">S’inscrire, c’est déjà beaucoup</h3>
+            <p className="text-sm text-slate-400 leading-relaxed">
+              L’abonnement n’est pas requis pour vivre un lieu. Dès l’inscription, chaque membre
+              dispose du cœur de Mandala — sans carte bancaire.
+            </p>
+          </div>
+          <ul className="grid gap-2.5 sm:grid-cols-2 text-sm text-slate-300">
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Compte &amp; profil — identité, bio, préférences de visibilité
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Rejoindre un lieu — charte, cercle, vie communautaire
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Mur vivant — annonces, événements, fil du lieu
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Messages &amp; chat — échanges, réactions, sondages de groupe
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Annuaire &amp; compétences — proposer / chercher, carte des membres
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Bibliothèque — lire et partager textes, recettes, médias
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Calendrier du lieu — dates et rendez-vous communautaires
+            </li>
+            <li className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+              Découvrir le réseau — carte publique des lieux listés
+            </li>
+          </ul>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Les offres Lieu et Mandala Pro ci-dessous ajoutent de la visibilité publique et des
+            mises en avant — elles ne débloquent pas la vie interne du lieu.
           </p>
-        </div>
+          <div>
+            <Link href={ctaHref} className="m-landing-btn !py-2.5 !px-4 text-[10px]">
+              {user ? 'Ouvrir mon espace' : 'Créer un compte gratuit'}
+            </Link>
+          </div>
+        </article>
 
         <div className="grid gap-6 md:grid-cols-2 md:gap-8">
           <article className="m-landing-card p-6 sm:p-8 space-y-5">

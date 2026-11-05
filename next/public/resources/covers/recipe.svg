@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="Recette">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3f1d0f"/>
+      <stop offset="100%" stop-color="#7c2d12"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#g)"/>
+  <circle cx="460" cy="180" r="78" fill="none" stroke="#fdba74" stroke-width="10" opacity="0.85"/>
+  <circle cx="460" cy="180" r="42" fill="#fb923c" opacity="0.35"/>
+  <path d="M460 102 v-28 M422 118 l-18-18 M498 118 l18-18" stroke="#fdba74" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  <text x="96" y="292" fill="#ffedd5" font-family="Georgia, serif" font-size="28" opacity="0.9">Recette</text>
+</svg>

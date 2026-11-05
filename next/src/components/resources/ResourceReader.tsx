@@ -1,6 +1,7 @@
 'use client'
 
 import { resourceMediaUrl, type ResourceDetail } from '@/api/resources'
+import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { resourceKindMeta } from '@/lib/resource-constants'
 
 export function ResourceReader({
@@ -12,7 +13,9 @@ export function ResourceReader({
 }) {
   const meta = resourceKindMeta(resource.kind)
   const fileUrl = resource.has_file ? resourceMediaUrl(resource.id, 'file') : null
-  const coverUrl = resource.has_cover ? resourceMediaUrl(resource.id, 'cover') : null
+  const coverUrl = resource.has_cover
+    ? resourceMediaUrl(resource.id, 'cover')
+    : resourceDefaultCoverUrl(resource.kind)
   const mime = resource.file_mime ?? ''
 
   return (
@@ -34,10 +37,8 @@ export function ResourceReader({
         )}
       </header>
       <div className="flex-1 overflow-y-auto">
-        {coverUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverUrl} alt="" className="w-full max-h-72 object-cover bg-slate-900" />
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={coverUrl} alt="" className="w-full max-h-72 object-cover bg-slate-900" />
         <article className="max-w-2xl mx-auto px-4 py-6 space-y-4">
           <h1 className="text-2xl font-semibold">{resource.title}</h1>
           <p className="text-sm text-slate-400">

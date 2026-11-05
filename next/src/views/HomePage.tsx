@@ -24,6 +24,7 @@ import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncements
 import { TodayBoard } from '@/components/place/TodayBoard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
+import { ExplainCard } from '@/components/help/ExplainCard'
 
 function eventDateParts(startsAt: string | null): { day: string; month: string } | null {
   const d = parseWallClockDateTime(startsAt)
@@ -157,6 +158,9 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
 
   return (
     <div className="m-landing m-home pb-10">
+      <div className="mx-4 sm:mx-6 lg:mx-8 mt-4">
+        <ExplainCard screen="home" />
+      </div>
       <section className="m-home-hero mx-4 sm:mx-6 lg:mx-8 mt-4 sm:mt-6 rounded-[1.35rem]">
         {heroImage ? (
           // eslint-disable-next-line @next/next/no-img-element

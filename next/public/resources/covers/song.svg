@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="Chanson">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4a044e"/>
+      <stop offset="100%" stop-color="#701a75"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#g)"/>
+  <circle cx="420" cy="210" r="36" fill="#f0abfc" opacity="0.85"/>
+  <circle cx="500" cy="170" r="26" fill="#e879f9" opacity="0.75"/>
+  <path d="M456 210 V110 h44 v60" fill="none" stroke="#f5d0fe" stroke-width="10" stroke-linecap="round"/>
+  <text x="96" y="292" fill="#fae8ff" font-family="Georgia, serif" font-size="28" opacity="0.9">Chanson</text>
+</svg>

@@ -13,6 +13,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { membersApi, type CommunityMember } from '@/api/members'
 import { formatChatListTime } from '@/lib/format-datetime'
 import { isCommunityManagerRole } from '@/lib/community-role-labels'
+import { ExplainCard } from '@/components/help/ExplainCard'
 
 type Channel = {
   channelId: number
@@ -352,6 +353,9 @@ export function MessagesPage({
 
   return (
     <div className="relative flex-1 min-h-0 min-w-0 w-full flex flex-col overflow-hidden bg-slate-950">
+      <div className="shrink-0 px-4 pt-2">
+        <ExplainCard screen="messages" />
+      </div>
       {(error || msg) && (
         <p className={`shrink-0 px-4 py-2 text-sm ${error ? 'text-red-400' : 'text-emerald-400'}`}>{error || msg}</p>
       )}

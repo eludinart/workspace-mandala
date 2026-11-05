@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { resourcesApi, resourceMediaUrl, type ResourceCard, type ResourceDetail } from '@/api/resources'
 import { ResourceComposer } from '@/components/resources/ResourceComposer'
 import { ApiError } from '@/lib/api-client'
+import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { resourceKindMeta } from '@/lib/resource-constants'
 
 const SCOPE_LABEL = { hidden: 'Cachée', places: 'Mes lieux', mandala: 'Tout Mandala' } as const
@@ -60,12 +61,16 @@ export function MyResourcesSection() {
       <ul className="space-y-2">
         {cards.map((card) => (
           <li key={card.id} className="flex gap-3 items-center rounded-lg border border-slate-800 bg-slate-950/40 p-2">
-            {card.has_cover ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={resourceMediaUrl(card.id, 'cover')} alt="" className="w-14 h-14 rounded-lg object-cover" />
-            ) : (
-              <div className="w-14 h-14 rounded-lg bg-slate-900" />
-            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={
+                card.has_cover
+                  ? resourceMediaUrl(card.id, 'cover')
+                  : resourceDefaultCoverUrl(card.kind)
+              }
+              alt=""
+              className="w-14 h-14 rounded-lg object-cover"
+            />
             <div className="min-w-0 flex-1">
               <p className="text-sm text-slate-100 truncate">{card.title}</p>
               <p className="text-xs text-slate-500">

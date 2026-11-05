@@ -216,7 +216,6 @@ export function AnnuaireCitiesMap({
   }, [mapReady, sizeToken])
 
   const practiceCount = mappable.filter((m) => m.kind === 'practice').length
-  const placeCount = mappable.filter((m) => m.kind === 'mandala_place').length
 
   return (
     <div
@@ -227,11 +226,7 @@ export function AnnuaireCitiesMap({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 px-3 py-2 text-[11px] text-slate-400">
           <span className="inline-flex items-center gap-1.5">
             <span className="m-map-legend m-map-legend--practice" aria-hidden />
-            Ville d’exercice ({practiceCount})
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="m-map-legend m-map-legend--mandala" aria-hidden />
-            Lieu Mandala ({placeCount})
+            Membres · villes d’exercice ({practiceCount})
           </span>
         </div>
       )}

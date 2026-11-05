@@ -691,8 +691,9 @@ export async function listSkillDirectory(params: {
     }
     const memberships = await listCommunitiesForUser(userId)
     const shared = memberships.find((c) => viewerPlaceIds.has(c.id))
-    const places =
-      params.publicAccess || params.view === 'mandala'
+    const places = params.publicAccess
+      ? toPlaceRefs(memberships.filter((c) => c.listed_public !== false))
+      : params.view === 'mandala'
         ? toPlaceRefs(memberships)
         : profile.places.filter((p) => viewerPlaceIds.has(p.id))
     const card = cardFromProfile(profile, identity, params.viewerId, places)

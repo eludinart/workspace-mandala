@@ -1,5 +1,6 @@
 /**
- * Marqueurs carte annuaire : pins exercice + pins lieux Mandala.
+ * Marqueurs carte annuaire : pins personnes × ville d’exercice uniquement.
+ * Les lieux Mandala suivent la même visibilité que le mur (`listed_public`).
  */
 import { getPool, isDbConfigured, table } from '@/lib/db'
 import type { SkillCard } from '@/lib/db-skills'
@@ -22,7 +23,7 @@ export type AnnuaireMapMarker = {
   community_id?: number
   community_slug?: string
   community_emoji?: string | null
-  /** Lieux Mandala rattachés à la personne (pour tooltip pin exercice). */
+  /** Lieux Mandala listés publics rattachés (tooltip pin exercice). */
   place_names?: string[]
 }
 
@@ -32,35 +33,21 @@ function filterByAudience(cards: SkillCard[], audience: AnnuaireAudience): Skill
   return cards
 }
 
-async function loadCommunityCoords(
-  ids: number[]
-): Promise<Map<number, { lat: number; lng: number; slug: string; name: string; emoji: string | null }>> {
-  const map = new Map<
-    number,
-    { lat: number; lng: number; slug: string; name: string; emoji: string | null }
-  >()
+async function loadListedPlaceNames(ids: number[]): Promise<Map<number, string>> {
+  const map = new Map<number, string>()
   if (!ids.length || !isDbConfigured()) return map
   const pool = getPool()
   const t = table('mandala_communities')
   const placeholders = ids.map(() => '?').join(',')
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, slug, name, logo_emoji, latitude, longitude
+    `SELECT id, name
      FROM ${t}
      WHERE id IN (${placeholders}) AND is_active = 1
-       AND latitude IS NOT NULL AND longitude IS NOT NULL`,
+       AND COALESCE(listed_public, 1) = 1`,
     ids
   )
   for (const r of rows ?? []) {
-    const lat = Number(r.latitude)
-    const lng = Number(r.longitude)
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
-    map.set(Number(r.id), {
-      lat,
-      lng,
-      slug: String(r.slug),
-      name: String(r.name),
-      emoji: r.logo_emoji != null ? String(r.logo_emoji) : null,
-    })
+    map.set(Number(r.id), String(r.name))
   }
   return map
 }
@@ -75,7 +62,9 @@ export async function listAnnuaireMapMarkers(opts?: {
   if (slug && isDbConfigured()) {
     const pool = getPool()
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id FROM ${table('mandala_communities')} WHERE slug = ? AND is_active = 1 LIMIT 1`,
+      `SELECT id FROM ${table('mandala_communities')}
+       WHERE slug = ? AND is_active = 1 AND COALESCE(listed_public, 1) = 1
+       LIMIT 1`,
       [slug]
     )
     communityId = rows[0] ? Number(rows[0].id) : null
@@ -104,16 +93,17 @@ export async function listAnnuaireMapMarkers(opts?: {
     }
   }
 
-  const [cityCoords, placeCoords] = await Promise.all([
+  const [cityCoords, listedPlaces] = await Promise.all([
     resolveCitiesCoords([...cityLabels]),
-    loadCommunityCoords([...communityIds]),
+    loadListedPlaceNames([...communityIds]),
   ])
 
   const markers: AnnuaireMapMarker[] = []
-  const seenPlace = new Set<number>()
 
   for (const card of cards) {
-    const placeNames = (card.places ?? []).map((p) => p.name).filter(Boolean)
+    const placeNames = (card.places ?? [])
+      .map((p) => listedPlaces.get(p.id))
+      .filter((name): name is string => Boolean(name))
     for (const city of card.practice_locations ?? []) {
       const label = normalizeCityLabel(city)
       if (!label) continue
@@ -129,22 +119,6 @@ export async function listAnnuaireMapMarkers(opts?: {
         display_name: card.display_name || card.pseudo,
         pro_verified: Boolean(card.pro_verified),
         place_names: placeNames,
-      })
-    }
-    for (const p of card.places ?? []) {
-      if (seenPlace.has(p.id)) continue
-      const geo = placeCoords.get(p.id)
-      if (!geo) continue
-      seenPlace.add(p.id)
-      markers.push({
-        id: `place:${p.id}`,
-        kind: 'mandala_place',
-        latitude: geo.lat,
-        longitude: geo.lng,
-        label: geo.name,
-        community_id: p.id,
-        community_slug: geo.slug,
-        community_emoji: geo.emoji,
       })
     }
   }

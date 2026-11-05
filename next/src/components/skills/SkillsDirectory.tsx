@@ -13,6 +13,7 @@ import {
   SKILL_REGISTERS,
   type SkillRegister,
 } from '@/lib/skill-constants'
+import { ExplainCard } from '@/components/help/ExplainCard'
 
 export const OPEN_SKILL_USER_KEY = 'mandala_skill_user'
 
@@ -311,6 +312,7 @@ export function SkillsDirectory({
 
   return (
     <div className="space-y-5">
+      {variant === 'app' && <ExplainCard screen="skills" />}
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">

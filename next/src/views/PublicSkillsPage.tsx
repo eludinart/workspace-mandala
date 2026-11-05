@@ -81,10 +81,11 @@ export function PublicSkillsPage() {
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-slate-200">
-                    Carte des villes d’exercice
+                    Carte des membres
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Pin bleu = personne × ville ; pin ambre = lieu Mandala. Le filtre
+                    Chaque pin est une personne × ville d’exercice. Seuls les lieux listés
+                    publiquement (comme sur le mur) apparaissent en rattachement. Le filtre
                     Pros / Membres s’applique aussi ici.
                   </p>
                 </div>
@@ -102,8 +103,6 @@ export function PublicSkillsPage() {
                     document
                       .getElementById('annuaire')
                       ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  } else if (m.kind === 'mandala_place' && m.community_slug) {
-                    window.location.href = `/lieux/${m.community_slug}`
                   }
                 }}
               />
