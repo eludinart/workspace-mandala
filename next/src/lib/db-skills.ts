@@ -23,11 +23,14 @@ import {
   type ProDirectoryFlags,
 } from './db-billing'
 import { createNotification } from './db-notifications'
+import { geocodeAddress } from '@/lib/geocode'
 import {
   normalizeCityLabel,
-  normalizePracticeLocations,
+  normalizePracticePlaces,
   practiceLocationsFromJson,
   practiceLocationsToJson,
+  practicePlaceLabels,
+  type PracticePlace,
 } from './practice-locations'
 
 function applyProFlags(card: SkillCard, flags: ProDirectoryFlags | undefined): void {
@@ -65,8 +68,14 @@ export type SkillProfile = {
   residence_city: string
   /** Afficher la résidence sur le profil public et la carte. */
   residence_public: boolean
-  /** Villes où elle exerce (carte + matching). */
-  practice_locations: string[]
+  /** `city` = centre-ville ; `address` = adresse + GPS. */
+  location_mode: 'city' | 'address'
+  residence_address: string
+  residence_postal_code: string
+  latitude: number | null
+  longitude: number | null
+  /** Lieux d’exercice (ville et/ou adresse GPS). */
+  practice_locations: PracticePlace[]
   updated_at: string | null
   place_ids: number[]
   places: SkillPlaceRef[]
@@ -117,7 +126,15 @@ export type SkillCard = {
   profile_views_30d?: number
   residence_city?: string
   residence_public?: boolean
+  location_mode?: 'city' | 'address'
+  residence_address?: string
+  residence_postal_code?: string
+  latitude?: number | null
+  longitude?: number | null
+  /** Libellés villes (affichage). */
   practice_locations?: string[]
+  /** Détail lieux d’exercice pour la carte (GPS éventuel). */
+  practice_places?: PracticePlace[]
 }
 
 export type SkillNote = {
@@ -232,6 +249,30 @@ async function ensureSkillTables(): Promise<void> {
       `ALTER TABLE ${tP} ADD COLUMN residence_public TINYINT(1) NOT NULL DEFAULT 1`
     )
   }
+  if (!existing.has('location_mode')) {
+    await exec(
+      pool,
+      `ALTER TABLE ${tP} ADD COLUMN location_mode VARCHAR(16) NOT NULL DEFAULT 'city'`
+    )
+  }
+  if (!existing.has('residence_address')) {
+    await exec(
+      pool,
+      `ALTER TABLE ${tP} ADD COLUMN residence_address VARCHAR(255) NOT NULL DEFAULT ''`
+    )
+  }
+  if (!existing.has('residence_postal_code')) {
+    await exec(
+      pool,
+      `ALTER TABLE ${tP} ADD COLUMN residence_postal_code VARCHAR(24) NOT NULL DEFAULT ''`
+    )
+  }
+  if (!existing.has('latitude')) {
+    await exec(pool, `ALTER TABLE ${tP} ADD COLUMN latitude DECIMAL(9,6) NULL`)
+  }
+  if (!existing.has('longitude')) {
+    await exec(pool, `ALTER TABLE ${tP} ADD COLUMN longitude DECIMAL(9,6) NULL`)
+  }
   const tViews = table('mandala_skill_profile_views')
   await exec(
     pool,
@@ -256,6 +297,11 @@ function emptyProfile(userId: number): SkillProfile {
     frame_text: '',
     residence_city: '',
     residence_public: true,
+    location_mode: 'city',
+    residence_address: '',
+    residence_postal_code: '',
+    latitude: null,
+    longitude: null,
     practice_locations: [],
     updated_at: null,
     place_ids: [],
@@ -271,6 +317,10 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_id, scope, offer_text, seek_text, frame_text, residence_city,
             COALESCE(residence_public, 1) AS residence_public,
+            COALESCE(location_mode, 'city') AS location_mode,
+            COALESCE(residence_address, '') AS residence_address,
+            COALESCE(residence_postal_code, '') AS residence_postal_code,
+            latitude, longitude,
             practice_locations_json, updated_at
      FROM ${tP} WHERE user_id = ? LIMIT 1`,
     [userId]
@@ -285,6 +335,21 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
         frame_text: String(r.frame_text ?? ''),
         residence_city: normalizeCityLabel(r.residence_city),
         residence_public: Number(r.residence_public) !== 0,
+        location_mode: (r.location_mode === 'address' ? 'address' : 'city') as
+          | 'city'
+          | 'address',
+        residence_address: String(r.residence_address ?? '').trim().slice(0, 255),
+        residence_postal_code: String(r.residence_postal_code ?? '')
+          .replace(/\D/g, '')
+          .slice(0, 10),
+        latitude:
+          r.latitude != null && Number.isFinite(Number(r.latitude))
+            ? Number(r.latitude)
+            : null,
+        longitude:
+          r.longitude != null && Number.isFinite(Number(r.longitude))
+            ? Number(r.longitude)
+            : null,
         practice_locations: practiceLocationsFromJson(r.practice_locations_json),
         updated_at: r.updated_at ? new Date(r.updated_at as string).toISOString() : null,
       }
@@ -343,7 +408,14 @@ export type SkillProfileInput = {
   frame_text: string
   residence_city?: string
   residence_public?: boolean
-  practice_locations?: string[]
+  location_mode?: 'city' | 'address'
+  residence_address?: string
+  residence_postal_code?: string
+  latitude?: number | null
+  longitude?: number | null
+  /** Si true et mode address : recalcule lat/lng via Nominatim. */
+  geocode?: boolean
+  practice_locations?: Array<PracticePlace | string>
   place_ids: number[]
   tags: SkillTag[]
 }
@@ -384,19 +456,101 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
     input.residence_public === undefined
       ? before?.residence_public !== false
       : Boolean(input.residence_public)
-  const practice = normalizePracticeLocations(input.practice_locations)
+  const locationMode =
+    input.location_mode === 'address' || input.location_mode === 'city'
+      ? input.location_mode
+      : before?.location_mode === 'address'
+        ? 'address'
+        : 'city'
+  const residenceAddress = String(input.residence_address ?? before?.residence_address ?? '')
+    .trim()
+    .slice(0, 255)
+  const residencePostal = String(
+    input.residence_postal_code ?? before?.residence_postal_code ?? ''
+  )
+    .replace(/\D/g, '')
+    .slice(0, 10)
+  let latitude =
+    input.latitude !== undefined
+      ? input.latitude
+      : before?.latitude ?? null
+  let longitude =
+    input.longitude !== undefined
+      ? input.longitude
+      : before?.longitude ?? null
+  if (locationMode === 'city') {
+    latitude = null
+    longitude = null
+  } else if (
+    input.geocode ||
+    (latitude == null && longitude == null && (residenceAddress || residence))
+  ) {
+    const hit = await geocodeAddress({
+      address: residenceAddress || null,
+      postal_code: residencePostal || null,
+      city: residence || null,
+      country: 'France',
+    })
+    if (hit) {
+      latitude = hit.latitude
+      longitude = hit.longitude
+    }
+  }
+  let practice = normalizePracticePlaces(input.practice_locations)
+  if (input.geocode) {
+    const next: PracticePlace[] = []
+    for (const place of practice) {
+      if (place.mode !== 'address') {
+        next.push({ ...place, latitude: null, longitude: null })
+        continue
+      }
+      const hit = await geocodeAddress({
+        address: place.address || null,
+        postal_code: place.postal_code || null,
+        city: place.city || null,
+        country: 'France',
+      })
+      next.push({
+        ...place,
+        latitude: hit?.latitude ?? place.latitude,
+        longitude: hit?.longitude ?? place.longitude,
+      })
+    }
+    practice = next
+  }
   const practiceJson = practiceLocationsToJson(practice)
   const pool = getPool()
   const tP = table('mandala_skill_profiles')
   await pool.execute(
-    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text, frame_text, residence_city, residence_public, practice_locations_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ${tP} (
+       user_id, scope, offer_text, seek_text, frame_text, residence_city, residence_public,
+       location_mode, residence_address, residence_postal_code, latitude, longitude, practice_locations_json
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE scope = VALUES(scope), offer_text = VALUES(offer_text),
        seek_text = VALUES(seek_text), frame_text = VALUES(frame_text),
        residence_city = VALUES(residence_city),
        residence_public = VALUES(residence_public),
+       location_mode = VALUES(location_mode),
+       residence_address = VALUES(residence_address),
+       residence_postal_code = VALUES(residence_postal_code),
+       latitude = VALUES(latitude),
+       longitude = VALUES(longitude),
        practice_locations_json = VALUES(practice_locations_json)`,
-    [userId, input.scope, offer, seek, frame, residence, residencePublic ? 1 : 0, practiceJson]
+    [
+      userId,
+      input.scope,
+      offer,
+      seek,
+      frame,
+      residence,
+      residencePublic ? 1 : 0,
+      locationMode,
+      residenceAddress,
+      residencePostal,
+      latitude,
+      longitude,
+      practiceJson,
+    ]
   )
 
   const tPlaces = table('mandala_skill_profile_places')
@@ -527,7 +681,17 @@ function cardFromProfile(
     residence_city:
       skillsVisible && profile.residence_public !== false ? profile.residence_city : '',
     residence_public: profile.residence_public !== false,
-    practice_locations: skillsVisible ? profile.practice_locations : [],
+    location_mode: profile.location_mode,
+    residence_address:
+      skillsVisible && profile.residence_public !== false && profile.location_mode === 'address'
+        ? profile.residence_address
+        : '',
+    latitude:
+      skillsVisible && profile.residence_public !== false ? profile.latitude : null,
+    longitude:
+      skillsVisible && profile.residence_public !== false ? profile.longitude : null,
+    practice_locations: skillsVisible ? practicePlaceLabels(profile.practice_locations) : [],
+    practice_places: skillsVisible ? profile.practice_locations : [],
   }
 }
 
@@ -701,7 +865,7 @@ export async function listSkillDirectory(params: {
         profile.seek_text,
         profile.frame_text,
         profile.residence_city,
-        ...profile.practice_locations,
+        ...practicePlaceLabels(profile.practice_locations),
         ...profile.tags.map((t) => t.label),
         ...profile.places.map((p) => p.name),
       ]

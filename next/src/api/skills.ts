@@ -1,4 +1,5 @@
 import { api } from '@/lib/api-client'
+import type { PracticePlace } from '@/lib/practice-locations'
 import type { SkillRegister, SkillScope } from '@/lib/skill-constants'
 
 export type SkillTag = { label: string; register: SkillRegister }
@@ -19,7 +20,12 @@ export type SkillProfile = {
   residence_city: string
   /** Si false, la résidence n’apparaît pas sur le profil public / la carte. */
   residence_public: boolean
-  practice_locations: string[]
+  location_mode: 'city' | 'address'
+  residence_address: string
+  residence_postal_code: string
+  latitude: number | null
+  longitude: number | null
+  practice_locations: PracticePlace[]
   updated_at: string | null
   place_ids: number[]
   places: SkillPlaceRef[]
@@ -54,7 +60,13 @@ export type SkillCard = {
   profile_views_30d?: number
   residence_city?: string
   residence_public?: boolean
+  location_mode?: 'city' | 'address'
+  residence_address?: string
+  residence_postal_code?: string
+  latitude?: number | null
+  longitude?: number | null
   practice_locations?: string[]
+  practice_places?: PracticePlace[]
 }
 
 export type SkillNote = {
@@ -98,7 +110,13 @@ export const skillsApi = {
     frame_text: string
     residence_city?: string
     residence_public?: boolean
-    practice_locations?: string[]
+    location_mode?: 'city' | 'address'
+    residence_address?: string
+    residence_postal_code?: string
+    latitude?: number | null
+    longitude?: number | null
+    geocode?: boolean
+    practice_locations?: Array<PracticePlace | string>
     place_ids: number[]
     tags: SkillTag[]
   }) => api.put('/api/skills/profile', body) as Promise<{ profile: SkillProfile }>,

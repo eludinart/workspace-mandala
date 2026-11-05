@@ -4,7 +4,7 @@ import { isDbConfigured } from '@/lib/db'
 import { getMySkillProfile, saveMySkillProfile } from '@/lib/db-skills'
 import {
   normalizeCityLabel,
-  normalizePracticeLocations,
+  normalizePracticePlaces,
 } from '@/lib/practice-locations'
 import { isSkillRegister, isSkillScope } from '@/lib/skill-constants'
 
@@ -33,7 +33,32 @@ function parseBody(body: Record<string, unknown>) {
     residence_city: normalizeCityLabel(body.residence_city),
     residence_public:
       body.residence_public === undefined ? undefined : Boolean(body.residence_public),
-    practice_locations: normalizePracticeLocations(body.practice_locations),
+    location_mode:
+      body.location_mode === 'address'
+        ? ('address' as const)
+        : body.location_mode === 'city'
+          ? ('city' as const)
+          : undefined,
+    residence_address:
+      body.residence_address === undefined ? undefined : String(body.residence_address ?? ''),
+    residence_postal_code:
+      body.residence_postal_code === undefined
+        ? undefined
+        : String(body.residence_postal_code ?? ''),
+    latitude:
+      body.latitude === undefined || body.latitude === null || body.latitude === ''
+        ? body.latitude === null || body.latitude === ''
+          ? null
+          : undefined
+        : Number(body.latitude),
+    longitude:
+      body.longitude === undefined || body.longitude === null || body.longitude === ''
+        ? body.longitude === null || body.longitude === ''
+          ? null
+          : undefined
+        : Number(body.longitude),
+    geocode: body.geocode === undefined ? undefined : Boolean(body.geocode),
+    practice_locations: normalizePracticePlaces(body.practice_locations),
     place_ids: placeIds,
     tags,
   }

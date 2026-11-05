@@ -10,8 +10,8 @@ declare global {
 
 export const ACCOUNT_SKILLS_ANCHOR = 'mandala_account_anchor'
 import { skillsApi, type SkillProfile, type SkillTag } from '@/api/skills'
-import { CityFromPostalField } from '@/components/geo/CityFromPostalField'
-import { PracticeCitiesFromPostal } from '@/components/geo/PracticeCitiesFromPostal'
+import { PersonLocationFields } from '@/components/geo/PersonLocationFields'
+import { PracticePlacesEditor } from '@/components/geo/PracticePlacesEditor'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import {
@@ -31,6 +31,11 @@ const EMPTY: SkillProfile = {
   frame_text: '',
   residence_city: '',
   residence_public: true,
+  location_mode: 'city',
+  residence_address: '',
+  residence_postal_code: '',
+  latitude: null,
+  longitude: null,
   practice_locations: [],
   updated_at: null,
   place_ids: [],
@@ -138,6 +143,14 @@ export function SkillsProfileSection() {
         frame_text: profile.frame_text,
         residence_city: profile.residence_city,
         residence_public: profile.residence_public !== false,
+        location_mode: profile.location_mode === 'address' ? 'address' : 'city',
+        residence_address: profile.residence_address ?? '',
+        residence_postal_code: profile.residence_postal_code ?? '',
+        latitude: profile.latitude,
+        longitude: profile.longitude,
+        geocode:
+          profile.location_mode === 'address' ||
+          profile.practice_locations.some((p) => p.mode === 'address'),
         practice_locations: profile.practice_locations,
         place_ids: profile.place_ids,
         tags: tagsToSave,
@@ -277,31 +290,36 @@ export function SkillsProfileSection() {
         Dites ce que vous savez faire, ce que vous proposez au collectif, et ce que vous cherchez. La fiche reste cachée tant que vous ne choisissez pas qui peut la voir.
       </p>
 
-      <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-        <p className="text-sm font-medium text-slate-200">Où vous êtes</p>
-        <CityFromPostalField
-          id="skills-residence"
-          label="Ville de résidence"
-          hint="Code postal, puis sélection de la commune."
-          value={profile.residence_city}
-          onChange={(city) => setProfile((p) => ({ ...p, residence_city: city }))}
-          disabled={saving}
-        />
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={profile.residence_public !== false}
-            onChange={(e) => setProfile((p) => ({ ...p, residence_public: e.target.checked }))}
-            className="rounded"
-          />
-          <span className="text-slate-300">Afficher ma résidence sur mon profil public et la carte</span>
-        </label>
-        <PracticeCitiesFromPostal
-          value={profile.practice_locations}
-          onChange={(practice_locations) => setProfile((p) => ({ ...p, practice_locations }))}
-          disabled={saving}
-        />
-      </div>
+      <PersonLocationFields
+        idPrefix="skills-loc"
+        disabled={saving}
+        value={{
+          location_mode: profile.location_mode === 'address' ? 'address' : 'city',
+          residence_city: profile.residence_city,
+          residence_address: profile.residence_address ?? '',
+          residence_postal_code: profile.residence_postal_code ?? '',
+          latitude: profile.latitude ?? null,
+          longitude: profile.longitude ?? null,
+          residence_public: profile.residence_public !== false,
+        }}
+        onChange={(loc) =>
+          setProfile((p) => ({
+            ...p,
+            location_mode: loc.location_mode,
+            residence_city: loc.residence_city,
+            residence_address: loc.residence_address,
+            residence_postal_code: loc.residence_postal_code,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+            residence_public: loc.residence_public,
+          }))
+        }
+      />
+      <PracticePlacesEditor
+        value={profile.practice_locations}
+        onChange={(practice_locations) => setProfile((p) => ({ ...p, practice_locations }))}
+        disabled={saving}
+      />
 
       <fieldset className="space-y-2">
         <legend className="text-sm text-slate-200">Qui peut me trouver ?</legend>

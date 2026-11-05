@@ -55,10 +55,23 @@ function markerTooltipHtml(m: AnnuaireMapMarker): string {
 }
 
 function practiceIconHtml(m: AnnuaireMapMarker, selected: boolean): string {
+  const pro = m.pro_verified ? ' m-map-marker--pro' : ''
+  const attached = m.place_names?.length ? ' m-map-marker--attached' : ''
   const sel = selected ? ' m-map-marker--selected' : ''
   const title = escapeHtml(m.display_name || '')
-  // Pin brand Mandala (logo circulaire) — pas l’avatar / initiale.
-  return `<div class="m-map-marker m-map-marker--brand${sel}" title="${title}"><img src="/brand-mark.png" alt="" class="m-map-marker-brand" /></div>`
+  const base = `m-map-marker m-map-marker--practice${pro}${attached}${sel}`
+
+  if (isAvatarImageUrl(m.avatar)) {
+    return `<div class="${base} m-map-marker--photo" title="${title}"><img src="${escapeAttr(String(m.avatar))}" alt="" class="m-map-marker-photo" /></div>`
+  }
+
+  const emoji = String(m.avatar_emoji ?? '').trim()
+  if (emoji) {
+    return `<div class="${base} m-map-marker--emoji" title="${title}">${escapeHtml(emoji)}</div>`
+  }
+
+  const initial = (m.display_name || '?').trim().slice(0, 1).toUpperCase() || '·'
+  return `<div class="${base}" title="${title}">${escapeHtml(initial)}</div>`
 }
 
 function placeIconHtml(m: AnnuaireMapMarker, selected: boolean): string {
@@ -121,12 +134,11 @@ function syncMarkers(
     const selected = m.id === selectedId
     const html =
       m.kind === 'mandala_place' ? placeIconHtml(m, selected) : practiceIconHtml(m, selected)
-    const size = m.kind === 'mandala_place' ? 36 : 42
     const icon = L.divIcon({
       className: 'm-map-marker-wrap',
       html,
-      iconSize: [size, size],
-      iconAnchor: [size / 2, size / 2],
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
     })
     const marker = L.marker([pin.latitude, pin.longitude], {
       icon,

@@ -13,8 +13,12 @@ import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
-import { CityFromPostalField } from '@/components/geo/CityFromPostalField'
-import { PracticeCitiesFromPostal } from '@/components/geo/PracticeCitiesFromPostal'
+import {
+  PersonLocationFields,
+  type PersonLocationValue,
+} from '@/components/geo/PersonLocationFields'
+import { PracticePlacesEditor } from '@/components/geo/PracticePlacesEditor'
+import type { PracticePlace } from '@/lib/practice-locations'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { ApiError } from '@/lib/api-client'
 import {
@@ -80,9 +84,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [lastName, setLastName] = useState('')
   const [showFullLastName, setShowFullLastName] = useState(false)
   const [bio, setBio] = useState('')
-  const [residenceCity, setResidenceCity] = useState('')
-  const [residencePublic, setResidencePublic] = useState(true)
-  const [practiceCities, setPracticeCities] = useState<string[]>([])
+  const [location, setLocation] = useState<PersonLocationValue>({
+    location_mode: 'city',
+    residence_city: '',
+    residence_address: '',
+    residence_postal_code: '',
+    latitude: null,
+    longitude: null,
+    residence_public: true,
+  })
+  const [practicePlaces, setPracticePlaces] = useState<PracticePlace[]>([])
   const [avatarEmoji, setAvatarEmoji] = useState('🌸')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [profilePublic, setProfilePublic] = useState(true)
@@ -134,9 +145,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       setProfilePublic(p.profile_public !== false)
       try {
         const skills = await skillsApi.getMine()
-        setResidenceCity(skills.profile.residence_city ?? '')
-        setResidencePublic(skills.profile.residence_public !== false)
-        setPracticeCities(skills.profile.practice_locations ?? [])
+        setLocation({
+          location_mode: skills.profile.location_mode === 'address' ? 'address' : 'city',
+          residence_city: skills.profile.residence_city ?? '',
+          residence_address: skills.profile.residence_address ?? '',
+          residence_postal_code: skills.profile.residence_postal_code ?? '',
+          latitude: skills.profile.latitude ?? null,
+          longitude: skills.profile.longitude ?? null,
+          residence_public: skills.profile.residence_public !== false,
+        })
+        setPracticePlaces(skills.profile.practice_locations ?? [])
       } catch {
         /* fiche compétences optionnelle */
       }
@@ -224,7 +242,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         const skills = await skillsApi.getMine()
         const nextScope =
           skills.profile.scope === 'hidden' &&
-          (residenceCity.trim() || practiceCities.length > 0)
+          (location.residence_city.trim() || practicePlaces.length > 0)
             ? 'mandala'
             : skills.profile.scope
         await skillsApi.saveMine({
@@ -234,9 +252,17 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           frame_text: skills.profile.frame_text,
           place_ids: skills.profile.place_ids,
           tags: skills.profile.tags,
-          residence_city: residenceCity.trim(),
-          residence_public: residencePublic,
-          practice_locations: practiceCities,
+          residence_city: location.residence_city.trim(),
+          residence_public: location.residence_public,
+          location_mode: location.location_mode,
+          residence_address: location.residence_address,
+          residence_postal_code: location.residence_postal_code,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          geocode:
+            location.location_mode === 'address' ||
+            practicePlaces.some((p) => p.mode === 'address'),
+          practice_locations: practicePlaces,
         })
       } catch {
         /* profil identité déjà sauvé */
@@ -465,26 +491,15 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
             />
           </label>
-          <CityFromPostalField
-            id="account-residence"
-            label="Ville de résidence"
-            hint="Code postal, puis sélection de la commune."
-            value={residenceCity}
-            onChange={setResidenceCity}
+          <PersonLocationFields
+            idPrefix="account-loc"
+            value={location}
+            onChange={setLocation}
             disabled={saving}
           />
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={residencePublic}
-              onChange={(e) => setResidencePublic(e.target.checked)}
-              className="rounded"
-            />
-            <span>Afficher ma résidence sur mon profil public et la carte</span>
-          </label>
-          <PracticeCitiesFromPostal
-            value={practiceCities}
-            onChange={setPracticeCities}
+          <PracticePlacesEditor
+            value={practicePlaces}
+            onChange={setPracticePlaces}
             disabled={saving}
           />
           <label className="flex items-center gap-2 text-sm cursor-pointer">
