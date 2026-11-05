@@ -81,13 +81,15 @@ export function LandingPromisesSection() {
 
   return (
     <section id="projet" className="m-landing-band m-landing-band--projet scroll-mt-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
-        <p className="m-landing-eyebrow">Le projet</p>
-        <h2 className="text-3xl sm:text-4xl mt-3">Une plateforme, trois promesses</h2>
-        <p className="text-slate-400 text-sm sm:text-base leading-relaxed mt-4 max-w-2xl mx-auto">
-          Cliquez une promesse pour voir ce que Mandala propose concrètement — lieux, vie
-          communautaire, et partage de savoir-faire.
-        </p>
+      <div className="m-landing-promises-wrap">
+        <header className="m-landing-promises-intro">
+          <p className="m-landing-eyebrow">Le projet</p>
+          <h2 className="m-landing-promises-title">Une plateforme, trois promesses</h2>
+          <p className="m-landing-promises-lede">
+            Ouvrez une entrée pour voir ce que Mandala propose concrètement — lieux, vie
+            communautaire, et partage de savoir-faire.
+          </p>
+        </header>
 
         <div className="m-landing-promises">
           {PROMISES.map((p) => {
@@ -97,25 +99,25 @@ export function LandingPromisesSection() {
                 key={p.id}
                 type="button"
                 aria-expanded={isOpen}
-                aria-controls={`promise-detail-${p.id}`}
+                aria-controls={isOpen ? `promise-detail-${p.id}` : undefined}
                 onClick={() => setOpenId(isOpen ? null : p.id)}
-                className={`m-landing-promise m-landing-card text-left w-full p-5 transition-all ${
-                  isOpen ? 'ring-1 ring-violet-500/40 border-violet-500/40' : 'hover:border-slate-600'
-                }`}
+                className={`m-landing-promise${isOpen ? ' is-open' : ''}`}
               >
                 <span className="m-landing-promise-num" aria-hidden>
                   {p.num}
                 </span>
-                <h3 className="flex items-center justify-between gap-2">
-                  <span>{p.title}</span>
-                  <span className="text-slate-500 text-lg leading-none" aria-hidden>
-                    {isOpen ? '−' : '+'}
+                <span className="m-landing-promise-body">
+                  <span className="m-landing-promise-title-row">
+                    <span className="m-landing-promise-name">{p.title}</span>
+                    <span className="m-landing-promise-toggle" aria-hidden>
+                      {isOpen ? '−' : '+'}
+                    </span>
                   </span>
-                </h3>
-                <p className="text-sm text-slate-400 leading-relaxed">{p.teaser}</p>
-                <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-violet-300/80">
-                  {isOpen ? 'Fermer le détail' : 'Voir les fonctionnalités'}
-                </p>
+                  <span className="m-landing-promise-teaser">{p.teaser}</span>
+                  <span className="m-landing-promise-hint">
+                    {isOpen ? 'Fermer' : 'Détail'}
+                  </span>
+                </span>
               </button>
             )
           })}
@@ -126,30 +128,18 @@ export function LandingPromisesSection() {
             id={`promise-detail-${open.id}`}
             role="region"
             aria-label={`Détail — ${open.title}`}
-            className="mt-6 text-left m-landing-card p-6 sm:p-8 space-y-4"
+            className="m-landing-promise-detail"
           >
-            <div className="space-y-2">
-              <p className="m-landing-eyebrow">{open.title}</p>
-              <p className="text-sm sm:text-base text-slate-300 leading-relaxed">{open.detailLead}</p>
-            </div>
-            <ul className="grid gap-2 sm:grid-cols-2 text-sm text-slate-300">
+            <p className="m-landing-promise-detail-lead">{open.detailLead}</p>
+            <ul className="m-landing-promise-features">
               {open.features.map((f) => (
-                <li
-                  key={f}
-                  className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2.5"
-                >
-                  {f}
-                </li>
+                <li key={f}>{f}</li>
               ))}
             </ul>
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="m-landing-promise-links">
               {open.links.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className="inline-flex items-center text-xs px-4 py-2 rounded-full border border-slate-700 text-slate-200 hover:bg-slate-800/80"
-                >
-                  {l.label} →
+                <Link key={l.href} href={l.href} className="m-landing-promise-link">
+                  {l.label}
                 </Link>
               ))}
             </div>
