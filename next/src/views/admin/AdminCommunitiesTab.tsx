@@ -14,16 +14,19 @@ import { COMMUNITY_ROLE_SELECT_OPTIONS, CORE_CIRCLE_LABEL, isCommunityManagerRol
 export function AdminCommunitiesTab({
   onMessage,
   scope = 'app-admin',
+  initialSelectedId = null,
 }: {
   onMessage: (msg: string | null, ok?: boolean) => void
   /** app-admin : tous les lieux (admin application). managed : lieux dont l'utilisateur est gestionnaire. */
   scope?: 'app-admin' | 'managed'
+  /** Ouvre directement la fiche d’un lieu (ex. depuis le parc d’abonnements). */
+  initialSelectedId?: number | null
 }) {
   const isAppAdminScope = scope === 'app-admin'
   const communitiesApiClient = isAppAdminScope ? adminApi.communities : managerApi.communities
   const { refresh } = useCommunity()
   const [list, setList] = useState<CommunityAdmin[]>([])
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<number | null>(initialSelectedId ?? null)
   const [detail, setDetail] = useState<CommunityAdmin | null>(null)
   const [members, setMembers] = useState<CommunityMemberAdmin[]>([])
   const [loading, setLoading] = useState(true)
@@ -111,6 +114,10 @@ export function AdminCommunitiesTab({
   useEffect(() => {
     void loadList()
   }, [loadList])
+
+  useEffect(() => {
+    if (initialSelectedId != null) setSelectedId(initialSelectedId)
+  }, [initialSelectedId])
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId)

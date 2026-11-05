@@ -125,4 +125,52 @@ export const billingApi = {
       checklist: Record<string, unknown>
       next_steps: string[]
     }>,
+
+  listAdminSubscriptions: (params?: {
+    family?: 'all' | 'place' | 'pro'
+    sort?:
+      | 'urgency'
+      | 'period_end'
+      | 'family'
+      | 'target'
+      | 'provider'
+      | 'updated_at'
+    order?: 'asc' | 'desc'
+  }) => {
+    const q = new URLSearchParams()
+    if (params?.family && params.family !== 'all') q.set('family', params.family)
+    if (params?.sort) q.set('sort', params.sort)
+    if (params?.order) q.set('order', params.order)
+    const qs = q.toString()
+    return api.get(
+      `/api/admin/billing/subscriptions${qs ? `?${qs}` : ''}`
+    ) as Promise<{
+      items: Array<{
+        id: number
+        user_id: number
+        user_email: string | null
+        user_display_name: string | null
+        community_id: number | null
+        community_name: string | null
+        plan_family: 'place' | 'pro'
+        plan_id: string
+        status: string
+        ops_status: 'active' | 'expiring_soon' | 'grace' | 'past_due'
+        payment_provider: string
+        stripe_subscription_id: string | null
+        current_period_end: string | null
+        cancel_at_period_end: boolean
+        billing_partner: boolean
+        billing_featured: boolean
+        updated_at: string | null
+        target_label: string
+      }>
+      meta: {
+        family: string
+        sort: string
+        order: string
+        count: number
+      }
+    }>
+  },
 }

@@ -16,6 +16,7 @@ import { ApiError } from '@/lib/api-client'
 import { assignableAppRole } from '@/lib/app-roles'
 import { ProEndorseQueue } from '@/components/billing/ProEndorseQueue'
 import { AdminPlaceGiftPanel } from '@/components/billing/AdminPlaceGiftPanel'
+import { AdminSubscriptionsPanel } from '@/components/billing/AdminSubscriptionsPanel'
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
 
@@ -87,6 +88,7 @@ export function AdminPage({
   const [userSearch, setUserSearch] = useState('')
   const [usersLoading, setUsersLoading] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [focusCommunityId, setFocusCommunityId] = useState<number | null>(null)
 
   const [adminNotifs, setAdminNotifs] = useState<AdminNotif[]>([])
   const [nTitle, setNTitle] = useState('')
@@ -662,6 +664,16 @@ export function AdminPage({
 
       {tab === 'billing' && (
         <div className="space-y-4">
+          <AdminSubscriptionsPanel
+            onOpenUser={(userId) => {
+              setSelectedUserId(userId)
+              setTab('people')
+            }}
+            onOpenPlace={(communityId) => {
+              setFocusCommunityId(communityId)
+              setTab('places')
+            }}
+          />
           <AdminPlaceGiftPanel />
           <ProEndorseQueue />
         </div>
@@ -673,7 +685,11 @@ export function AdminPage({
           <p className="text-sm text-slate-400">
             Gestion des sites enregistrés, membres et paramètres par lieu.
           </p>
-          <AdminCommunitiesTab scope="app-admin" onMessage={onCommunitiesMessage} />
+          <AdminCommunitiesTab
+            scope="app-admin"
+            onMessage={onCommunitiesMessage}
+            initialSelectedId={focusCommunityId}
+          />
         </section>
       )}
 

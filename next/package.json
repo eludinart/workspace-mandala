@@ -9,7 +9,7 @@
     "build:docker": "node ../scripts/check-invalid-jsx.mjs && node ./node_modules/next/dist/bin/next build",
     "start": "node ./node_modules/next/dist/bin/next start",
     "lint": "next lint",
-    "test:billing": "tsx --test src/lib/billing-entitlements.test.ts"
+    "test:billing": "tsx --test src/lib/billing-entitlements.test.ts src/lib/admin-billing-ops.test.ts"
   },
   "dependencies": {
     "@tiptap/extension-image": "^3.32.2",

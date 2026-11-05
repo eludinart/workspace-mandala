@@ -4,6 +4,12 @@
 import type { RowDataPacket } from 'mysql2'
 import { getPool, isDbConfigured, table } from '@/lib/db'
 import type { PlanFamily } from '@/lib/billing-catalog'
+import {
+  COMP_PLACE_GRACE_DAYS,
+  COMP_PLACE_WARN_DAYS_BEFORE,
+} from '@/lib/billing-comp-constants'
+
+export { COMP_PLACE_GRACE_DAYS, COMP_PLACE_WARN_DAYS_BEFORE }
 
 export type SubStatus =
   | 'none'
@@ -356,11 +362,6 @@ export async function markSubscriptionStatus(
   return sub
 }
 
-/** Grâce après fin de cadeau lieu (jours) — accès maintenu. */
-export const COMP_PLACE_GRACE_DAYS = 7
-/** Alerte gestionnaires N jours avant current_period_end. */
-export const COMP_PLACE_WARN_DAYS_BEFORE = 7
-
 /** Stripe / Play : fin stricte. Cadeau (`comp`) : période + grâce. */
 const PLACE_PERIOD_OPEN_SQL = `(
   current_period_end IS NULL
@@ -571,6 +572,114 @@ export async function listActiveCommunityIds(): Promise<number[]> {
     `SELECT id FROM ${t} WHERE is_active = 1 ORDER BY id ASC`
   )
   return rows.map((r) => Number(r.id)).filter((n) => n > 0)
+}
+
+export type AdminBillingListSort =
+  | 'urgency'
+  | 'period_end'
+  | 'family'
+  | 'target'
+  | 'provider'
+  | 'updated_at'
+
+export type AdminBillingSubscriptionListItem = {
+  id: number
+  user_id: number
+  user_email: string | null
+  user_display_name: string | null
+  community_id: number | null
+  community_name: string | null
+  plan_family: PlanFamily
+  plan_id: string
+  status: string
+  payment_provider: string
+  stripe_subscription_id: string | null
+  current_period_end: Date | null
+  cancel_at_period_end: boolean
+  billing_partner: boolean
+  billing_featured: boolean
+  updated_at: Date | null
+}
+
+/**
+ * Parc admin : actifs / trialing encore ouverts (grâce cadeau lieu incluse)
+ * + past_due / unpaid.
+ */
+export async function listAdminBillingSubscriptions(opts?: {
+  family?: 'place' | 'pro' | 'all'
+}): Promise<AdminBillingSubscriptionListItem[]> {
+  if (!isDbConfigured()) return []
+  await ensureBillingTables()
+  const pool = getPool()
+  const tS = table('mandala_billing_subscriptions')
+  const tC = table('mandala_communities')
+  const tU = table('users')
+  const family = opts?.family ?? 'all'
+  const familySql =
+    family === 'place' || family === 'pro' ? `AND s.plan_family = ?` : ''
+  const params: Array<string | number> = []
+  if (family === 'place' || family === 'pro') params.push(family)
+
+  const placeOpen = `(
+    s.current_period_end IS NULL
+    OR (
+      s.payment_provider = 'comp'
+      AND DATE_ADD(s.current_period_end, INTERVAL ${COMP_PLACE_GRACE_DAYS} DAY) > UTC_TIMESTAMP()
+    )
+    OR (
+      IFNULL(s.payment_provider, 'stripe') <> 'comp'
+      AND s.current_period_end > UTC_TIMESTAMP()
+    )
+  )`
+  const proOpen = `(s.current_period_end IS NULL OR s.current_period_end > UTC_TIMESTAMP())`
+
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT s.id, s.user_id, s.community_id, s.plan_family, s.plan_id, s.status,
+            s.payment_provider, s.stripe_subscription_id, s.current_period_end,
+            s.cancel_at_period_end, s.updated_at,
+            c.name AS community_name,
+            IFNULL(c.billing_partner, 0) AS billing_partner,
+            IFNULL(c.billing_featured, 0) AS billing_featured,
+            u.user_email AS user_email,
+            u.display_name AS user_display_name
+     FROM ${tS} s
+     LEFT JOIN ${tC} c ON c.id = s.community_id
+     LEFT JOIN ${tU} u ON u.ID = s.user_id
+     WHERE (
+       s.status IN ('past_due', 'unpaid')
+       OR (
+         s.status IN ('active', 'trialing')
+         AND (
+           (s.plan_family = 'place' AND ${placeOpen})
+           OR (s.plan_family = 'pro' AND ${proOpen})
+         )
+       )
+     )
+     ${familySql}
+     ORDER BY s.updated_at DESC`,
+    params
+  )
+
+  return rows.map((r) => ({
+    id: Number(r.id),
+    user_id: Number(r.user_id),
+    user_email: r.user_email != null ? String(r.user_email) : null,
+    user_display_name: r.user_display_name != null ? String(r.user_display_name) : null,
+    community_id: r.community_id != null ? Number(r.community_id) : null,
+    community_name: r.community_name != null ? String(r.community_name) : null,
+    plan_family: r.plan_family === 'place' ? 'place' : 'pro',
+    plan_id: String(r.plan_id ?? ''),
+    status: String(r.status ?? 'none'),
+    payment_provider: String(r.payment_provider ?? 'stripe'),
+    stripe_subscription_id: r.stripe_subscription_id
+      ? String(r.stripe_subscription_id)
+      : null,
+    current_period_end: r.current_period_end ? new Date(r.current_period_end) : null,
+    cancel_at_period_end: Boolean(r.cancel_at_period_end),
+    billing_partner: Boolean(r.billing_partner),
+    billing_featured: Boolean(r.billing_featured),
+    updated_at: r.updated_at ? new Date(r.updated_at) : null,
+  }))
 }
 
 export async function listPlaceSubscriptionsForUser(
