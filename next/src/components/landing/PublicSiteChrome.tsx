@@ -67,7 +67,7 @@ export function PublicSiteChrome({
         </div>
       </div>
 
-      <nav className="m-landing-nav sticky top-0 z-40 shadow-md shadow-black/20">
+      <nav className="m-landing-nav sticky top-0 z-[80] shadow-md shadow-black/20">
         <div className="max-w-6xl mx-auto px-2 sm:px-6 flex items-center justify-center gap-1 sm:gap-4 overflow-x-auto">
           <a
             href="/#top"
@@ -80,7 +80,7 @@ export function PublicSiteChrome({
             Mur &amp; carte
           </a>
           <Link href="/competences" aria-current={pathname === '/competences' ? 'page' : undefined}>
-            Compétences
+            Annuaire
           </Link>
           <Link href="/ressources" aria-current={pathname === '/ressources' ? 'page' : undefined}>
             Ressources

@@ -237,9 +237,17 @@ html.light .m-rich-text a {
   height: 0;
 }
 
+/* Contient les z-index élevés de Leaflet (panes 400–700) sous le header sticky. */
+.m-public-map {
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+
 .m-public-map .leaflet-container {
   background: rgb(15 23 42);
   font-family: inherit;
+  z-index: 0;
 }
 
 .m-map-marker-wrap {

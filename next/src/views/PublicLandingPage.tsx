@@ -83,7 +83,9 @@ export function PublicLandingPage() {
               ॐ
             </span>
             <span className="m-landing-logo">Mandala</span>
-            <p className="m-landing-eyebrow mb-5">Réseau de lieux &amp; communautés</p>
+            <p className="m-landing-eyebrow mb-5">
+              Des lieux, une communauté, des professionnels à portée de main.
+            </p>
             <h1 className="m-landing-hero-title">
               Le mur vivant des lieux
               <br />
