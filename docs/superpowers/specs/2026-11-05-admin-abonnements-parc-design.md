@@ -19,6 +19,12 @@ L’onglet Admin → **Abonnements** n’expose que le cadeau Lieu et la file d�
 
 Cible · famille/plan · statut ops (`actif` / `bientôt` / `grâce` / `impayé`) · provider · fin de période · résiliation fin de période · actions.
 
-## Hors scope
+## Phases
 
-Historique annulé/expiré, export CSV, gestion Stripe complète.
+- **A (livré)** : parc actifs + à risque, filtre/tri, raccourcis ouvrir / prolonger cadeau.
+- **B (en cours)** : historique récent (annulé / expiré / hors grâce), filtre de portée `actifs | historique | tout`, sans gestion Stripe destructive.
+- **C (plus tard)** : export CSV, annulation / forçage statut (gestion complète).
+
+## Hors scope (phase C+)
+
+Export CSV, gestion Stripe complète (annuler, forcer statut).

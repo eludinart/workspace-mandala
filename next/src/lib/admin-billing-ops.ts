@@ -1,5 +1,5 @@
 /**
- * Statut opérationnel pour le parc admin (actifs + à risque).
+ * Statut opérationnel pour le parc admin (actifs + à risque + historique).
  * Pur / testable — pas d’accès DB.
  */
 import {
@@ -7,7 +7,13 @@ import {
   COMP_PLACE_WARN_DAYS_BEFORE,
 } from '@/lib/billing-comp-constants'
 
-export type AdminBillingOpsStatus = 'active' | 'expiring_soon' | 'grace' | 'past_due'
+export type AdminBillingOpsStatus =
+  | 'active'
+  | 'expiring_soon'
+  | 'grace'
+  | 'past_due'
+  | 'expired'
+  | 'canceled'
 
 export type AdminBillingOpsInput = {
   status: string
@@ -23,6 +29,7 @@ export function deriveAdminBillingOpsStatus(
   now: Date = new Date()
 ): AdminBillingOpsStatus {
   const status = String(row.status ?? '').toLowerCase()
+  if (status === 'canceled' || status === 'cancelled') return 'canceled'
   if (status === 'past_due' || status === 'unpaid') return 'past_due'
 
   const end = row.current_period_end
@@ -37,7 +44,7 @@ export function deriveAdminBillingOpsStatus(
     if (isCompPlace && nowMs <= endMs + COMP_PLACE_GRACE_DAYS * MS_DAY) {
       return 'grace'
     }
-    return 'past_due'
+    return 'expired'
   }
 
   if (endMs <= nowMs + COMP_PLACE_WARN_DAYS_BEFORE * MS_DAY) {
@@ -57,6 +64,10 @@ export function adminBillingOpsUrgency(ops: AdminBillingOpsStatus): number {
       return 2
     case 'active':
       return 3
+    case 'expired':
+      return 4
+    case 'canceled':
+      return 5
     default: {
       const _exhaustive: never = ops
       return _exhaustive
@@ -68,5 +79,7 @@ export const ADMIN_BILLING_OPS_LABELS: Record<AdminBillingOpsStatus, string> = {
   active: 'Actif',
   expiring_soon: 'Bientôt',
   grace: 'Grâce',
-  past_due: 'Impayé / échu',
+  past_due: 'Impayé',
+  expired: 'Expiré',
+  canceled: 'Annulé',
 }

@@ -601,12 +601,20 @@ export type AdminBillingSubscriptionListItem = {
   updated_at: Date | null
 }
 
+export type AdminBillingListScope = 'active' | 'history' | 'all'
+
+/** Historique récent : 90 jours (updated_at ou fin de période). */
+const ADMIN_BILLING_HISTORY_DAYS = 90
+
 /**
- * Parc admin : actifs / trialing encore ouverts (grâce cadeau lieu incluse)
- * + past_due / unpaid.
+ * Parc admin :
+ * - active : trialing/active ouverts (grâce cadeau incluse) + past_due/unpaid
+ * - history : annulés / expirés (hors grâce), 90 j
+ * - all : union des deux
  */
 export async function listAdminBillingSubscriptions(opts?: {
   family?: 'place' | 'pro' | 'all'
+  scope?: AdminBillingListScope
 }): Promise<AdminBillingSubscriptionListItem[]> {
   if (!isDbConfigured()) return []
   await ensureBillingTables()
@@ -615,6 +623,8 @@ export async function listAdminBillingSubscriptions(opts?: {
   const tC = table('mandala_communities')
   const tU = table('users')
   const family = opts?.family ?? 'all'
+  const scope: AdminBillingListScope =
+    opts?.scope === 'history' || opts?.scope === 'all' ? opts.scope : 'active'
   const familySql =
     family === 'place' || family === 'pro' ? `AND s.plan_family = ?` : ''
   const params: Array<string | number> = []
@@ -632,6 +642,45 @@ export async function listAdminBillingSubscriptions(opts?: {
     )
   )`
   const proOpen = `(s.current_period_end IS NULL OR s.current_period_end > UTC_TIMESTAMP())`
+  const placeClosed = `NOT ${placeOpen}`
+  const proClosed = `NOT ${proOpen}`
+
+  const activeWhere = `(
+    s.status IN ('past_due', 'unpaid')
+    OR (
+      s.status IN ('active', 'trialing')
+      AND (
+        (s.plan_family = 'place' AND ${placeOpen})
+        OR (s.plan_family = 'pro' AND ${proOpen})
+      )
+    )
+  )`
+  const historyRecent = `(
+    s.updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ${ADMIN_BILLING_HISTORY_DAYS} DAY)
+    OR (
+      s.current_period_end IS NOT NULL
+      AND s.current_period_end >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ${ADMIN_BILLING_HISTORY_DAYS} DAY)
+    )
+  )`
+  const historyWhere = `(
+    ${historyRecent}
+    AND (
+      s.status IN ('canceled', 'cancelled')
+      OR (
+        s.status IN ('active', 'trialing')
+        AND (
+          (s.plan_family = 'place' AND ${placeClosed})
+          OR (s.plan_family = 'pro' AND ${proClosed})
+        )
+      )
+    )
+  )`
+  const scopeWhere =
+    scope === 'history'
+      ? historyWhere
+      : scope === 'all'
+        ? `(${activeWhere} OR ${historyWhere})`
+        : activeWhere
 
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT s.id, s.user_id, s.community_id, s.plan_family, s.plan_id, s.status,
@@ -645,18 +694,10 @@ export async function listAdminBillingSubscriptions(opts?: {
      FROM ${tS} s
      LEFT JOIN ${tC} c ON c.id = s.community_id
      LEFT JOIN ${tU} u ON u.ID = s.user_id
-     WHERE (
-       s.status IN ('past_due', 'unpaid')
-       OR (
-         s.status IN ('active', 'trialing')
-         AND (
-           (s.plan_family = 'place' AND ${placeOpen})
-           OR (s.plan_family = 'pro' AND ${proOpen})
-         )
-       )
-     )
+     WHERE ${scopeWhere}
      ${familySql}
-     ORDER BY s.updated_at DESC`,
+     ORDER BY s.updated_at DESC
+     LIMIT 500`,
     params
   )
 

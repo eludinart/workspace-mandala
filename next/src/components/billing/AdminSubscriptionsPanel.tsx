@@ -8,6 +8,7 @@ import {
 } from '@/lib/admin-billing-ops'
 
 type FamilyFilter = 'all' | 'place' | 'pro'
+type ScopeFilter = 'active' | 'history' | 'all'
 type SortKey =
   | 'urgency'
   | 'period_end'
@@ -31,6 +32,8 @@ const OPS_CLASS: Record<AdminBillingOpsStatus, string> = {
   expiring_soon: 'text-amber-300',
   grace: 'text-orange-300',
   past_due: 'text-rose-300',
+  expired: 'text-slate-400',
+  canceled: 'text-slate-500',
 }
 
 function formatEnd(iso: string | null): string {
@@ -51,6 +54,7 @@ export function AdminSubscriptionsPanel({
   onOpenPlace: (communityId: number) => void
 }) {
   const [family, setFamily] = useState<FamilyFilter>('all')
+  const [scope, setScope] = useState<ScopeFilter>('active')
   const [sort, setSort] = useState<SortKey>('urgency')
   const [order, setOrder] = useState<'asc' | 'desc'>('asc')
   const [items, setItems] = useState<SubRow[]>([])
@@ -63,7 +67,12 @@ export function AdminSubscriptionsPanel({
     setLoading(true)
     setError('')
     try {
-      const res = await billingApi.listAdminSubscriptions({ family, sort, order })
+      const res = await billingApi.listAdminSubscriptions({
+        family,
+        scope,
+        sort,
+        order,
+      })
       setItems(res.items ?? [])
     } catch (e: unknown) {
       setItems([])
@@ -71,7 +80,7 @@ export function AdminSubscriptionsPanel({
     } finally {
       setLoading(false)
     }
-  }, [family, sort, order])
+  }, [family, scope, sort, order])
 
   useEffect(() => {
     void load()
@@ -106,7 +115,7 @@ export function AdminSubscriptionsPanel({
         <div>
           <h3 className="text-sm font-semibold text-slate-100">Parc d’abonnements</h3>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            Actifs et à risque (bientôt, grâce cadeau, impayé). Cadeaux / Stripe / Play —
+            Actifs / à risque, ou historique 90 j (expiré, annulé). Cadeaux / Stripe / Play —
             Lieu et Mandala Pro.
           </p>
         </div>
@@ -120,6 +129,18 @@ export function AdminSubscriptionsPanel({
       </div>
 
       <div className="flex flex-wrap gap-2 items-end">
+        <label className="text-xs text-slate-400 space-y-1">
+          <span className="block">Portée</span>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value as ScopeFilter)}
+            className="rounded-lg bg-slate-950 border border-slate-700 px-2 py-1.5 text-sm text-slate-200"
+          >
+            <option value="active">Actifs + à risque</option>
+            <option value="history">Historique (90 j)</option>
+            <option value="all">Tout</option>
+          </select>
+        </label>
         <label className="text-xs text-slate-400 space-y-1">
           <span className="block">Famille</span>
           <select
@@ -167,7 +188,13 @@ export function AdminSubscriptionsPanel({
       {extendMsg && <p className="text-sm text-amber-200">{extendMsg}</p>}
 
       {!loading && items.length === 0 && !error ? (
-        <p className="text-sm text-slate-500">Aucun abonnement actif ou à risque.</p>
+        <p className="text-sm text-slate-500">
+          {scope === 'history'
+            ? 'Aucun abonnement dans l’historique récent.'
+            : scope === 'all'
+              ? 'Aucun abonnement trouvé.'
+              : 'Aucun abonnement actif ou à risque.'}
+        </p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-800">
           <table className="w-full text-xs">

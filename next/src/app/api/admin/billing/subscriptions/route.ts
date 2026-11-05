@@ -1,6 +1,7 @@
 /**
  * GET /api/admin/billing/subscriptions
- * Query: family=all|place|pro, sort=urgency|period_end|family|target|provider|updated_at, order=asc|desc
+ * Query: family=all|place|pro, scope=active|history|all,
+ *        sort=urgency|period_end|family|target|provider|updated_at, order=asc|desc
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { ApiError, requireAdmin } from '@/lib/api-auth'
@@ -11,6 +12,7 @@ import {
 } from '@/lib/admin-billing-ops'
 import {
   listAdminBillingSubscriptions,
+  type AdminBillingListScope,
   type AdminBillingListSort,
 } from '@/lib/db-billing'
 
@@ -50,13 +52,16 @@ export async function GET(req: NextRequest) {
     const familyRaw = (sp.get('family') || 'all').toLowerCase()
     const family =
       familyRaw === 'place' || familyRaw === 'pro' ? familyRaw : 'all'
+    const scopeRaw = (sp.get('scope') || 'active').toLowerCase()
+    const scope: AdminBillingListScope =
+      scopeRaw === 'history' || scopeRaw === 'all' ? scopeRaw : 'active'
     const sortRaw = (sp.get('sort') || 'urgency').toLowerCase()
     const sort: AdminBillingListSort = SORTS.has(sortRaw as AdminBillingListSort)
       ? (sortRaw as AdminBillingListSort)
       : 'urgency'
     const order = (sp.get('order') || 'asc').toLowerCase() === 'desc' ? 'desc' : 'asc'
 
-    const rows = await listAdminBillingSubscriptions({ family })
+    const rows = await listAdminBillingSubscriptions({ family, scope })
     const now = new Date()
     const items = rows.map((r) => {
       const ops_status: AdminBillingOpsStatus = deriveAdminBillingOpsStatus(
@@ -139,7 +144,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       items,
-      meta: { family, sort, order, count: items.length },
+      meta: { family, scope, sort, order, count: items.length },
     })
   } catch (err: unknown) {
     const e = err as Error & { status?: number }

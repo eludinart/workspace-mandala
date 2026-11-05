@@ -80,7 +80,7 @@ describe('deriveAdminBillingOpsStatus', () => {
     )
   })
 
-  it('does not grant grace to stripe place after end', () => {
+  it('marks expired for stripe place after end', () => {
     assert.equal(
       deriveAdminBillingOpsStatus(
         {
@@ -91,7 +91,22 @@ describe('deriveAdminBillingOpsStatus', () => {
         },
         now
       ),
-      'past_due'
+      'expired'
+    )
+  })
+
+  it('marks canceled', () => {
+    assert.equal(
+      deriveAdminBillingOpsStatus(
+        {
+          status: 'canceled',
+          plan_family: 'pro',
+          payment_provider: 'stripe',
+          current_period_end: new Date('2026-10-01T00:00:00.000Z'),
+        },
+        now
+      ),
+      'canceled'
     )
   })
 })

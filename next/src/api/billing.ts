@@ -128,6 +128,7 @@ export const billingApi = {
 
   listAdminSubscriptions: (params?: {
     family?: 'all' | 'place' | 'pro'
+    scope?: 'active' | 'history' | 'all'
     sort?:
       | 'urgency'
       | 'period_end'
@@ -139,6 +140,7 @@ export const billingApi = {
   }) => {
     const q = new URLSearchParams()
     if (params?.family && params.family !== 'all') q.set('family', params.family)
+    if (params?.scope && params.scope !== 'active') q.set('scope', params.scope)
     if (params?.sort) q.set('sort', params.sort)
     if (params?.order) q.set('order', params.order)
     const qs = q.toString()
@@ -155,7 +157,13 @@ export const billingApi = {
         plan_family: 'place' | 'pro'
         plan_id: string
         status: string
-        ops_status: 'active' | 'expiring_soon' | 'grace' | 'past_due'
+        ops_status:
+          | 'active'
+          | 'expiring_soon'
+          | 'grace'
+          | 'past_due'
+          | 'expired'
+          | 'canceled'
         payment_provider: string
         stripe_subscription_id: string | null
         current_period_end: string | null
@@ -167,6 +175,7 @@ export const billingApi = {
       }>
       meta: {
         family: string
+        scope: string
         sort: string
         order: string
         count: number
