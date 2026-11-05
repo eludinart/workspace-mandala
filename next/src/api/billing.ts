@@ -25,7 +25,20 @@ export const billingApi = {
       can_see_cta: boolean
       member_covered: boolean
       pro: Record<string, unknown>
-      places: Array<Record<string, unknown>>
+      places: Array<{
+        communityId?: number
+        community_id?: number
+        status?: string
+        planId?: string | null
+        plan_id?: string | null
+        currentPeriodEnd?: string | null
+        current_period_end?: string | null
+        coveredMemberCount?: number
+        covered_member_count?: number
+        featured?: boolean
+        partner?: boolean
+        [key: string]: unknown
+      }>
       comp_alerts?: Array<{
         community_id: number
         place_name: string

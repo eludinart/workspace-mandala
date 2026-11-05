@@ -9,6 +9,7 @@ import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import { ApiError } from '@/lib/api-client'
+import { PlaceBillingSettingsPanel } from '@/components/billing/PlaceBillingSettingsPanel'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 
@@ -442,6 +443,10 @@ export function PlaceSettingsPage({
               </span>
             </label>
           </fieldset>
+
+          {active?.id != null && active.id > 0 && (
+            <PlaceBillingSettingsPanel communityId={active.id} />
+          )}
 
           <fieldset className="space-y-3 rounded-xl border border-slate-800 p-3">
             <legend className="px-1 text-xs uppercase tracking-widest text-slate-400">
