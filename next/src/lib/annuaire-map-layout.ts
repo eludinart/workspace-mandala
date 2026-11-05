@@ -70,24 +70,37 @@ export function layoutAnnuairePins(markers: AnnuaireMapMarker[]): AnnuaireLaidPi
 
   const people: AnnuaireLaidPin[] = []
   for (const [key, items] of byCity) {
-    const baseLat = items[0].latitude
-    const baseLng = items[0].longitude
-    const cityLabel = items[0].label || 'Ville'
+    // Une personne ne doit apparaître qu’une fois par ville (évite le fan résidence+exercice).
+    const byUser = new Map<number, AnnuaireMapMarker>()
+    for (const m of items) {
+      const uid = m.user_id ?? 0
+      const prev = byUser.get(uid)
+      if (!prev) {
+        byUser.set(uid, m)
+        continue
+      }
+      // Préférer exercice si les deux existent
+      if (prev.kind === 'residence' && m.kind === 'practice') byUser.set(uid, m)
+    }
+    const unique = [...byUser.values()]
+    const baseLat = unique[0].latitude
+    const baseLng = unique[0].longitude
+    const cityLabel = unique[0].label || 'Ville'
 
-    if (items.length > ANNUAIRE_FAN_MAX) {
+    if (unique.length > ANNUAIRE_FAN_MAX) {
       people.push({
         type: 'cluster',
         id: `cluster:${key}`,
         label: cityLabel,
-        items,
+        items: unique,
         latitude: baseLat,
         longitude: baseLng,
       })
       continue
     }
 
-    items.forEach((marker, index) => {
-      const { dLat, dLng } = fanOffset(index, items.length)
+    unique.forEach((marker, index) => {
+      const { dLat, dLng } = fanOffset(index, unique.length)
       people.push({
         type: 'single',
         id: marker.id,

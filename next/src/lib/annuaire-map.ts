@@ -57,7 +57,10 @@ function cityKey(label: string): string {
   return normalizeCityLabel(label).toLocaleLowerCase('fr')
 }
 
-/** Positions utiles pour une fiche : GPS exact prioritaire, sinon villes uniques. */
+/**
+ * Une seule position par personne : GPS exact > premier lieu d’exercice > résidence.
+ * (Évite 2 pins pour résidence + ville d’exercice / centre-ville.)
+ */
 function locationsForCard(card: SkillCard): Array<{
   key: string
   kind: 'practice' | 'residence'
@@ -65,15 +68,6 @@ function locationsForCard(card: SkillCard): Array<{
   latitude?: number
   longitude?: number
 }> {
-  const out: Array<{
-    key: string
-    kind: 'practice' | 'residence'
-    label: string
-    latitude?: number
-    longitude?: number
-  }> = []
-  const seen = new Set<string>()
-
   const lat = card.latitude
   const lng = card.longitude
   const hasExact =
@@ -90,39 +84,24 @@ function locationsForCard(card: SkillCard): Array<{
 
   if (hasExact) {
     const label = residence || practices[0] || 'Position'
-    const key = `exact:${card.user_id}`
-    out.push({
-      key,
-      kind: residence ? 'residence' : 'practice',
-      label,
-      latitude: Number(lat),
-      longitude: Number(lng),
-    })
-    seen.add(cityKey(label))
-    // Autres lieux d’exercice distincts de la résidence exacte
-    for (const city of practices) {
-      const k = cityKey(city)
-      if (seen.has(k)) continue
-      seen.add(k)
-      out.push({ key: `practice:${k}`, kind: 'practice', label: city })
-    }
-    return out
+    return [
+      {
+        key: `exact:${card.user_id}`,
+        kind: residence ? 'residence' : 'practice',
+        label,
+        latitude: Number(lat),
+        longitude: Number(lng),
+      },
+    ]
   }
 
-  for (const city of practices) {
-    const k = cityKey(city)
-    if (seen.has(k)) continue
-    seen.add(k)
-    out.push({ key: `practice:${k}`, kind: 'practice', label: city })
+  if (practices[0]) {
+    return [{ key: `practice:${cityKey(practices[0])}`, kind: 'practice', label: practices[0] }]
   }
   if (residence) {
-    const k = cityKey(residence)
-    if (!seen.has(k)) {
-      seen.add(k)
-      out.push({ key: `residence:${k}`, kind: 'residence', label: residence })
-    }
+    return [{ key: `residence:${cityKey(residence)}`, kind: 'residence', label: residence }]
   }
-  return out
+  return []
 }
 
 export async function listAnnuaireMapMarkers(opts?: {
