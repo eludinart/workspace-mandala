@@ -13,21 +13,25 @@ const FEATURES = [
     mark: '01',
     title: 'Un mur vivant',
     text: 'Carte, événements et messages des organisateurs réunis sur un même fil — par date ou par lieu.',
+    href: '/#mur',
   },
   {
     mark: '02',
     title: 'Vivre ensemble',
     text: 'Membres, calendrier, événements et échanges : un espace numérique au service du lien humain.',
+    href: '/competences',
   },
   {
     mark: '03',
     title: 'Charte & engagement',
     text: "Chaque membre découvre et valide la charte du lieu avant d'intégrer l'espace communautaire.",
+    href: '/app',
   },
   {
     mark: '04',
     title: 'Des lieux inspirants',
     text: 'Ashrams, fermes, collectifs : chaque communauté cultive sa présence, à son rythme.',
+    href: '/#lieux',
   },
 ]
 
@@ -87,23 +91,29 @@ export function PublicLandingPage() {
               Des lieux, une communauté, des professionnels à portée de main.
             </p>
             <h1 className="m-landing-hero-title">
-              Le mur vivant des lieux
+              Le mur vivant des communautés
               <br />
-              qui vous inspirent
+              qui vous inspirent,
+              <br />
+              et de ceux qui les font vivre.
             </h1>
             <p className="m-landing-hero-lede">
-              Carte interactive, événements à venir et messages des organisateurs — tout ce qui
-              anime les communautés Mandala, au même endroit.
+              Carte interactive, événements à venir, messages des organisateurs et annuaire de
+              compétences — pros et amateurs — tout ce qui anime les communautés Mandala, au même
+              endroit.
             </p>
             <div className="m-landing-hero-actions">
               <button type="button" onClick={scrollToMur} className="m-landing-btn">
                 Explorer le mur
               </button>
+              <Link href="/competences" className="m-landing-btn m-landing-btn--ghost">
+                Annuaire
+              </Link>
               <Link
                 href={user ? '/app' : '/app?mode=register'}
                 className="m-landing-btn m-landing-btn--ghost"
               >
-                {user ? 'Voir tout mon fil' : 'Rejoindre un lieu'}
+                {user ? 'Ouvrir mon profil' : 'Rejoindre un lieu'}
               </Link>
             </div>
             {!loading && places.length > 0 && (
@@ -118,13 +128,13 @@ export function PublicLandingPage() {
         <section className="m-landing-features" aria-label="Ce que propose Mandala">
           <div className="m-landing-features-grid">
             {FEATURES.map((f) => (
-              <article key={f.title} className="m-landing-icon-card">
+              <Link key={f.title} href={f.href} className="m-landing-icon-card">
                 <div className="m-landing-icon-mark" aria-hidden>
                   {f.mark}
                 </div>
                 <h3 className="text-xl mb-2">{f.title}</h3>
                 <p className="text-sm text-slate-400 leading-relaxed">{f.text}</p>
-              </article>
+              </Link>
             ))}
           </div>
         </section>
