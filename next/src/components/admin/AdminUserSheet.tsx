@@ -14,6 +14,7 @@ import {
 import { assignableAppRole } from '@/lib/app-roles'
 import type { CommunityRole } from '@/lib/db-communities'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
+import { AdminUserProPanel } from '@/components/billing/AdminUserProPanel'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -504,6 +505,8 @@ export function AdminUserSheet({
                   </button>
                 </section>
               )}
+
+              {canEditAppRole && <AdminUserProPanel userId={userId} />}
 
               <section className="space-y-3 border-t border-slate-800 pt-4">
                 <h3 className="text-xs uppercase tracking-widest text-amber-300">Mot de passe</h3>

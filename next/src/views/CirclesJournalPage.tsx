@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { circleJournalApi } from '@/api/place-ops'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { addMonths, monthLabelFr, ymToday } from '@/components/calendar/calendar-utils'
@@ -166,6 +167,7 @@ export function CirclesJournalPage() {
 
   return (
     <div className="w-full space-y-4">
+      <ExplainCard screen="circles" />
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-100">Cercles</h1>
         <p className="text-sm text-slate-400 mt-1">

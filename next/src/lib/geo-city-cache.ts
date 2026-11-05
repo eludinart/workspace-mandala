@@ -4,7 +4,7 @@
 import type { RowDataPacket } from 'mysql2'
 import { exec, getPool, isDbConfigured, table } from '@/lib/db'
 import { geocodeAddress } from '@/lib/geocode'
-import { normalizeCityLabel } from '@/lib/practice-locations'
+import { normalizeCityLabel, parseCityAndPostal } from '@/lib/practice-locations'
 
 let _ensured = false
 
@@ -31,9 +31,27 @@ function cityKey(label: string): string {
 
 export type CityCoords = { city: string; latitude: number; longitude: number }
 
-/** Résout une ville FR (cache puis Nominatim). */
+/** Enregistre des coords connues (ex. centre commune geo.api.gouv.fr). */
+export async function rememberCityCoords(input: CityCoords): Promise<void> {
+  const city = normalizeCityLabel(input.city)
+  if (!city || !isDbConfigured()) return
+  if (!Number.isFinite(input.latitude) || !Number.isFinite(input.longitude)) return
+  await ensureGeoCityCache()
+  const pool = getPool()
+  const t = table('geo_city_cache')
+  await pool.execute(
+    `INSERT INTO ${t} (city_key, city_label, latitude, longitude)
+     VALUES (?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE city_label = VALUES(city_label),
+       latitude = VALUES(latitude), longitude = VALUES(longitude)`,
+    [cityKey(city), city, input.latitude, input.longitude]
+  )
+}
+
+/** Résout une ville FR (cache puis Nominatim). Accepte « Tours 37000 ». */
 export async function resolveCityCoords(rawCity: string): Promise<CityCoords | null> {
-  const city = normalizeCityLabel(rawCity)
+  const parsed = parseCityAndPostal(rawCity)
+  const city = parsed.city
   if (!city || !isDbConfigured()) return null
   const key = cityKey(city)
   await ensureGeoCityCache()
@@ -50,15 +68,13 @@ export async function resolveCityCoords(rawCity: string): Promise<CityCoords | n
       longitude: Number(rows[0].longitude),
     }
   }
-  const hit = await geocodeAddress({ city, country: 'France' })
+  const hit = await geocodeAddress({
+    city,
+    postal_code: parsed.postal_code,
+    country: 'France',
+  })
   if (!hit) return null
-  await pool.execute(
-    `INSERT INTO ${t} (city_key, city_label, latitude, longitude)
-     VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE city_label = VALUES(city_label),
-       latitude = VALUES(latitude), longitude = VALUES(longitude)`,
-    [key, city, hit.latitude, hit.longitude]
-  )
+  await rememberCityCoords({ city, latitude: hit.latitude, longitude: hit.longitude })
   return { city, latitude: hit.latitude, longitude: hit.longitude }
 }
 

@@ -475,7 +475,7 @@ export async function grantComplimentaryProSubscription(opts: {
     [opts.userId, planId, compKey, periodEnd]
   )
 
-  const tagline = (opts.tagline ?? '').trim().slice(0, 200) || 'Mandala Pro (admin test)'
+  const tagline = (opts.tagline ?? '').trim().slice(0, 200) || 'Mandala Pro'
   const endorsementId =
     opts.endorsementCommunityId != null && opts.endorsementCommunityId > 0
       ? opts.endorsementCommunityId
@@ -558,6 +558,63 @@ export type AdminProVisibilitySnapshot = {
     current_period_end: string | null
     is_admin_comp: boolean
   } | null
+}
+
+/** Instantané Pro pour fiche admin (abo + vérification). */
+export async function getAdminProVisibilitySnapshot(
+  userId: number
+): Promise<AdminProVisibilitySnapshot> {
+  if (!isDbConfigured() || userId <= 0) {
+    return {
+      verification: 'none',
+      pro_boost: false,
+      pro_verified: false,
+      endorsement_place_name: null,
+      tagline: null,
+      subscription: null,
+    }
+  }
+  await ensureBillingTables()
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  const [profile, flags, subRows] = await Promise.all([
+    getProProfile(userId),
+    getProBoostFlagsForUsers([userId]),
+    pool.execute<RowDataPacket[]>(
+      `SELECT plan_id, status, payment_provider, stripe_subscription_id, current_period_end
+       FROM ${t}
+       WHERE user_id = ? AND plan_family = 'pro'
+         AND status IN ('active','trialing')
+         AND ${PERIOD_OPEN_SQL}
+       ORDER BY updated_at DESC LIMIT 1`,
+      [userId]
+    ),
+  ])
+  const f = flags.get(userId)
+  const verification = (profile?.verification ?? 'none') as ProVerification | 'none'
+  const row = subRows[0]?.[0]
+  const provider = row ? String(row.payment_provider ?? 'stripe') : ''
+  const stripeKey = row?.stripe_subscription_id ? String(row.stripe_subscription_id) : ''
+  const isAdminComp =
+    provider === 'comp' || stripeKey === adminCompProSubscriptionKey(userId)
+  return {
+    verification,
+    pro_boost: Boolean(f?.proBoost),
+    pro_verified: Boolean(f?.proVerified),
+    endorsement_place_name: f?.endorsement_place_name ?? null,
+    tagline: profile?.tagline ?? null,
+    subscription: row
+      ? {
+          plan_id: String(row.plan_id ?? ''),
+          status: String(row.status ?? ''),
+          payment_provider: provider || 'unknown',
+          current_period_end: row.current_period_end
+            ? new Date(row.current_period_end).toISOString()
+            : null,
+          is_admin_comp: isAdminComp,
+        }
+      : null,
+  }
 }
 
 export type CompPlaceSubRow = BillingSubRow & {

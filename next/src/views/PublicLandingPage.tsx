@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 import { LandingOffersSection } from '@/components/landing/LandingOffersSection'
+import { LandingPromisesSection } from '@/components/landing/LandingPromisesSection'
 
 const FEATURES = [
   {
@@ -32,24 +33,6 @@ const FEATURES = [
     title: 'Des lieux inspirants',
     text: 'Ashrams, fermes, collectifs : chaque communauté cultive sa présence, à son rythme.',
     href: '/#lieux',
-  },
-]
-
-const PROMISES = [
-  {
-    num: 'I',
-    title: 'Présence',
-    text: 'Un lieu trouvé, une fiche claire, une carte qui relie les communautés du réseau.',
-  },
-  {
-    num: 'II',
-    title: 'Calendrier',
-    text: 'Les dates qui comptent — pour les membres du lieu, et pour ceux qui viennent d’ailleurs.',
-  },
-  {
-    num: 'III',
-    title: 'Mur vivant',
-    text: 'Annonces et messages d’organisateurs au même endroit, sans bruit inutile.',
   },
 ]
 
@@ -151,27 +134,7 @@ export function PublicLandingPage() {
           <WallDiscoverSection feedLimit={20} />
         </section>
 
-        <section id="projet" className="m-landing-band m-landing-band--projet scroll-mt-16">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 text-center">
-            <p className="m-landing-eyebrow">Le projet</p>
-            <h2 className="text-3xl sm:text-4xl mt-3">Une plateforme, trois promesses</h2>
-            <p className="text-slate-400 text-sm sm:text-base leading-relaxed mt-4 max-w-2xl mx-auto">
-              Mandala met la technologie au service des lieux et de leurs communautés : présence,
-              calendrier, et un mur vivant pour relier les uns aux autres.
-            </p>
-            <div className="m-landing-promises">
-              {PROMISES.map((p) => (
-                <article key={p.num} className="m-landing-promise">
-                  <span className="m-landing-promise-num" aria-hidden>
-                    {p.num}
-                  </span>
-                  <h3>{p.title}</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{p.text}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </section>
+        <LandingPromisesSection />
 
         <LandingOffersSection />
 

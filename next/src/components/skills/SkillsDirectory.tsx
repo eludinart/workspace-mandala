@@ -167,6 +167,12 @@ export function SkillsDirectory({
   useEffect(() => {
     if (!initialUserId) return
     setSelectedId(initialUserId)
+    const t = window.setTimeout(() => {
+      document
+        .getElementById('annuaire-fiche')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+    return () => window.clearTimeout(t)
   }, [initialUserId])
 
   useEffect(() => {
@@ -312,7 +318,7 @@ export function SkillsDirectory({
 
   return (
     <div className="space-y-5">
-      {variant === 'app' && <ExplainCard screen="skills" />}
+      {variant === 'app' && <ExplainCard screen={peopleDirectory ? 'directory' : 'skills'} />}
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">
@@ -608,6 +614,11 @@ export function SkillsDirectory({
                       ) : (
                         <p className="text-[11px] text-slate-500">Sans lieu Mandala</p>
                       )}
+                      {card.residence_city && (
+                        <p className="text-[11px] text-emerald-300/90 truncate">
+                          Habite · {card.residence_city}
+                        </p>
+                      )}
                       {(card.practice_locations?.length ?? 0) > 0 && (
                         <p className="text-[11px] text-sky-300/90 truncate">
                           Exerce · {(card.practice_locations ?? []).join(' · ')}
@@ -639,7 +650,8 @@ export function SkillsDirectory({
         </ul>
 
         <article
-          className={`relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] ${
+          id="annuaire-fiche"
+          className={`relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] scroll-mt-24 ${
             selected ? 'order-1 lg:order-2' : 'order-2'
           }`}
         >
@@ -693,6 +705,11 @@ export function SkillsDirectory({
                     </ul>
                   ) : (
                     <p className="mt-2 text-xs text-slate-500">Sans rattachement à un lieu Mandala</p>
+                  )}
+                  {selected.residence_city && (
+                    <p className="mt-1.5 text-xs text-emerald-300/90">
+                      Habite à {selected.residence_city}
+                    </p>
                   )}
                   {(selected.practice_locations?.length ?? 0) > 0 && (
                     <p className="mt-1.5 text-xs text-sky-300/90">

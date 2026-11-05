@@ -105,90 +105,107 @@ export function WallFeed({
 
   return (
     <div className={`space-y-4 ${className}`}>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="rounded-2xl border border-slate-800/80 bg-slate-950/40 p-4 sm:p-5 space-y-4">
         <div>
-          <h2 className="text-2xl text-slate-100">Fil d&apos;actualité</h2>
+          <p className="m-landing-eyebrow mb-2">Fil d&apos;actualité</p>
+          <h2 className="text-2xl text-slate-100">Messages &amp; événements</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {channel === 'people'
               ? 'Brèves des personnes qui montrent leurs compétences'
               : isAuthenticated
-              ? memberPlaceCount > 0
-                ? `Messages et événements de vos ${memberPlaceCount} lieu(x)`
-                : 'Rejoignez un lieu pour voir plus de contenu'
-              : 'Mur public — contenus publiés par les organisateurs de chaque lieu'}
+                ? memberPlaceCount > 0
+                  ? `Messages et événements de vos ${memberPlaceCount} lieu(x)`
+                  : 'Rejoignez un lieu pour voir plus de contenu'
+                : 'Mur public — contenus publiés par les organisateurs de chaque lieu'}
           </p>
         </div>
-        <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
-          {isAuthenticated && (
-            <div
-              className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
-              role="tablist"
-              aria-label="Source du fil"
-            >
-              {(
-                [
-                  { id: 'places' as const, label: 'Lieux' },
-                  { id: 'people' as const, label: 'Personnes' },
-                ] as const
-              ).map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={channel === opt.id}
-                  onClick={() => setChannel(opt.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    channel === opt.id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
-                  }`}
+
+        <div className="flex flex-col gap-3 border-t border-slate-800/70 pt-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
+            Options du fil — sans effet sur la carte
+          </p>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 sm:items-center">
+            {isAuthenticated && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-slate-400 shrink-0">Voir</span>
+                <div
+                  className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5"
+                  role="tablist"
+                  aria-label="Source du fil d’actualité"
                 >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {channel === 'places' && (
-          <>
-          <div
-            className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5 shrink-0 self-end"
-            role="tablist"
-            aria-label="Trier le fil"
-          >
-            {(
-              [
-                { id: 'date' as const, label: 'Par date' },
-                { id: 'place' as const, label: 'Par lieu' },
-              ] as const
-            ).map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                role="tab"
-                aria-selected={sort === opt.id}
-                onClick={() => setSort(opt.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                    sort === opt.id
-                      ? 'bg-violet-600 text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <label className="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none self-end">
-            <input
-              type="checkbox"
-              checked={showPastEvents}
-              onChange={(e) => setShowPastEvents(e.target.checked)}
-              className="rounded border-slate-600 text-violet-600 focus:ring-violet-500/40"
-            />
-            Afficher les événements passés
-            {!showPastEvents && hiddenPastCount > 0 && (
-              <span className="text-slate-500">({hiddenPastCount} masqué{hiddenPastCount > 1 ? 's' : ''})</span>
+                  {(
+                    [
+                      { id: 'places' as const, label: 'Annonces des lieux' },
+                      { id: 'people' as const, label: 'Brèves des personnes' },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={channel === opt.id}
+                      onClick={() => setChannel(opt.id)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                        channel === opt.id
+                          ? 'bg-violet-600 text-white'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-          </label>
-          </>
-          )}
+            {channel === 'places' && (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-400 shrink-0">Trier le fil</span>
+                  <div
+                    className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5"
+                    role="tablist"
+                    aria-label="Trier le fil d’actualité"
+                  >
+                    {(
+                      [
+                        { id: 'date' as const, label: 'Chronologique' },
+                        { id: 'place' as const, label: 'Groupé par lieu' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={sort === opt.id}
+                        onClick={() => setSort(opt.id)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          sort === opt.id
+                            ? 'bg-violet-600 text-white'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 text-xs text-slate-400 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showPastEvents}
+                    onChange={(e) => setShowPastEvents(e.target.checked)}
+                    className="rounded border-slate-600 text-violet-600 focus:ring-violet-500/40"
+                  />
+                  Afficher les événements passés dans le fil
+                  {!showPastEvents && hiddenPastCount > 0 && (
+                    <span className="text-slate-500">
+                      ({hiddenPastCount} masqué{hiddenPastCount > 1 ? 's' : ''})
+                    </span>
+                  )}
+                </label>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

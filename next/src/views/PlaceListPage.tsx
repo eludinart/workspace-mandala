@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { placeListsApi, type PlaceListKind } from '@/api/place-ops'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { ApiError } from '@/lib/api-client'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 
@@ -162,6 +163,7 @@ export function PlaceListPage({ kind }: { kind: PlaceListKind }) {
 
   return (
     <div className="w-full space-y-4">
+      <ExplainCard screen={kind === 'courses' ? 'courses' : 'logistics'} />
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-slate-100">{meta.title}</h1>
         <p className="text-sm text-slate-400 mt-1">{meta.hint}</p>

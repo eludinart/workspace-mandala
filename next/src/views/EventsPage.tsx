@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { eventsApi } from '@/api/events'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { EventDetailPage } from '@/views/EventDetailPage'
 import { EventPreviewCard } from '@/components/events/EventPreviewCard'
@@ -333,6 +334,7 @@ export function EventsPage({
 
   return (
     <div className="w-full space-y-4">
+      <ExplainCard screen="events" />
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Événements — {active?.name}</h1>

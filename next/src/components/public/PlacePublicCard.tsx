@@ -11,6 +11,8 @@ type Props = {
   onSelect?: () => void
   /** Affiche la proposition de lien lieu → lieu (carte / Découvrir connecté). */
   showRelier?: boolean
+  /** Description tronquée — adapté au carrousel landing. */
+  compact?: boolean
 }
 
 function normalizeWebsite(url: string): string {
@@ -37,7 +39,13 @@ function directionsUrl(place: PublicCommunityCard): string | null {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`
 }
 
-export function PlacePublicCard({ place, selected, onSelect, showRelier }: Props) {
+export function PlacePublicCard({
+  place,
+  selected,
+  onSelect,
+  showRelier,
+  compact = false,
+}: Props) {
   const website = place.website?.trim()
   const email = place.contact_email?.trim()
   const displayAddress = composeAddress(place)
@@ -47,6 +55,8 @@ export function PlacePublicCard({ place, selected, onSelect, showRelier }: Props
     <article
       id={`lieu-${place.slug}`}
       className={`m-landing-card p-6 transition-all scroll-mt-24 ${
+        compact ? 'min-h-[17rem] flex flex-col' : ''
+      } ${
         selected
           ? 'ring-1 ring-violet-500/40 border-violet-500/40'
           : 'hover:border-slate-600'
@@ -72,12 +82,18 @@ export function PlacePublicCard({ place, selected, onSelect, showRelier }: Props
       </button>
 
       {place.description && (
-        <p className="mt-4 text-sm text-slate-400 leading-relaxed whitespace-pre-wrap">
+        <p
+          className={`mt-4 text-sm text-slate-400 leading-relaxed ${
+            compact
+              ? 'line-clamp-4 whitespace-normal flex-1'
+              : 'whitespace-pre-wrap'
+          }`}
+        >
           {place.description}
         </p>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2 items-center">
+      <div className={`mt-4 flex flex-wrap gap-2 items-center ${compact ? 'mt-auto pt-2' : ''}`}>
         {place.profile_public !== false ? (
           <Link
             href={`/lieux/${encodeURIComponent(place.slug)}`}

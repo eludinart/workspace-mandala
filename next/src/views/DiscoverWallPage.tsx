@@ -1,6 +1,7 @@
 'use client'
 
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { SkillsCarousel } from '@/components/landing/SkillsCarousel'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
 import { OPEN_SKILL_USER_KEY, queueSkillFiche } from '@/components/skills/SkillsDirectory'
@@ -12,6 +13,7 @@ import { OPEN_SKILL_USER_KEY, queueSkillFiche } from '@/components/skills/Skills
 export function DiscoverWallPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   return (
     <div className="m-landing w-full space-y-8 pb-8">
+      <ExplainCard screen="discover" />
       <header className="text-center sm:text-left space-y-3 pt-1">
         <p className="m-landing-eyebrow">Réseau Mandala</p>
         <h1 className="m-landing-hero-title !text-4xl sm:!text-5xl">Découvrir</h1>

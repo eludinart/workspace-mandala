@@ -196,7 +196,10 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
         </div>
       </section>
 
-      <HeartWeatherHomeCard />
+      <div className="mx-4 sm:mx-6 lg:mx-8 mt-4 space-y-3">
+        <ExplainCard screen="heart_weather" />
+        <HeartWeatherHomeCard />
+      </div>
 
       <div className="w-full px-4 sm:px-6 lg:px-8 space-y-16 pt-10">
         <section className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
@@ -313,6 +316,7 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
             <p className="m-landing-eyebrow">Annonces</p>
             <h2 className="text-3xl sm:text-4xl">Actualités du lieu</h2>
           </div>
+          <ExplainCard screen="announcements" />
           <PlaceAnnouncementsSection onNavigate={onNavigate} />
         </section>
 
@@ -428,31 +432,53 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
         </section>
 
         {active?.description && (
-          <section className="m-landing-card p-6 sm:p-8 space-y-3">
-            <p className="m-landing-eyebrow">À propos</p>
-            <h2 className="text-3xl">{active.name}</h2>
-            <p className="text-slate-300 text-sm sm:text-base whitespace-pre-wrap leading-relaxed">
-              {active.description}
-            </p>
-            {(active.website || active.contact_email) && (
-              <div className="flex flex-wrap gap-3 pt-2">
-                {active.website && (
-                  <a
-                    href={active.website.startsWith('http') ? active.website : `https://${active.website}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="m-landing-btn"
-                  >
-                    Site web
-                  </a>
-                )}
-                {active.contact_email && (
-                  <a href={`mailto:${active.contact_email}`} className="m-landing-btn m-landing-btn--ghost">
-                    {active.contact_email}
-                  </a>
-                )}
-              </div>
+          <section className="m-home-about relative overflow-hidden rounded-[1.35rem] border border-slate-800">
+            {heroImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={heroImage} alt="" className="m-home-about-media" />
+            ) : (
+              <div
+                className="m-home-about-media"
+                style={{
+                  background: `linear-gradient(145deg, ${accent}88 0%, ${accent}33 42%, rgb(15 23 42) 78%, rgb(2 6 23) 100%)`,
+                }}
+                aria-hidden
+              />
             )}
+            <div className="m-home-about-wash" aria-hidden />
+            <div className="relative z-[1] p-6 sm:p-8 md:p-10 space-y-3 max-w-3xl">
+              <p className="m-landing-eyebrow">À propos</p>
+              <h2 className="text-3xl sm:text-4xl text-slate-50">{active.name}</h2>
+              <p className="m-home-about-body text-sm sm:text-base whitespace-pre-wrap leading-relaxed">
+                {active.description}
+              </p>
+              {(active.website || active.contact_email) && (
+                <div className="flex flex-wrap gap-3 pt-2">
+                  {active.website && (
+                    <a
+                      href={
+                        active.website.startsWith('http')
+                          ? active.website
+                          : `https://${active.website}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="m-landing-btn"
+                    >
+                      Site web
+                    </a>
+                  )}
+                  {active.contact_email && (
+                    <a
+                      href={`mailto:${active.contact_email}`}
+                      className="m-landing-btn m-landing-btn--ghost"
+                    >
+                      {active.contact_email}
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
         )}
 

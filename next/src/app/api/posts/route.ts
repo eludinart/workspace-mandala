@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       type: body.type,
       content: String(body.content ?? ''),
       wall_public: can_manage ? body.wall_public : false,
+      image_data: body.image_data ?? null,
     })
     return NextResponse.json({ post })
   } catch (err: unknown) {

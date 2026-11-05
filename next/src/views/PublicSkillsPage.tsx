@@ -100,9 +100,8 @@ export function PublicSkillsPage() {
                   setSelectedMarkerId(m.id)
                   if (m.kind === 'practice' && m.user_id) {
                     setHighlightUserId(m.user_id)
-                    document
-                      .getElementById('annuaire')
-                      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    // Le scroll vers #annuaire-fiche est déclenché dans SkillsDirectory
+                    // dès que initialUserId change (après ouverture de la fiche).
                   }
                 }}
               />

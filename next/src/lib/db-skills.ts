@@ -63,6 +63,8 @@ export type SkillProfile = {
   frame_text: string
   /** Ville où la personne vit — distincte des lieux d’exercice. */
   residence_city: string
+  /** Afficher la résidence sur le profil public et la carte. */
+  residence_public: boolean
   /** Villes où elle exerce (carte + matching). */
   practice_locations: string[]
   updated_at: string | null
@@ -114,6 +116,7 @@ export type SkillCard = {
   /** Vues de fiche (propriétaire seulement, 30 j). */
   profile_views_30d?: number
   residence_city?: string
+  residence_public?: boolean
   practice_locations?: string[]
 }
 
@@ -223,6 +226,12 @@ async function ensureSkillTables(): Promise<void> {
       `ALTER TABLE ${tP} ADD COLUMN practice_locations_json TEXT NULL`
     )
   }
+  if (!existing.has('residence_public')) {
+    await exec(
+      pool,
+      `ALTER TABLE ${tP} ADD COLUMN residence_public TINYINT(1) NOT NULL DEFAULT 1`
+    )
+  }
   const tViews = table('mandala_skill_profile_views')
   await exec(
     pool,
@@ -246,6 +255,7 @@ function emptyProfile(userId: number): SkillProfile {
     seek_text: '',
     frame_text: '',
     residence_city: '',
+    residence_public: true,
     practice_locations: [],
     updated_at: null,
     place_ids: [],
@@ -260,6 +270,7 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
   const tP = table('mandala_skill_profiles')
   const [rows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_id, scope, offer_text, seek_text, frame_text, residence_city,
+            COALESCE(residence_public, 1) AS residence_public,
             practice_locations_json, updated_at
      FROM ${tP} WHERE user_id = ? LIMIT 1`,
     [userId]
@@ -273,6 +284,7 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
         seek_text: String(r.seek_text ?? ''),
         frame_text: String(r.frame_text ?? ''),
         residence_city: normalizeCityLabel(r.residence_city),
+        residence_public: Number(r.residence_public) !== 0,
         practice_locations: practiceLocationsFromJson(r.practice_locations_json),
         updated_at: r.updated_at ? new Date(r.updated_at as string).toISOString() : null,
       }
@@ -330,6 +342,7 @@ export type SkillProfileInput = {
   seek_text: string
   frame_text: string
   residence_city?: string
+  residence_public?: boolean
   practice_locations?: string[]
   place_ids: number[]
   tags: SkillTag[]
@@ -367,18 +380,23 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
   const seek = input.seek_text.trim().slice(0, MAX_SKILL_TEXT)
   const frame = input.frame_text.trim().slice(0, MAX_SKILL_TEXT)
   const residence = normalizeCityLabel(input.residence_city)
+  const residencePublic =
+    input.residence_public === undefined
+      ? before?.residence_public !== false
+      : Boolean(input.residence_public)
   const practice = normalizePracticeLocations(input.practice_locations)
   const practiceJson = practiceLocationsToJson(practice)
   const pool = getPool()
   const tP = table('mandala_skill_profiles')
   await pool.execute(
-    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text, frame_text, residence_city, practice_locations_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ${tP} (user_id, scope, offer_text, seek_text, frame_text, residence_city, residence_public, practice_locations_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE scope = VALUES(scope), offer_text = VALUES(offer_text),
        seek_text = VALUES(seek_text), frame_text = VALUES(frame_text),
        residence_city = VALUES(residence_city),
+       residence_public = VALUES(residence_public),
        practice_locations_json = VALUES(practice_locations_json)`,
-    [userId, input.scope, offer, seek, frame, residence, practiceJson]
+    [userId, input.scope, offer, seek, frame, residence, residencePublic ? 1 : 0, practiceJson]
   )
 
   const tPlaces = table('mandala_skill_profile_places')
@@ -506,7 +524,9 @@ function cardFromProfile(
     bio: extras?.bio ?? '',
     resources: extras?.resources ?? [],
     skills_visible: skillsVisible,
-    residence_city: skillsVisible ? profile.residence_city : '',
+    residence_city:
+      skillsVisible && profile.residence_public !== false ? profile.residence_city : '',
+    residence_public: profile.residence_public !== false,
     practice_locations: skillsVisible ? profile.practice_locations : [],
   }
 }

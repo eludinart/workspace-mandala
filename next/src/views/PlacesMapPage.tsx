@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { placeLinksApi } from '@/api/place-links'
-import { PlacePublicCard } from '@/components/public/PlacePublicCard'
+import { PlacesCarousel } from '@/components/landing/PlacesCarousel'
 
 const PlacesMap = dynamic(
   () => import('@/components/public/PlacesMap').then((m) => m.PlacesMap),
@@ -108,6 +108,9 @@ export function PlacesMapPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Les lieux inscrits</h2>
+        <p className="text-sm text-slate-500">
+          Faites défiler pour découvrir chaque lieu du réseau.
+        </p>
 
         {loading && <p className="text-sm text-slate-500">Chargement des lieux…</p>}
 
@@ -117,18 +120,14 @@ export function PlacesMapPage() {
           </p>
         )}
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          {places.map((place) => (
-            <div key={place.slug} id={`carte-lieu-${place.slug}`}>
-              <PlacePublicCard
-                place={place}
-                selected={selectedSlug === place.slug}
-                onSelect={() => setSelectedSlug(place.slug)}
-                showRelier
-              />
-            </div>
-          ))}
-        </div>
+        {!loading && places.length > 0 && (
+          <PlacesCarousel
+            places={places}
+            selectedSlug={selectedSlug}
+            onSelect={setSelectedSlug}
+            showRelier
+          />
+        )}
       </section>
     </div>
   )

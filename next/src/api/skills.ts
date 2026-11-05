@@ -17,6 +17,8 @@ export type SkillProfile = {
   seek_text: string
   frame_text: string
   residence_city: string
+  /** Si false, la résidence n’apparaît pas sur le profil public / la carte. */
+  residence_public: boolean
   practice_locations: string[]
   updated_at: string | null
   place_ids: number[]
@@ -51,6 +53,7 @@ export type SkillCard = {
   pro_endorsement_place?: string | null
   profile_views_30d?: number
   residence_city?: string
+  residence_public?: boolean
   practice_locations?: string[]
 }
 
@@ -71,12 +74,14 @@ export type AnnuaireAudience = 'all' | 'pro' | 'members'
 
 export type AnnuaireMapMarker = {
   id: string
-  kind: 'practice' | 'mandala_place'
+  kind: 'practice' | 'residence' | 'mandala_place'
   latitude: number
   longitude: number
   label: string
   user_id?: number
   display_name?: string
+  avatar?: string | null
+  avatar_emoji?: string | null
   pro_verified?: boolean
   community_id?: number
   community_slug?: string
@@ -92,6 +97,7 @@ export const skillsApi = {
     seek_text: string
     frame_text: string
     residence_city?: string
+    residence_public?: boolean
     practice_locations?: string[]
     place_ids: number[]
     tags: SkillTag[]

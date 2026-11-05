@@ -35,21 +35,8 @@ function hasAnyAddressPart(input: GeocodeInput): boolean {
  * Résout des coordonnées à partir d'une adresse structurée.
  * Retourne null si l'adresse est vide ou introuvable (pas d'exception bloquante).
  */
-export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeResult | null> {
-  if (!hasAnyAddressPart(input)) return null
-
-  const params = new URLSearchParams({
-    format: 'jsonv2',
-    limit: '1',
-    addressdetails: '0',
-  })
-  if (input.address) params.set('street', String(input.address).trim())
-  if (input.city) params.set('city', String(input.city).trim())
-  if (input.postal_code) params.set('postalcode', String(input.postal_code).trim())
-  params.set('country', input.country ? String(input.country).trim() : 'France')
-
+async function nominatimSearch(params: URLSearchParams): Promise<GeocodeResult | null> {
   const url = `${NOMINATIM_BASE}/search?${params.toString()}`
-
   try {
     const res = await fetch(url, {
       headers: {
@@ -69,4 +56,38 @@ export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeResult
   } catch {
     return null
   }
+}
+
+export async function geocodeAddress(input: GeocodeInput): Promise<GeocodeResult | null> {
+  if (!hasAnyAddressPart(input)) return null
+
+  const country = input.country ? String(input.country).trim() : 'France'
+  const city = input.city ? String(input.city).trim() : ''
+  const postal = input.postal_code ? String(input.postal_code).trim() : ''
+  const street = input.address ? String(input.address).trim() : ''
+
+  const structured = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '1',
+    addressdetails: '0',
+    country,
+  })
+  if (street) structured.set('street', street)
+  if (city) structured.set('city', city)
+  if (postal) structured.set('postalcode', postal)
+
+  const structuredHit = await nominatimSearch(structured)
+  if (structuredHit) return structuredHit
+
+  // Repli libre : « 37000 Tours, France » — utile si ville+CP étaient collés avant normalisation.
+  const qParts = [street, [postal, city].filter(Boolean).join(' '), country].filter(Boolean)
+  const q = qParts.join(', ').trim()
+  if (!q) return null
+  const free = new URLSearchParams({
+    format: 'jsonv2',
+    limit: '1',
+    addressdetails: '0',
+    q,
+  })
+  return nominatimSearch(free)
 }

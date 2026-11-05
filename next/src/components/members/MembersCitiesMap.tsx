@@ -26,16 +26,22 @@ export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) 
       return
     }
     let cancelled = false
-    void api
-      .get(`/api/members/city?community_slug=${encodeURIComponent(communitySlug)}`)
-      .then((raw) => {
-        if (!cancelled) setPins((raw as { pins?: Pin[] }).pins ?? [])
-      })
-      .catch(() => {
-        if (!cancelled) setPins([])
-      })
+    const loadPins = () => {
+      void api
+        .get(`/api/members/city?community_slug=${encodeURIComponent(communitySlug)}`)
+        .then((raw) => {
+          if (!cancelled) setPins((raw as { pins?: Pin[] }).pins ?? [])
+        })
+        .catch(() => {
+          if (!cancelled) setPins([])
+        })
+    }
+    loadPins()
+    const onChanged = () => loadPins()
+    window.addEventListener('mandala-member-city-changed', onChanged)
     return () => {
       cancelled = true
+      window.removeEventListener('mandala-member-city-changed', onChanged)
     }
   }, [can, doorsLoading, communitySlug])
 

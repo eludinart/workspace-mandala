@@ -13,12 +13,16 @@ export type AnnuaireAudience = 'all' | 'pro' | 'members'
 
 export type AnnuaireMapMarker = {
   id: string
-  kind: 'practice' | 'mandala_place'
+  kind: 'practice' | 'residence' | 'mandala_place'
   latitude: number
   longitude: number
   label: string
   user_id?: number
   display_name?: string
+  /** Photo de profil (data URL ou http) pour le pin. */
+  avatar?: string | null
+  /** Emoji de profil si pas de photo. */
+  avatar_emoji?: string | null
   pro_verified?: boolean
   community_id?: number
   community_slug?: string
@@ -88,6 +92,10 @@ export async function listAnnuaireMapMarkers(opts?: {
       const c = normalizeCityLabel(city)
       if (c) cityLabels.add(c)
     }
+    if (card.residence_public !== false) {
+      const residence = normalizeCityLabel(card.residence_city)
+      if (residence) cityLabels.add(residence)
+    }
     for (const p of card.places ?? []) {
       if (p.id > 0) communityIds.add(p.id)
     }
@@ -104,6 +112,14 @@ export async function listAnnuaireMapMarkers(opts?: {
     const placeNames = (card.places ?? [])
       .map((p) => listedPlaces.get(p.id))
       .filter((name): name is string => Boolean(name))
+    const base = {
+      user_id: card.user_id,
+      display_name: card.display_name || card.pseudo,
+      avatar: card.avatar ?? null,
+      avatar_emoji: card.avatar_emoji ?? null,
+      pro_verified: Boolean(card.pro_verified),
+      place_names: placeNames,
+    }
     for (const city of card.practice_locations ?? []) {
       const label = normalizeCityLabel(city)
       if (!label) continue
@@ -115,11 +131,24 @@ export async function listAnnuaireMapMarkers(opts?: {
         latitude: coords.latitude,
         longitude: coords.longitude,
         label,
-        user_id: card.user_id,
-        display_name: card.display_name || card.pseudo,
-        pro_verified: Boolean(card.pro_verified),
-        place_names: placeNames,
+        ...base,
       })
+    }
+    if (card.residence_public !== false) {
+      const label = normalizeCityLabel(card.residence_city)
+      if (label) {
+        const coords = cityCoords.get(label.toLocaleLowerCase('fr'))
+        if (coords) {
+          markers.push({
+            id: `residence:${card.user_id}:${label.toLocaleLowerCase('fr')}`,
+            kind: 'residence',
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            label,
+            ...base,
+          })
+        }
+      }
     }
   }
 

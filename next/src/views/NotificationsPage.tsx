@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useNotifications } from '@/contexts/NotificationContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { navigateFromNotification } from '@/lib/notification-navigation'
 import type { NotificationItem } from '@/contexts/NotificationContext'
 import { PAGE_READ_PREVIEW_LIMIT, splitNotificationsForDisplay } from '@/lib/notification-retention'
@@ -35,6 +36,7 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
 
   return (
     <div className="w-full space-y-6">
+      <ExplainCard screen="notifications" />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Centre d&apos;alertes</h1>

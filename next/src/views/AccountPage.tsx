@@ -13,6 +13,9 @@ import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { CityFromPostalField } from '@/components/geo/CityFromPostalField'
+import { PracticeCitiesFromPostal } from '@/components/geo/PracticeCitiesFromPostal'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { ApiError } from '@/lib/api-client'
 import {
   paymentSurfaceAllowsStripe,
@@ -78,7 +81,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [showFullLastName, setShowFullLastName] = useState(false)
   const [bio, setBio] = useState('')
   const [residenceCity, setResidenceCity] = useState('')
-  const [practiceCitiesRaw, setPracticeCitiesRaw] = useState('')
+  const [residencePublic, setResidencePublic] = useState(true)
+  const [practiceCities, setPracticeCities] = useState<string[]>([])
   const [avatarEmoji, setAvatarEmoji] = useState('🌸')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [profilePublic, setProfilePublic] = useState(true)
@@ -131,7 +135,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       try {
         const skills = await skillsApi.getMine()
         setResidenceCity(skills.profile.residence_city ?? '')
-        setPracticeCitiesRaw((skills.profile.practice_locations ?? []).join(', '))
+        setResidencePublic(skills.profile.residence_public !== false)
+        setPracticeCities(skills.profile.practice_locations ?? [])
       } catch {
         /* fiche compétences optionnelle */
       }
@@ -217,19 +222,21 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       })
       try {
         const skills = await skillsApi.getMine()
-        const practice_locations = practiceCitiesRaw
-          .split(/[,;\n]/)
-          .map((s) => s.trim())
-          .filter(Boolean)
+        const nextScope =
+          skills.profile.scope === 'hidden' &&
+          (residenceCity.trim() || practiceCities.length > 0)
+            ? 'mandala'
+            : skills.profile.scope
         await skillsApi.saveMine({
-          scope: skills.profile.scope,
+          scope: nextScope,
           offer_text: skills.profile.offer_text,
           seek_text: skills.profile.seek_text,
           frame_text: skills.profile.frame_text,
           place_ids: skills.profile.place_ids,
           tags: skills.profile.tags,
           residence_city: residenceCity.trim(),
-          practice_locations,
+          residence_public: residencePublic,
+          practice_locations: practiceCities,
         })
       } catch {
         /* profil identité déjà sauvé */
@@ -331,6 +338,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
 
   return (
     <div className="m-user-form w-full space-y-6">
+      <ExplainCard screen="account" />
       <header className="sticky top-0 z-20 -mx-1 space-y-3 border-b border-slate-800/70 bg-slate-950/95 px-1 pb-3 pt-1 backdrop-blur-md">
         <div>
           <p className="m-user-eyebrow mb-1">Espace personnel</p>
@@ -457,28 +465,28 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
             />
           </label>
-          <label className="block text-sm">
-            <span className="text-slate-500">Ville de résidence</span>
+          <CityFromPostalField
+            id="account-residence"
+            label="Ville de résidence"
+            hint="Code postal, puis sélection de la commune."
+            value={residenceCity}
+            onChange={setResidenceCity}
+            disabled={saving}
+          />
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
-              value={residenceCity}
-              onChange={(e) => setResidenceCity(e.target.value)}
-              maxLength={120}
-              placeholder="Où vous vivez"
-              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+              type="checkbox"
+              checked={residencePublic}
+              onChange={(e) => setResidencePublic(e.target.checked)}
+              className="rounded"
             />
+            <span>Afficher ma résidence sur mon profil public et la carte</span>
           </label>
-          <label className="block text-sm">
-            <span className="text-slate-500">Lieux d’exercice</span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Villes séparées par des virgules — carte &amp; matching.
-            </span>
-            <input
-              value={practiceCitiesRaw}
-              onChange={(e) => setPracticeCitiesRaw(e.target.value)}
-              placeholder="Tours, Chinon…"
-              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
-            />
-          </label>
+          <PracticeCitiesFromPostal
+            value={practiceCities}
+            onChange={setPracticeCities}
+            disabled={saving}
+          />
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"

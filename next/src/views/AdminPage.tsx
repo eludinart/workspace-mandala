@@ -19,6 +19,7 @@ import { AdminPlaceGiftPanel } from '@/components/billing/AdminPlaceGiftPanel'
 import { AdminSubscriptionsPanel } from '@/components/billing/AdminSubscriptionsPanel'
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
+import { ExplainCard } from '@/components/help/ExplainCard'
 
 import type { AdminTabId } from '@/lib/nav'
 type CommMode = 'announcement' | 'broadcast'
@@ -317,6 +318,7 @@ export function AdminPage({
 
   return (
     <div className="w-full space-y-4">
+      <ExplainCard screen="admin" />
       <AdminCommunityBanner />
       <h1 className="text-2xl font-bold">Administration</h1>
       <div className="flex flex-wrap gap-2">

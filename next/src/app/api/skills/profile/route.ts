@@ -31,6 +31,8 @@ function parseBody(body: Record<string, unknown>) {
     seek_text: String(body.seek_text ?? ''),
     frame_text: String(body.frame_text ?? ''),
     residence_city: normalizeCityLabel(body.residence_city),
+    residence_public:
+      body.residence_public === undefined ? undefined : Boolean(body.residence_public),
     practice_locations: normalizePracticeLocations(body.practice_locations),
     place_ids: placeIds,
     tags,

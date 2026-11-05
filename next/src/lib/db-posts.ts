@@ -21,11 +21,24 @@ export type CommunityPostRow = {
   author_id: number
   type: PostType
   content: string
+  image_data: string | null
   created_at: string
   author_pseudo: string
   author_avatar_emoji: string
   author_avatar: string | null
   wall_public: boolean
+}
+
+function normalizePostImageData(img: unknown): string | null | undefined {
+  if (img === undefined) return undefined
+  if (img === null || img === '') return null
+  if (typeof img !== 'string') return undefined
+  if (!/^data:image\/(jpeg|png|webp|gif);base64,/i.test(img)) return undefined
+  const raw = Buffer.from(img.replace(/^data:image\/\w+;base64,/, ''), 'base64')
+  if (raw.length > 600_000) {
+    throw Object.assign(new Error('Image trop lourde (600 Ko max.)'), { status: 400 })
+  }
+  return img
 }
 
 export async function ensurePostTables(): Promise<void> {
@@ -47,7 +60,22 @@ export async function ensurePostTables(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
   )
   await ensureWallPublicColumn(pool, t)
+  await ensurePostImageColumn(pool, t)
   })
+  await ensureOnce('posts-image', async () => {
+    const pool = getPool()
+    await ensurePostImageColumn(pool, table('mandala_posts'))
+  })
+}
+
+async function ensurePostImageColumn(
+  pool: ReturnType<typeof getPool>,
+  tableName: string
+): Promise<void> {
+  const [cols] = await pool.execute<RowDataPacket[]>(`SHOW COLUMNS FROM ${tableName}`)
+  const existing = new Set((cols ?? []).map((c) => String(c.Field)))
+  if (existing.has('image_data')) return
+  await exec(pool, `ALTER TABLE ${tableName} ADD COLUMN image_data MEDIUMTEXT NULL`)
 }
 
 function isPostType(v: unknown): v is PostType {
@@ -106,7 +134,7 @@ export async function deleteCommunityPost(params: {
 export async function createPost(
   communityId: number,
   authorId: number,
-  data: { type: PostType; content: string; wall_public?: boolean }
+  data: { type: PostType; content: string; wall_public?: boolean; image_data?: string | null }
 ): Promise<CommunityPostRow> {
   await ensurePostTables()
   if (!isPostType(data.type)) {
@@ -119,13 +147,18 @@ export async function createPost(
   if (content.length > 2000) {
     throw Object.assign(new Error('Brève trop longue (2000 caractères max.)'), { status: 400 })
   }
+  const image = normalizePostImageData(data.image_data ?? null)
+  if (data.image_data != null && data.image_data !== '' && image === undefined) {
+    throw Object.assign(new Error('Image invalide (JPEG, PNG, WebP ou GIF)'), { status: 400 })
+  }
 
   const pool = getPool()
   const t = table('mandala_posts')
   const wallPublic = parseWallPublic(data.wall_public) ? 1 : 0
   const [result] = await pool.execute(
-    `INSERT INTO ${t} (community_id, author_id, type, content, wall_public) VALUES (?, ?, ?, ?, ?)`,
-    [communityId, authorId, data.type, content, wallPublic]
+    `INSERT INTO ${t} (community_id, author_id, type, content, image_data, wall_public)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [communityId, authorId, data.type, content, image ?? null, wallPublic]
   )
   const insertId = Number((result as { insertId?: number }).insertId)
   const posts = await getPostsByCommunity(communityId, 1)
@@ -138,6 +171,7 @@ export async function createPost(
       author_id: authorId,
       type: data.type,
       content,
+      image_data: image ?? null,
       created_at: new Date().toISOString(),
       author_pseudo: `user_${authorId}`,
       author_avatar_emoji: '🌸',
@@ -181,6 +215,7 @@ function mapPostRow(r: RowDataPacket): CommunityPostRow {
     author_id: Number(r.author_id),
     type: (r.type === 'logistics' ? 'logistics' : 'inspiration') as PostType,
     content: String(r.content),
+    image_data: r.image_data ? String(r.image_data) : null,
     created_at: r.created_at ? String(r.created_at) : new Date().toISOString(),
     author_pseudo: String(r.author_pseudo),
     author_avatar_emoji: String(r.author_avatar_emoji || '🌸'),
@@ -239,7 +274,7 @@ export async function getPostsByCommunity(
   const safeLimit = Math.min(Math.max(1, limit), 50)
 
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT p.id, p.community_id, p.author_id, p.type, p.content, p.created_at, p.wall_public,
+    `SELECT p.id, p.community_id, p.author_id, p.type, p.content, p.image_data, p.created_at, p.wall_public,
             COALESCE(pm.meta_value, u.display_name, CONCAT('user_', p.author_id)) AS author_pseudo,
             COALESCE(em.meta_value, '🌸') AS author_avatar_emoji,
             COALESCE(am.meta_value, '') AS author_avatar

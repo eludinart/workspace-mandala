@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { placeAnnouncementsApi, type PlaceAnnouncement, type PlaceAnnouncementDraft } from '@/api/place-announcements'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
 import {
@@ -99,6 +100,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
 
   return (
     <div className="w-full space-y-5">
+      <ExplainCard screen="announcements" />
       <div>
         <button
           type="button"

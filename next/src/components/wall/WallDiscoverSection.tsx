@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { placeLinksApi } from '@/api/place-links'
 import { WallFeed } from '@/components/wall/WallFeed'
-import { PlacePublicCard } from '@/components/public/PlacePublicCard'
+import { PlacesCarousel } from '@/components/landing/PlacesCarousel'
 import type { WallFeedSort } from '@/lib/wall-feed-types'
 
 const PlacesMap = dynamic(
@@ -151,7 +151,7 @@ export function WallDiscoverSection({
         </div>
       </section>
 
-      <section className="min-w-0">
+      <section className="min-w-0 pt-2 border-t border-slate-800/60">
         <WallFeed
           initialSort={initialSort}
           limit={feedLimit}
@@ -165,19 +165,16 @@ export function WallDiscoverSection({
           <div className="text-center sm:text-left space-y-2">
             <p className="m-landing-eyebrow">Communautés</p>
             <h2 className="text-2xl sm:text-3xl">Tous les lieux</h2>
+            <p className="text-sm text-slate-500">
+              Faites défiler pour découvrir chaque lieu du réseau.
+            </p>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {places.map((place) => (
-              <div key={place.slug} id={`mur-lieu-${place.slug}`}>
-                <PlacePublicCard
-                  place={place}
-                  selected={selectedSlug === place.slug}
-                  onSelect={() => setSelectedSlug(place.slug)}
-                  showRelier
-                />
-              </div>
-            ))}
-          </div>
+          <PlacesCarousel
+            places={places}
+            selectedSlug={selectedSlug}
+            onSelect={setSelectedSlug}
+            showRelier
+          />
         </section>
       )}
 

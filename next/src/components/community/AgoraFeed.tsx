@@ -1,13 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { postsApi, type CommunityPost } from '@/api/posts'
 import type { PostType } from '@/lib/db-posts'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { ApiError } from '@/lib/api-client'
+import { compressFeedImage } from '@/lib/compress-feed-image'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { FeedSection } from '@/components/community/FeedSection'
 import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
 import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
@@ -36,6 +38,10 @@ export function AgoraFeed() {
   const [removingId, setRemovingId] = useState<number | null>(null)
   const [composerOpen, setComposerOpen] = useState(false)
   const [wallPublic, setWallPublic] = useState(false)
+  const [imageData, setImageData] = useState<string | null>(null)
+  const [imageBusy, setImageBusy] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
   const [reportPostId, setReportPostId] = useState<number | null>(null)
@@ -66,6 +72,31 @@ export function AgoraFeed() {
     void load()
   }, [load])
 
+  const pickImage = async (file: File | null) => {
+    if (!file) return
+    setImageBusy(true)
+    setError(null)
+    try {
+      const res = await compressFeedImage(file)
+      if (res.error || !res.dataUrl) {
+        setError(res.error || 'Impossible de préparer l’image')
+        return
+      }
+      setImageData(res.dataUrl)
+    } catch {
+      setError('Impossible de préparer l’image')
+    } finally {
+      setImageBusy(false)
+    }
+  }
+
+  const resetComposer = () => {
+    setComposerOpen(false)
+    setDraft('')
+    setWallPublic(false)
+    setImageData(null)
+  }
+
   const publish = async () => {
     if (!active?.id || !draft.trim()) return
     setSubmitting(true)
@@ -77,10 +108,9 @@ export function AgoraFeed() {
         type: postType,
         content: draft.trim(),
         wall_public: canManage ? wallPublic : false,
+        image_data: imageData,
       })
-      setDraft('')
-      setWallPublic(false)
-      setComposerOpen(false)
+      resetComposer()
       setMsg('Brève publiée')
       await load()
     } catch (e: unknown) {
@@ -130,6 +160,8 @@ export function AgoraFeed() {
   }
 
   return (
+    <div className="space-y-3">
+    <ExplainCard screen="agora" />
     <FeedSection
       icon="💬"
       title="L'Agora"
@@ -192,6 +224,45 @@ export function AgoraFeed() {
               }
               className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-base resize-none"
             />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null
+                  e.target.value = ''
+                  void pickImage(f)
+                }}
+              />
+              <button
+                type="button"
+                disabled={submitting || imageBusy}
+                onClick={() => fileRef.current?.click()}
+                className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+              >
+                {imageBusy ? 'Préparation…' : imageData ? 'Changer l’image' : 'Ajouter une image'}
+              </button>
+              {imageData && (
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => setImageData(null)}
+                  className="text-xs text-red-400 hover:underline"
+                >
+                  Retirer l’image
+                </button>
+              )}
+            </div>
+            {imageData && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageData}
+                alt=""
+                className="w-full max-h-48 rounded-xl border border-slate-800 object-cover"
+              />
+            )}
             {canManage && (
               <WallPublicToggle
                 id="wall-public-agora-compose"
@@ -203,7 +274,7 @@ export function AgoraFeed() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled={submitting || !draft.trim()}
+                disabled={submitting || imageBusy || !draft.trim()}
                 onClick={() => void publish()}
                 className="text-sm font-medium px-5 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 disabled:opacity-50"
               >
@@ -211,11 +282,7 @@ export function AgoraFeed() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setComposerOpen(false)
-                  setDraft('')
-                  setWallPublic(false)
-                }}
+                onClick={resetComposer}
                 className="text-sm text-slate-500 hover:text-slate-300 px-3 py-2"
               >
                 Annuler
@@ -298,6 +365,20 @@ export function AgoraFeed() {
                 <p className="text-base text-slate-200 mt-3 whitespace-pre-wrap leading-relaxed">
                   {p.content}
                 </p>
+                {p.image_data && (
+                  <button
+                    type="button"
+                    onClick={() => setLightbox(p.image_data)}
+                    className="mt-3 block w-full overflow-hidden rounded-xl border border-slate-800 hover:border-violet-500/40 transition-colors"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={p.image_data}
+                      alt=""
+                      className="w-full max-h-72 object-cover aspect-[16/10] bg-slate-950"
+                    />
+                  </button>
+                )}
                 {canManage && (
                   <div className="mt-3">
                     <WallPublicToggle
@@ -325,6 +406,22 @@ export function AgoraFeed() {
         communityId={active?.id}
         title="Signaler une publication"
       />
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          role="dialog"
+          aria-modal
+          onClick={() => setLightbox(null)}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={lightbox}
+            alt=""
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+          />
+        </div>
+      )}
     </FeedSection>
+    </div>
   )
 }

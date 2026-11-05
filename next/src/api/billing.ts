@@ -60,6 +60,38 @@ export const billingApi = {
       }>
     }>,
 
+  getProComp: (userId: number) =>
+    api.get(`/api/admin/billing/pro/comp?user_id=${userId}`) as Promise<{
+      user_id: number
+      pro: {
+        verification: string
+        pro_boost: boolean
+        pro_verified: boolean
+        endorsement_place_name: string | null
+        tagline: string | null
+        subscription: {
+          plan_id: string
+          status: string
+          payment_provider: string
+          current_period_end: string | null
+          is_admin_comp: boolean
+        } | null
+      }
+    }>,
+
+  grantProComp: (body: { user_id: number; months: number; tagline?: string }) =>
+    api.post('/api/admin/billing/pro/comp', body) as Promise<{
+      ok: boolean
+      months: number
+      pro: Record<string, unknown>
+    }>,
+
+  revokeProComp: (userId: number) =>
+    api.post('/api/admin/billing/pro/comp', {
+      user_id: userId,
+      revoke: true,
+    }) as Promise<{ ok: boolean; revoked: boolean; pro: Record<string, unknown> }>,
+
   createCheckoutSession: (body: {
     product_id: string
     community_id?: number

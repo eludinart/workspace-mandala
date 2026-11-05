@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { resourcesApi, resourceMediaUrl, type ResourceCard, type ResourceDetail } from '@/api/resources'
+import { ExplainCard } from '@/components/help/ExplainCard'
 import { ResourceComposer } from '@/components/resources/ResourceComposer'
 import { ResourceReader } from '@/components/resources/ResourceReader'
 import { ApiError } from '@/lib/api-client'
@@ -87,6 +88,7 @@ export function ResourceLibrary({
 
   return (
     <div className="space-y-5">
+      {variant === 'app' && <ExplainCard screen="resources" />}
       <header className="space-y-2">
         <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">Bibliothèque</p>
         <div className="flex flex-wrap items-end justify-between gap-3">

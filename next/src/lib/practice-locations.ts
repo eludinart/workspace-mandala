@@ -3,11 +3,38 @@
 export const MAX_PRACTICE_LOCATIONS = 8
 export const MAX_CITY_LEN = 120
 
-export function normalizeCityLabel(raw: unknown): string {
-  return String(raw ?? '')
+/** Extrait un code postal FR (5 chiffres) éventuellement collé à la ville. */
+export function parseCityAndPostal(raw: unknown): {
+  city: string
+  postal_code: string | null
+} {
+  let s = String(raw ?? '')
     .trim()
     .replace(/\s+/g, ' ')
-    .slice(0, MAX_CITY_LEN)
+  if (!s) return { city: '', postal_code: null }
+
+  let postal_code: string | null = null
+  const leading = s.match(/^(\d{5})\s+(.+)$/)
+  if (leading) {
+    postal_code = leading[1]
+    s = leading[2]
+  } else {
+    const trailing = s.match(/^(.+?)(?:\s*[,(]\s*|\s+)(\d{5})\)?\s*$/)
+    if (trailing && !/^\d+$/.test(trailing[1].trim())) {
+      s = trailing[1].replace(/[,(]\s*$/, '').trim()
+      postal_code = trailing[2]
+    }
+  }
+
+  return {
+    city: s.slice(0, MAX_CITY_LEN),
+    postal_code,
+  }
+}
+
+/** Libellé ville sans code postal (Nominatim échoue si le CP est dans `city`). */
+export function normalizeCityLabel(raw: unknown): string {
+  return parseCityAndPostal(raw).city
 }
 
 /** Liste dédupliquée (insensible à la casse FR), max N. */
