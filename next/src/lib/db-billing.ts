@@ -832,18 +832,41 @@ export async function userMemberOfCoveredPlace(userId: number): Promise<boolean>
   return Boolean(rows[0])
 }
 
-/** Batch flags Pro pour directory. */
+export type ProDirectoryFlags = {
+  proBoost: boolean
+  proVerified: boolean
+  tagline: string | null
+  modalities: string | null
+  service_area: string | null
+  external_url: string | null
+  endorsement_place_name: string | null
+}
+
+function emptyProFlags(): ProDirectoryFlags {
+  return {
+    proBoost: false,
+    proVerified: false,
+    tagline: null,
+    modalities: null,
+    service_area: null,
+    external_url: null,
+    endorsement_place_name: null,
+  }
+}
+
+/** Batch flags + profil Pro pour directory / fiches. */
 export async function getProBoostFlagsForUsers(
   userIds: number[]
-): Promise<Map<number, { proBoost: boolean; proVerified: boolean }>> {
-  const map = new Map<number, { proBoost: boolean; proVerified: boolean }>()
-  for (const id of userIds) map.set(id, { proBoost: false, proVerified: false })
+): Promise<Map<number, ProDirectoryFlags>> {
+  const map = new Map<number, ProDirectoryFlags>()
+  for (const id of userIds) map.set(id, emptyProFlags())
   if (!isDbConfigured() || !userIds.length) return map
   await ensureBillingTables()
   const pool = getPool()
   const placeholders = userIds.map(() => '?').join(',')
   const tS = table('mandala_billing_subscriptions')
   const tP = table('mandala_pro_profiles')
+  const tC = table('mandala_communities')
   const [subRows] = await pool.execute<RowDataPacket[]>(
     `SELECT user_id FROM ${tS}
      WHERE plan_family = 'pro' AND status IN ('active','trialing')
@@ -853,18 +876,28 @@ export async function getProBoostFlagsForUsers(
   )
   for (const r of subRows) {
     const id = Number(r.user_id)
-    const cur = map.get(id) ?? { proBoost: false, proVerified: false }
+    const cur = map.get(id) ?? emptyProFlags()
     cur.proBoost = true
     map.set(id, cur)
   }
   const [proRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT user_id, verification FROM ${tP} WHERE user_id IN (${placeholders})`,
+    `SELECT p.user_id, p.verification, p.tagline, p.modalities, p.service_area, p.external_url,
+            p.endorsement_community_id, c.name AS endorsement_place_name
+     FROM ${tP} p
+     LEFT JOIN ${tC} c ON c.id = p.endorsement_community_id AND c.is_active = 1
+     WHERE p.user_id IN (${placeholders})`,
     userIds
   )
   for (const r of proRows) {
     const id = Number(r.user_id)
-    const cur = map.get(id) ?? { proBoost: false, proVerified: false }
+    const cur = map.get(id) ?? emptyProFlags()
     cur.proVerified = String(r.verification) === 'verified'
+    cur.tagline = r.tagline != null ? String(r.tagline) : null
+    cur.modalities = r.modalities != null ? String(r.modalities) : null
+    cur.service_area = r.service_area != null ? String(r.service_area) : null
+    cur.external_url = r.external_url != null ? String(r.external_url) : null
+    cur.endorsement_place_name =
+      r.endorsement_place_name != null ? String(r.endorsement_place_name) : null
     map.set(id, cur)
   }
   return map

@@ -7,6 +7,7 @@ import { MyResourcesSection } from '@/components/resources/MyResourcesSection'
 import { accountApi } from '@/api/account'
 import { authApi } from '@/api/auth'
 import { billingApi } from '@/api/billing'
+import { ProAccountStatus } from '@/components/billing/ProAccountStatus'
 import { communitiesApi } from '@/api/communities'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
@@ -459,6 +460,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             <p className="text-sm text-slate-400">
               Fais rayonner ton lieu ou ta pratique. Les membres restent en gratuité.
             </p>
+            <ProAccountStatus onNavigate={onNavigate} />
             {onNavigate && (
               <button
                 type="button"
