@@ -15,6 +15,8 @@ import {
   resolvePaymentSurface,
   type PaymentSurface,
 } from '@/lib/play-distribution-context'
+import { buildCheckoutReturnPath } from '@/lib/checkout-return'
+import { ProVerificationForm } from '@/components/billing/ProVerificationForm'
 
 type Props = {
   onNavigate: MandalaNavigate
@@ -150,7 +152,14 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
             family === 'place' ? selectedCommunityId ?? undefined : undefined,
         })
         setError('')
-        window.location.href = '/app?checkout=success&provider=play'
+        window.location.href = buildCheckoutReturnPath({
+          status: 'success',
+          planId: product.product_id,
+          planFamily: family,
+          provider: 'play',
+          communityId:
+            family === 'place' ? selectedCommunityId : undefined,
+        })
         return
       }
 
@@ -164,10 +173,25 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
         return
       }
 
+      const communityIdForCheckout =
+        family === 'place' ? selectedCommunityId ?? undefined : undefined
       const { url } = await billingApi.createCheckoutSession({
         product_id: product.product_id,
-        community_id:
-          family === 'place' ? selectedCommunityId ?? undefined : undefined,
+        community_id: communityIdForCheckout,
+        success_url: buildCheckoutReturnPath({
+          status: 'success',
+          planId: product.product_id,
+          planFamily: family,
+          provider: 'stripe',
+          communityId: communityIdForCheckout,
+        }),
+        cancel_url: buildCheckoutReturnPath({
+          status: 'canceled',
+          planId: product.product_id,
+          planFamily: family,
+          provider: 'stripe',
+          communityId: communityIdForCheckout,
+        }),
       })
       if (!url) throw new Error('URL checkout manquante')
       window.location.href = url
@@ -375,6 +399,16 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
                 </button>
               )
             })}
+          </div>
+          <div className="rounded-xl border border-violet-800/40 bg-slate-950/50 p-4 space-y-2">
+            <h3 className="text-sm font-medium text-violet-100">
+              Après paiement — demande d’endossement
+            </h3>
+            <p className="text-xs text-slate-400">
+              Obligatoire pour le badge Pro. La file est revue par un lieu ou
+              l’équipe Mandala.
+            </p>
+            <ProVerificationForm />
           </div>
         </section>
       </div>

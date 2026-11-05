@@ -9,6 +9,7 @@ import { useSocialStore } from '@/store/useSocialStore'
 import { AppHeader } from '@/components/layout/AppHeader'
 import { PlaceSwitchBanner } from '@/components/layout/PlaceSwitchBanner'
 import { BillingCompExpiryBanner } from '@/components/billing/BillingCompExpiryBanner'
+import { CheckoutReturnBanner } from '@/components/billing/CheckoutReturnBanner'
 import { AdminActingRoleBar } from '@/components/AdminActingRoleBar'
 import { BottomNav } from '@/components/layout/BottomNav'
 import { AppNavPanel } from '@/components/layout/AppNavPanel'
@@ -16,6 +17,7 @@ import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer'
 import { InstallAppPrompt } from '@/components/InstallAppPrompt'
 import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { HelpButton } from '@/components/help/HelpButton'
+import type { CheckoutReturnState } from '@/lib/checkout-return'
 import { useEffect, useState } from 'react'
 
 export function Layout({
@@ -23,12 +25,16 @@ export function Layout({
   onNavigate,
   adminTab,
   onBack,
+  checkoutReturn,
+  onDismissCheckoutReturn,
   children,
 }: {
   page: MandalaPage
   onNavigate: MandalaNavigate
   adminTab?: AdminTabId
   onBack?: () => void
+  checkoutReturn?: CheckoutReturnState | null
+  onDismissCheckoutReturn?: () => void
   children: React.ReactNode
 }) {
   const { user } = useAuth()
@@ -101,6 +107,13 @@ export function Layout({
           </button>
         )}
         <PlaceSwitchBanner />
+        {checkoutReturn && onDismissCheckoutReturn && (
+          <CheckoutReturnBanner
+            state={checkoutReturn}
+            onNavigate={onNavigate}
+            onDismiss={onDismissCheckoutReturn}
+          />
+        )}
         <BillingCompExpiryBanner onNavigate={onNavigate} />
         <AdminActingRoleBar />
         <InstallAppPrompt />

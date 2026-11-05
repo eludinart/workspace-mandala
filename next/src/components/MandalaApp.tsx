@@ -32,6 +32,11 @@ import { OnboardingGate } from '@/components/onboarding/OnboardingGate'
 import { TermsAcceptanceGate } from '@/components/legal/TermsAcceptanceGate'
 import { TelemetryTracker } from '@/components/TelemetryTracker'
 import type { AdminTabId } from '@/lib/nav'
+import {
+  clearCheckoutParamsFromUrl,
+  parseCheckoutReturnFromSearch,
+  type CheckoutReturnState,
+} from '@/lib/checkout-return'
 
 export type MandalaPage =
   | 'home'
@@ -179,6 +184,7 @@ export function MandalaApp() {
   const [openEventId, setOpenEventId] = useState<number | null>(null)
   const [adminTab, setAdminTab] = useState<AdminTabId>('people')
   const [managedPlaceHubSlug, setManagedPlaceHubSlug] = useState<string | null>(null)
+  const [checkoutReturn, setCheckoutReturn] = useState<CheckoutReturnState | null>(null)
   const historyAction = useRef<HistoryNav>('idle')
   const appStateRef = useRef<AppHistoryState | null>(null)
   const rootRef = useRef<AppHistoryState>(homeHistory(1))
@@ -292,6 +298,17 @@ export function MandalaApp() {
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    const parsed = parseCheckoutReturnFromSearch(window.location.search)
+    if (parsed) {
+      setCheckoutReturn(parsed)
+      clearCheckoutParamsFromUrl()
+    }
+  }, [])
+
+  const dismissCheckoutReturn = useCallback(() => {
+    setCheckoutReturn(null)
+    clearCheckoutParamsFromUrl()
   }, [])
 
   useEffect(() => {
@@ -596,6 +613,8 @@ export function MandalaApp() {
             onNavigate={navigate}
             adminTab={adminTab}
             onBack={historyDepth > 1 ? goBack : undefined}
+            checkoutReturn={checkoutReturn}
+            onDismissCheckoutReturn={dismissCheckoutReturn}
           >
             {content}
           </Layout>

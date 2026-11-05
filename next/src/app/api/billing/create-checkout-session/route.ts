@@ -7,6 +7,7 @@ import { ApiError, getAuthHeader, requireAuth } from '@/lib/api-auth'
 import { authMe } from '@/lib/db-auth'
 import { resolveBillingProduct, safeReturnUrl } from '@/lib/billing-catalog'
 import { assertBillingCtaAllowed } from '@/lib/billing-door'
+import { buildCheckoutReturnPath } from '@/lib/checkout-return'
 import { createCheckoutSession, getStripeSecretKey } from '@/lib/stripe'
 import {
   canManageCommunityInContext,
@@ -89,8 +90,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const successUrl = safeReturnUrl(base, body.success_url, '/app?checkout=success')
-    const cancelUrl = safeReturnUrl(base, body.cancel_url, '/app?checkout=canceled')
+    const defaultSuccess = buildCheckoutReturnPath({
+      status: 'success',
+      planId: product.planId,
+      planFamily: product.planFamily,
+      provider: 'stripe',
+      communityId,
+    })
+    const defaultCancel = buildCheckoutReturnPath({
+      status: 'canceled',
+      planId: product.planId,
+      planFamily: product.planFamily,
+      provider: 'stripe',
+      communityId,
+    })
+    const successUrl = safeReturnUrl(base, body.success_url, defaultSuccess)
+    const cancelUrl = safeReturnUrl(base, body.cancel_url, defaultCancel)
 
     const token = getAuthHeader(req)
     const payload = token ? jwtDecode(token) : null

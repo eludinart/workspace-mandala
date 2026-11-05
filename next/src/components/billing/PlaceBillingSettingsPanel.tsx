@@ -12,6 +12,7 @@ import {
   resolvePaymentSurface,
   type PaymentSurface,
 } from '@/lib/play-distribution-context'
+import { buildCheckoutReturnPath } from '@/lib/checkout-return'
 
 type PlaceAccess = {
   communityId: number
@@ -234,7 +235,13 @@ export function PlaceBillingSettingsPanel({
           purchase_token: purchase.purchaseToken,
           community_id: communityId,
         })
-        window.location.href = '/app?checkout=success&provider=play'
+        window.location.href = buildCheckoutReturnPath({
+          status: 'success',
+          planId: product.product_id,
+          planFamily: 'place',
+          provider: 'play',
+          communityId,
+        })
         return
       }
 
@@ -249,6 +256,20 @@ export function PlaceBillingSettingsPanel({
       const { url } = await billingApi.createCheckoutSession({
         product_id: product.product_id,
         community_id: communityId,
+        success_url: buildCheckoutReturnPath({
+          status: 'success',
+          planId: product.product_id,
+          planFamily: 'place',
+          provider: 'stripe',
+          communityId,
+        }),
+        cancel_url: buildCheckoutReturnPath({
+          status: 'canceled',
+          planId: product.product_id,
+          planFamily: 'place',
+          provider: 'stripe',
+          communityId,
+        }),
       })
       if (!url) throw new Error('URL checkout manquante')
       window.location.href = url
