@@ -66,9 +66,15 @@ export function PublicLandingPage() {
       <main>
         <section id="top" className="m-landing-hero">
           <div className="m-landing-hero-inner">
-            <span className="m-landing-brand-mark" aria-hidden>
-              ॐ
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand-mark.png"
+              alt=""
+              width={88}
+              height={88}
+              className="m-landing-brand-btn m-landing-brand-btn--hero"
+              aria-hidden
+            />
             <span className="m-landing-logo">Mandala</span>
             <p className="m-landing-eyebrow mb-5">
               Des lieux, une communauté, des professionnels à portée de main.
