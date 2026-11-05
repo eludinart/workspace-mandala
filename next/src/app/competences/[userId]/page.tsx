@@ -56,14 +56,19 @@ export default async function PublicSkillProfilePage({ params }: Props) {
         <header className="space-y-3">
           <h1 className="text-3xl sm:text-4xl font-semibold text-slate-50">{name}</h1>
           {card.pro_verified && (
-            <p className="text-sm text-violet-200">
-              Mandala Pro
-              {card.pro_endorsement_place
-                ? ` · endossé par ${card.pro_endorsement_place}`
-                : ''}
-            </p>
+            <div className="m-pro-banner space-y-1">
+              <p className="text-sm font-semibold text-violet-100">Mandala Pro</p>
+              {card.pro_endorsement_place ? (
+                <p className="text-xs text-violet-200/90">
+                  Endossé par {card.pro_endorsement_place}
+                </p>
+              ) : null}
+              {card.pro_tagline ? (
+                <p className="text-base text-slate-100 pt-1">{card.pro_tagline}</p>
+              ) : null}
+            </div>
           )}
-          {card.pro_tagline && (
+          {!card.pro_verified && card.pro_tagline && (
             <p className="text-lg text-slate-300">{card.pro_tagline}</p>
           )}
           {card.places.length > 0 && (

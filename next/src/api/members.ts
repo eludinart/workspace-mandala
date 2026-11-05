@@ -16,6 +16,9 @@ export type MemberDirectoryEntry = {
   avatar: string | null
   profile_public: boolean
   is_me: boolean
+  pro_boost?: boolean
+  pro_verified?: boolean
+  pro_endorsement_place?: string | null
   communities: Array<{
     slug: string
     name: string
@@ -38,6 +41,9 @@ export type CommunityMember = {
   circle?: 'member' | 'core'
   weather_status?: string | null
   weather_note?: string | null
+  pro_boost?: boolean
+  pro_verified?: boolean
+  pro_endorsement_place?: string | null
 }
 
 export const membersApi = {

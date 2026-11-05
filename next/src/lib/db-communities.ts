@@ -19,6 +19,7 @@ import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
 import { geocodeAddress } from './geocode'
 import { assertCanListPlacePublic } from './billing-access'
+import { getProBoostFlagsForUsers } from './db-billing'
 
 export type CommunityRecord = {
   id: number
@@ -447,6 +448,11 @@ export type CommunityMemberDisplay = {
   circle: CommunityCircle
   weather_status: string | null
   weather_note: string | null
+  /** Abo Pro actif. */
+  pro_boost: boolean
+  /** Badge Mandala Pro (abo + verified). */
+  pro_verified: boolean
+  pro_endorsement_place: string | null
 }
 
 /** Membres d'une communauté pour l'annuaire (toujours inclure le visiteur). */
@@ -480,7 +486,7 @@ export async function listCommunityMembersDisplay(
     [WEATHER_META_KEY, communityId, viewerUserId]
   )
 
-  return (rows ?? [])
+  const base = (rows ?? [])
     .map((r) => {
       const { weather_status, weather_note } = weatherFromMetaRow(
         r.weather_json as string | undefined,
@@ -498,9 +504,27 @@ export async function listCommunityMembersDisplay(
         circle: parseCommunityCircle(r.circle),
         weather_status,
         weather_note,
+        pro_boost: false,
+        pro_verified: false,
+        pro_endorsement_place: null as string | null,
       }
     })
     .filter((m) => m.is_me || m.profile_public)
+
+  const flags = await getProBoostFlagsForUsers(base.map((m) => m.user_id))
+  for (const m of base) {
+    const f = flags.get(m.user_id)
+    m.pro_boost = Boolean(f?.proBoost)
+    m.pro_verified = Boolean(f?.proBoost && f?.proVerified)
+    m.pro_endorsement_place = f?.endorsement_place_name ?? null
+  }
+  base.sort((a, b) => {
+    if (a.is_me !== b.is_me) return a.is_me ? -1 : 1
+    if (a.pro_verified !== b.pro_verified) return a.pro_verified ? -1 : 1
+    if (a.pro_boost !== b.pro_boost) return a.pro_boost ? -1 : 1
+    return a.pseudo.localeCompare(b.pseudo, 'fr', { sensitivity: 'base' })
+  })
+  return base
 }
 
 export type MemberDirectoryCommunity = {
@@ -519,6 +543,9 @@ export type MemberDirectoryEntry = {
   avatar: string | null
   profile_public: boolean
   is_me: boolean
+  pro_boost: boolean
+  pro_verified: boolean
+  pro_endorsement_place: string | null
   communities: Array<{
     slug: string
     name: string
@@ -615,6 +642,9 @@ export async function listMemberDirectoryForViewer(
         avatar: r.avatar ? String(r.avatar) : null,
         profile_public: profilePublic,
         is_me: isMe,
+        pro_boost: false,
+        pro_verified: false,
+        pro_endorsement_place: null,
         communities: [],
       }
       memberMap.set(userId, entry)
@@ -646,9 +676,20 @@ export async function listMemberDirectoryForViewer(
   const communities = [...communityMap.values()].sort((a, b) =>
     a.name.localeCompare(b.name, 'fr')
   )
-  const members = [...memberMap.values()].sort((a, b) =>
-    a.pseudo.localeCompare(b.pseudo, 'fr')
-  )
+  const membersRaw = [...memberMap.values()]
+  const flags = await getProBoostFlagsForUsers(membersRaw.map((m) => m.user_id))
+  for (const m of membersRaw) {
+    const f = flags.get(m.user_id)
+    m.pro_boost = Boolean(f?.proBoost)
+    m.pro_verified = Boolean(f?.proBoost && f?.proVerified)
+    m.pro_endorsement_place = f?.endorsement_place_name ?? null
+  }
+  const members = membersRaw.sort((a, b) => {
+    if (a.is_me !== b.is_me) return a.is_me ? -1 : 1
+    if (a.pro_verified !== b.pro_verified) return a.pro_verified ? -1 : 1
+    if (a.pro_boost !== b.pro_boost) return a.pro_boost ? -1 : 1
+    return a.pseudo.localeCompare(b.pseudo, 'fr', { sensitivity: 'base' })
+  })
 
   return { communities, members }
 }

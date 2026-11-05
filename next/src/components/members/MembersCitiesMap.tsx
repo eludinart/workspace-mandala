@@ -10,6 +10,7 @@ type Pin = {
   display_name: string
   avatar?: string | null
   avatar_emoji?: string | null
+  pro_verified?: boolean
   city: string
   latitude: number
   longitude: number
@@ -31,7 +32,8 @@ function escapeAttr(s: string): string {
 
 function pinIconHtml(pin: Pin): string {
   const title = escapeHtml(pin.display_name || '')
-  const base = 'm-map-marker m-map-marker--practice'
+  const pro = pin.pro_verified ? ' m-map-marker--pro' : ''
+  const base = `m-map-marker m-map-marker--practice${pro}`
   if (isAvatarImageUrl(pin.avatar)) {
     return `<div class="${base} m-map-marker--photo" title="${title}"><img src="${escapeAttr(String(pin.avatar))}" alt="" class="m-map-marker-photo" /></div>`
   }
@@ -119,7 +121,9 @@ export function MembersCitiesMap({ communitySlug }: { communitySlug?: string }) 
           }),
         })
         marker.bindTooltip(
-          `<div class="m-map-tooltip"><strong>${escapeHtml(pin.display_name)}</strong><br/>${escapeHtml(pin.city)}</div>`,
+          `<div class="m-map-tooltip"><strong>${escapeHtml(pin.display_name)}</strong>${
+            pin.pro_verified ? '<br/><span style="opacity:0.85">Mandala Pro</span>' : ''
+          }<br/>${escapeHtml(pin.city)}</div>`,
           { className: 'm-map-leaflet-tooltip', direction: 'top', offset: [0, -12] }
         )
         marker.addTo(layer)

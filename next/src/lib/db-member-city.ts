@@ -3,6 +3,7 @@
  */
 import type { RowDataPacket } from 'mysql2'
 import { getPool, isDbConfigured, table } from '@/lib/db'
+import { getProBoostFlagsForUsers } from '@/lib/db-billing'
 import { normalizeCityLabel } from '@/lib/practice-locations'
 import { resolveCityCoords } from '@/lib/geo-city-cache'
 
@@ -75,6 +76,7 @@ export type MemberMapPin = {
   display_name: string
   avatar: string | null
   avatar_emoji: string | null
+  pro_verified: boolean
   city: string
   latitude: number
   longitude: number
@@ -106,14 +108,14 @@ export async function listCommunityMemberMapPins(
     [META_ON_MAP, META_CITY, communityId]
   )
 
-  const pins: MemberMapPin[] = []
+  const draft: Array<Omit<MemberMapPin, 'pro_verified'> & { user_id: number }> = []
   for (const r of rows ?? []) {
     const city = normalizeCityLabel(String(r.city ?? ''))
     if (!city) continue
     const coords = await resolveCityCoords(city)
     if (!coords) continue
     const avatarRaw = String(r.avatar ?? '').trim()
-    pins.push({
+    draft.push({
       user_id: Number(r.user_id),
       display_name: String(r.display_name || `user_${r.user_id}`),
       avatar: avatarRaw || null,
@@ -123,5 +125,17 @@ export async function listCommunityMemberMapPins(
       longitude: coords.longitude,
     })
   }
-  return pins
+  const flags = await getProBoostFlagsForUsers(draft.map((p) => p.user_id))
+  return draft
+    .map((p) => {
+      const f = flags.get(p.user_id)
+      return {
+        ...p,
+        pro_verified: Boolean(f?.proBoost && f?.proVerified),
+      }
+    })
+    .sort((a, b) => {
+      if (a.pro_verified !== b.pro_verified) return a.pro_verified ? -1 : 1
+      return a.display_name.localeCompare(b.display_name, 'fr', { sensitivity: 'base' })
+    })
 }

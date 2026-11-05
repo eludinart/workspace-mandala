@@ -24,11 +24,23 @@ import { ExplainCard } from '@/components/help/ExplainCard'
 import { MemberCityPrompt } from '@/components/members/MemberCityPrompt'
 import { MembersCitiesMap } from '@/components/members/MembersCitiesMap'
 import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
+import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 
 type MemberCardData = CommunityMember | MemberDirectoryEntry
 
-function sortMembersAz<T extends { pseudo?: string; display_name?: string }>(items: T[]): T[] {
+function sortMembersAz<
+  T extends {
+    pseudo?: string
+    display_name?: string
+    is_me?: boolean
+    pro_verified?: boolean
+    pro_boost?: boolean
+  },
+>(items: T[]): T[] {
   return [...items].sort((a, b) => {
+    if (Boolean(a.is_me) !== Boolean(b.is_me)) return a.is_me ? -1 : 1
+    if (Boolean(a.pro_verified) !== Boolean(b.pro_verified)) return a.pro_verified ? -1 : 1
+    if (Boolean(a.pro_boost) !== Boolean(b.pro_boost)) return a.pro_boost ? -1 : 1
     const av = String(a.pseudo ?? a.display_name ?? '')
     const bv = String(b.pseudo ?? b.display_name ?? '')
     return av.localeCompare(bv, 'fr', { sensitivity: 'base' })
@@ -560,8 +572,13 @@ function MemberCard({
         alt={member.pseudo}
       />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="font-medium truncate">{member.pseudo}</p>
+          {member.pro_verified ? (
+            <MandalaProBadge endorsementPlace={member.pro_endorsement_place} />
+          ) : member.pro_boost ? (
+            <MandalaProBadge variant="boost" />
+          ) : null}
           {isCoreMember(member) && (
             <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-700/60 text-amber-200">
               {CORE_CIRCLE_LABEL}
@@ -584,7 +601,11 @@ function MemberCard({
   return (
     <div
       className={`rounded-xl border p-4 flex flex-col gap-3 h-full ${
-        isMe ? 'border-violet-500/40 bg-violet-950/30' : 'border-slate-800 bg-slate-900/50'
+        member.pro_verified
+          ? 'm-pro-card'
+          : isMe
+            ? 'border-violet-500/40 bg-violet-950/30'
+            : 'border-slate-800 bg-slate-900/50'
       }`}
     >
       {onOpenProfile ? (

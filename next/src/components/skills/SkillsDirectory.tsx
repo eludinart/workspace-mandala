@@ -21,6 +21,7 @@ import {
   type SkillRegister,
 } from '@/lib/skill-constants'
 import { ExplainCard } from '@/components/help/ExplainCard'
+import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 
 const AnnuaireCitiesMap = dynamic(
   () =>
@@ -669,32 +670,24 @@ export function SkillsDirectory({
                   type="button"
                   onClick={() => setSelectedId(card.user_id)}
                   className={`w-full min-w-0 overflow-hidden text-left rounded-2xl border p-4 space-y-3 transition-colors ${
-                    active
-                      ? 'border-violet-500/70 bg-violet-950/30'
-                      : 'border-slate-800 bg-slate-900/50 hover:border-violet-800/50'
+                    card.pro_verified
+                      ? `m-pro-card ${active ? 'ring-2 ring-violet-400/40' : ''}`
+                      : active
+                        ? 'border-violet-500/70 bg-violet-950/30'
+                        : 'border-slate-800 bg-slate-900/50 hover:border-violet-800/50'
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
                     <div className="min-w-0">
-                      <p className="font-medium truncate flex items-center gap-2">
+                      <p className="font-medium truncate flex flex-wrap items-center gap-2">
                         <span className="truncate">{card.display_name || card.pseudo}</span>
-                        {card.pro_verified && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-violet-600/40 text-violet-100 border border-violet-500/40">
-                            Mandala Pro
-                          </span>
-                        )}
-                        {!card.pro_verified && card.pro_boost && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-700/80 text-slate-200">
-                            Pro
-                          </span>
-                        )}
+                        {card.pro_verified ? (
+                          <MandalaProBadge endorsementPlace={card.pro_endorsement_place} />
+                        ) : card.pro_boost ? (
+                          <MandalaProBadge variant="boost" />
+                        ) : null}
                       </p>
-                      {card.pro_verified && card.pro_endorsement_place && (
-                        <p className="text-[11px] text-violet-300/90 truncate">
-                          Endossé par {card.pro_endorsement_place}
-                        </p>
-                      )}
                       {card.places.length > 0 ? (
                         <div className="mt-0.5 flex flex-wrap gap-1">
                           {card.places.map((p) => (
@@ -749,7 +742,7 @@ export function SkillsDirectory({
           id="annuaire-fiche"
           className={`relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] scroll-mt-24 ${
             selected ? 'order-1 lg:order-2' : 'order-2'
-          }`}
+          } ${selected?.pro_verified ? 'm-pro-card' : ''}`}
         >
           {!selected && (
             <p className="text-sm text-slate-500">Sélectionnez une personne pour lire sa fiche.</p>
@@ -766,17 +759,12 @@ export function SkillsDirectory({
                 <div className="min-w-0 pt-1">
                   <h3 className="text-2xl font-semibold text-slate-50 leading-tight flex flex-wrap items-center gap-2">
                     <span>{selected.display_name || selected.pseudo}</span>
-                    {selected.pro_verified && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-600/40 text-violet-100 border border-violet-500/40">
-                        Mandala Pro
-                      </span>
-                    )}
+                    {selected.pro_verified ? (
+                      <MandalaProBadge endorsementPlace={selected.pro_endorsement_place} />
+                    ) : selected.pro_boost ? (
+                      <MandalaProBadge variant="boost" />
+                    ) : null}
                   </h3>
-                  {selected.pro_verified && selected.pro_endorsement_place && (
-                    <p className="mt-1 text-xs text-violet-200">
-                      Endossé par {selected.pro_endorsement_place}
-                    </p>
-                  )}
                   {selected.pro_tagline && (
                     <p className="mt-1 text-sm text-slate-200">{selected.pro_tagline}</p>
                   )}

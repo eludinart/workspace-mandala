@@ -2,14 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { skillsApi, type SkillCard } from '@/api/skills'
+import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import { UserAvatar } from '@/components/UserAvatar'
 
 const INTERVAL_MS = 6000
 
 function showcaseCards(cards: SkillCard[]): SkillCard[] {
-  return cards.filter(
-    (card) => card.tags.length > 0 || card.offer_text.trim() || card.seek_text.trim()
-  )
+  return cards
+    .filter((card) => card.tags.length > 0 || card.offer_text.trim() || card.seek_text.trim())
+    .sort((a, b) => {
+      if (Boolean(a.pro_verified) !== Boolean(b.pro_verified)) return a.pro_verified ? -1 : 1
+      if (Boolean(a.pro_boost) !== Boolean(b.pro_boost)) return a.pro_boost ? -1 : 1
+      return 0
+    })
 }
 
 function profileName(card: SkillCard): string {
@@ -105,12 +110,17 @@ export function SkillsCarousel({ onOpenProfile }: { onOpenProfile?: (userId: num
         <p className="m-landing-eyebrow">Savoir-faire</p>
         <h2 className="text-3xl sm:text-4xl">Des personnes, des compétences</h2>
         <p className="text-slate-400 text-sm sm:text-base">
-          Elles ont choisi de montrer ce qu’elles peuvent apporter au réseau.
+          Les Mandala Pro sont mis en avant — puis les autres membres qui partagent leurs
+          savoir-faire.
         </p>
       </div>
 
       <div className="max-w-3xl mx-auto">
-        <div className="m-landing-card overflow-hidden">
+        <div
+          className={`m-landing-card overflow-hidden ${
+            cards[index]?.pro_verified ? 'm-pro-card' : ''
+          }`}
+        >
           {!reduceMotion && count > 1 && (
             <div className="h-0.5 bg-slate-800/80" aria-hidden>
               <div
@@ -156,7 +166,17 @@ export function SkillsCarousel({ onOpenProfile }: { onOpenProfile?: (userId: num
                       />
                       <div className="min-w-0 flex-1 space-y-3">
                         <div>
-                          <h3 className="text-2xl sm:text-3xl text-slate-50">{name}</h3>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-2xl sm:text-3xl text-slate-50">{name}</h3>
+                            {card.pro_verified ? (
+                              <MandalaProBadge endorsementPlace={card.pro_endorsement_place} />
+                            ) : card.pro_boost ? (
+                              <MandalaProBadge variant="boost" />
+                            ) : null}
+                          </div>
+                          {card.pro_tagline && (
+                            <p className="mt-1 text-sm text-violet-200/90">{card.pro_tagline}</p>
+                          )}
                           {places && <p className="mt-1 text-sm text-slate-500">{places}</p>}
                         </div>
                         {blurb && (
