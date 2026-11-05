@@ -27,6 +27,8 @@ const EMPTY: SkillProfile = {
   offer_text: '',
   seek_text: '',
   frame_text: '',
+  residence_city: '',
+  practice_locations: [],
   updated_at: null,
   place_ids: [],
   places: [],
@@ -37,6 +39,7 @@ export function SkillsProfileSection() {
   const { communities } = useCommunity()
   const [profile, setProfile] = useState<SkillProfile>(EMPTY)
   const [draftLabel, setDraftLabel] = useState('')
+  const [draftPracticeCity, setDraftPracticeCity] = useState('')
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,9 +68,9 @@ export function SkillsProfileSection() {
 
   const dirty = useMemo(() => {
     if (!savedRef.current) return false
-    if (draftLabel.trim()) return true
+    if (draftLabel.trim() || draftPracticeCity.trim()) return true
     return JSON.stringify(profile) !== savedRef.current
-  }, [profile, draftLabel])
+  }, [profile, draftLabel, draftPracticeCity])
 
   useEffect(() => {
     window.__mdlSkillsDirty = dirty
@@ -126,11 +129,22 @@ export function SkillsProfileSection() {
       setDraftLabel(committed.draft)
     }
     try {
+      let practice = profile.practice_locations
+      const pendingCity = draftPracticeCity.trim()
+      if (pendingCity) {
+        const key = pendingCity.toLocaleLowerCase('fr')
+        if (!practice.some((c) => c.toLocaleLowerCase('fr') === key)) {
+          practice = [...practice, pendingCity].slice(0, 8)
+        }
+        setDraftPracticeCity('')
+      }
       const res = await skillsApi.saveMine({
         scope: profile.scope,
         offer_text: profile.offer_text,
         seek_text: profile.seek_text,
         frame_text: profile.frame_text,
+        residence_city: profile.residence_city,
+        practice_locations: practice,
         place_ids: profile.place_ids,
         tags: tagsToSave,
       })
@@ -268,6 +282,98 @@ export function SkillsProfileSection() {
       <p className="text-sm text-slate-400">
         Dites ce que vous savez faire, ce que vous proposez au collectif, et ce que vous cherchez. La fiche reste cachée tant que vous ne choisissez pas qui peut la voir.
       </p>
+
+      <div className="space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+        <p className="text-sm font-medium text-slate-200">Où vous êtes</p>
+        <label className="block text-sm">
+          <span className="text-slate-300">Ville de résidence</span>
+          <span className="mt-0.5 block text-xs text-slate-500">
+            Où vous vivez — n’apparaît pas sur la carte d’exercice.
+          </span>
+          <input
+            value={profile.residence_city}
+            onChange={(e) => setProfile((p) => ({ ...p, residence_city: e.target.value }))}
+            maxLength={120}
+            placeholder="Ex. Tours"
+            className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
+          />
+        </label>
+        <div className="space-y-2">
+          <p className="text-sm text-slate-300">Lieux d’exercice</p>
+          <p className="text-xs text-slate-500">
+            Villes où vous pratiquez (plusieurs possibles). Alimentent la carte et le matching.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {profile.practice_locations.map((city) => (
+              <span
+                key={city}
+                className="inline-flex items-center gap-1 rounded-full border border-sky-800/50 bg-sky-950/40 px-2.5 py-1 text-xs text-sky-100"
+              >
+                {city}
+                <button
+                  type="button"
+                  className="text-sky-400 hover:text-white"
+                  aria-label={`Retirer ${city}`}
+                  onClick={() =>
+                    setProfile((p) => ({
+                      ...p,
+                      practice_locations: p.practice_locations.filter((c) => c !== city),
+                    }))
+                  }
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 items-end">
+            <label className="flex-1 min-w-[140px] text-xs text-slate-500">
+              Ajouter une ville
+              <input
+                value={draftPracticeCity}
+                onChange={(e) => setDraftPracticeCity(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    const label = draftPracticeCity.trim()
+                    if (!label) return
+                    const key = label.toLocaleLowerCase('fr')
+                    setProfile((p) => {
+                      if (p.practice_locations.some((c) => c.toLocaleLowerCase('fr') === key)) {
+                        return p
+                      }
+                      if (p.practice_locations.length >= 8) return p
+                      return { ...p, practice_locations: [...p.practice_locations, label] }
+                    })
+                    setDraftPracticeCity('')
+                  }
+                }}
+                maxLength={120}
+                placeholder="Ex. Chinon, Amboise…"
+                className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-2 text-sm text-slate-100"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const label = draftPracticeCity.trim()
+                if (!label) return
+                const key = label.toLocaleLowerCase('fr')
+                setProfile((p) => {
+                  if (p.practice_locations.some((c) => c.toLocaleLowerCase('fr') === key)) return p
+                  if (p.practice_locations.length >= 8) return p
+                  return { ...p, practice_locations: [...p.practice_locations, label] }
+                })
+                setDraftPracticeCity('')
+              }}
+              disabled={!draftPracticeCity.trim() || profile.practice_locations.length >= 8}
+              className="shrink-0 rounded-lg border border-sky-700/70 bg-sky-950/50 px-3 py-2 text-sm text-sky-100 disabled:opacity-40"
+            >
+              Ajouter
+            </button>
+          </div>
+        </div>
+      </div>
 
       <fieldset className="space-y-2">
         <legend className="text-sm text-slate-200">Qui peut me trouver ?</legend>

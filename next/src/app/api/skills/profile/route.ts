@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/api-auth'
 import { isDbConfigured } from '@/lib/db'
 import { getMySkillProfile, saveMySkillProfile } from '@/lib/db-skills'
+import {
+  normalizeCityLabel,
+  normalizePracticeLocations,
+} from '@/lib/practice-locations'
 import { isSkillRegister, isSkillScope } from '@/lib/skill-constants'
 
 export const dynamic = 'force-dynamic'
@@ -26,6 +30,8 @@ function parseBody(body: Record<string, unknown>) {
     offer_text: String(body.offer_text ?? ''),
     seek_text: String(body.seek_text ?? ''),
     frame_text: String(body.frame_text ?? ''),
+    residence_city: normalizeCityLabel(body.residence_city),
+    practice_locations: normalizePracticeLocations(body.practice_locations),
     place_ids: placeIds,
     tags,
   }

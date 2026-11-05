@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { adminApi, type CommunityAdmin } from '@/api/admin'
 import { billingApi } from '@/api/billing'
 
-/** Admin : offrir N mois d’abonnement Lieu (cadeau / comp) à un lieu. */
+/** Admin : offrir N mois d’abonnement Lieu — uniquement lieux sans abo actif / grâce. */
 export function AdminPlaceGiftPanel() {
   const [places, setPlaces] = useState<CommunityAdmin[]>([])
+  const [coveredIds, setCoveredIds] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(true)
   const [communityId, setCommunityId] = useState<number | ''>('')
   const [months, setMonths] = useState(6)
   const [busy, setBusy] = useState(false)
@@ -14,17 +16,42 @@ export function AdminPlaceGiftPanel() {
   const [ok, setOk] = useState(true)
 
   const load = useCallback(async () => {
+    setLoading(true)
     try {
-      const data = await adminApi.communities.list()
-      setPlaces(data.items ?? [])
+      const [communities, subs] = await Promise.all([
+        adminApi.communities.list(),
+        billingApi.listAdminSubscriptions({ family: 'place', scope: 'active' }),
+      ])
+      setPlaces(communities.items ?? [])
+      const covered = new Set<number>()
+      for (const row of subs.items ?? []) {
+        if (row.community_id != null && row.community_id > 0) {
+          covered.add(row.community_id)
+        }
+      }
+      setCoveredIds(covered)
     } catch {
       setPlaces([])
+      setCoveredIds(new Set())
+    } finally {
+      setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void load()
   }, [load])
+
+  const eligible = useMemo(
+    () => places.filter((p) => !coveredIds.has(p.id)),
+    [places, coveredIds]
+  )
+
+  useEffect(() => {
+    if (communityId !== '' && coveredIds.has(communityId)) {
+      setCommunityId('')
+    }
+  }, [communityId, coveredIds])
 
   async function grant() {
     const id = Number(communityId)
@@ -66,6 +93,8 @@ export function AdminPlaceGiftPanel() {
           ? `Cadeau ${months} mois activé jusqu’au ${endLabel} (+ 7 j de grâce).`
           : `Cadeau ${months} mois activé.`
       )
+      setCommunityId('')
+      await load()
     } catch (e: unknown) {
       setOk(false)
       setMsg(e instanceof Error ? e.message : 'Erreur')
@@ -74,12 +103,36 @@ export function AdminPlaceGiftPanel() {
     }
   }
 
+  if (loading) {
+    return (
+      <section className="rounded-xl border border-amber-700/40 bg-slate-900/70 p-4">
+        <p className="text-xs text-slate-500">Chargement des cadeaux…</p>
+      </section>
+    )
+  }
+
+  if (eligible.length === 0) {
+    return (
+      <section className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
+        <h3 className="text-sm font-semibold text-slate-300">Cadeau abonnement Lieu</h3>
+        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+          Tous les lieux ont déjà un abonnement actif ou en grâce. Pour prolonger un cadeau,
+          utilisez <span className="text-slate-400">+1 / +3 / +6 mo</span> dans le parc
+          ci-dessus.
+        </p>
+        {msg && (
+          <p className={`text-xs mt-2 ${ok ? 'text-emerald-400' : 'text-rose-400'}`}>{msg}</p>
+        )}
+      </section>
+    )
+  }
+
   return (
     <section className="rounded-xl border border-amber-700/40 bg-slate-900/70 p-4 space-y-3">
       <h3 className="text-sm font-semibold text-amber-200">Cadeau abonnement Lieu</h3>
       <p className="text-xs text-slate-400 leading-relaxed">
-        Offre un nombre de mois (hors Stripe). Alerte 7 jours avant la fin, puis 7 jours de
-        grâce — mail + bannière in-app pour les gestionnaires.
+        Uniquement les lieux sans abo actif. Alerte 7 jours avant la fin, puis 7 jours de grâce.
+        Pour prolonger un cadeau existant → parc ci-dessus.
       </p>
       <div className="flex flex-col sm:flex-row gap-2">
         <select
@@ -91,7 +144,7 @@ export function AdminPlaceGiftPanel() {
           }}
         >
           <option value="">Choisir un lieu…</option>
-          {places.map((p) => (
+          {eligible.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>

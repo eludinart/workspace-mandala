@@ -402,11 +402,11 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
           </div>
           <div className="rounded-xl border border-violet-800/40 bg-slate-950/50 p-4 space-y-2">
             <h3 className="text-sm font-medium text-violet-100">
-              Après paiement — demande d’endossement
+              Demande Mandala Pro
             </h3>
             <p className="text-xs text-slate-400">
-              Obligatoire pour le badge Pro. La file est revue par un lieu ou
-              l’équipe Mandala.
+              Remplissez la demande (résidence + lieux d’exercice) pour la file de
+              validation. Le parcours cible : validation puis paiement.
             </p>
             <ProVerificationForm />
           </div>

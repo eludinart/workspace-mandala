@@ -266,6 +266,44 @@ html.light .m-rich-text a {
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.55), 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
+/* Annuaire : pin ville d’exercice */
+.m-map-marker--practice {
+  background: #0ea5e9;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.m-map-marker--practice.m-map-marker--pro {
+  background: #7c3aed;
+}
+
+.m-map-marker--practice.m-map-marker--attached {
+  box-shadow: 0 0 0 2px #f59e0b, 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+/* Annuaire : pin lieu Mandala (distinct) */
+.m-map-marker--mandala {
+  background: #b45309;
+  border-color: #fde68a;
+}
+
+.m-map-legend {
+  display: inline-block;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.m-map-legend--practice {
+  background: #0ea5e9;
+}
+
+.m-map-legend--mandala {
+  background: #b45309;
+}
+
 .m-map-leaflet-tooltip {
   background: rgba(15, 23, 42, 0.94) !important;
   border: 1px solid rgba(148, 163, 184, 0.35) !important;

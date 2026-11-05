@@ -16,6 +16,8 @@ export type SkillProfile = {
   offer_text: string
   seek_text: string
   frame_text: string
+  residence_city: string
+  practice_locations: string[]
   updated_at: string | null
   place_ids: number[]
   places: SkillPlaceRef[]
@@ -48,6 +50,8 @@ export type SkillCard = {
   pro_external_url?: string | null
   pro_endorsement_place?: string | null
   profile_views_30d?: number
+  residence_city?: string
+  practice_locations?: string[]
 }
 
 export type SkillNote = {
@@ -63,6 +67,23 @@ export type SkillNote = {
   is_mine: boolean
 }
 
+export type AnnuaireAudience = 'all' | 'pro' | 'members'
+
+export type AnnuaireMapMarker = {
+  id: string
+  kind: 'practice' | 'mandala_place'
+  latitude: number
+  longitude: number
+  label: string
+  user_id?: number
+  display_name?: string
+  pro_verified?: boolean
+  community_id?: number
+  community_slug?: string
+  community_emoji?: string | null
+  place_names?: string[]
+}
+
 export const skillsApi = {
   getMine: () => api.get('/api/skills/profile') as Promise<{ profile: SkillProfile }>,
   saveMine: (body: {
@@ -70,6 +91,8 @@ export const skillsApi = {
     offer_text: string
     seek_text: string
     frame_text: string
+    residence_city?: string
+    practice_locations?: string[]
     place_ids: number[]
     tags: SkillTag[]
   }) => api.put('/api/skills/profile', body) as Promise<{ profile: SkillProfile }>,
@@ -88,6 +111,15 @@ export const skillsApi = {
     if (params?.tag) q.set('tag', params.tag)
     const qs = q.toString()
     return api.get(`/api/skills/public${qs ? `?${qs}` : ''}`) as Promise<{ cards: SkillCard[] }>
+  },
+  mapMarkers: (params?: { audience?: AnnuaireAudience; communitySlug?: string }) => {
+    const q = new URLSearchParams()
+    if (params?.audience && params.audience !== 'all') q.set('audience', params.audience)
+    if (params?.communitySlug) q.set('community_slug', params.communitySlug)
+    const qs = q.toString()
+    return api.get(`/api/skills/map${qs ? `?${qs}` : ''}`) as Promise<{
+      markers: AnnuaireMapMarker[]
+    }>
   },
   card: (userId: number) =>
     api.get(`/api/skills/members/${userId}`) as Promise<{ card: SkillCard }>,

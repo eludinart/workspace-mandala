@@ -81,7 +81,7 @@ export const PLACE_BOUND_PAGES: MandalaPage[] = [
 
 export const SECONDARY_NAV: SecondaryNavItem[] = [
   { id: 'directory', label: 'Annuaire', icon: '👥' },
-  { id: 'skills', label: 'Compétences', icon: '✨' },
+  { id: 'skills', label: 'Annuaire', icon: '✨' },
   { id: 'resources', label: 'Ressources', icon: '📚' },
   { id: 'notifications', label: 'Alertes', icon: '🔔' },
   { id: 'account', label: 'Mon compte', icon: '👤' },
@@ -226,7 +226,7 @@ export const PAGE_LABELS: Record<MandalaPage, string> = {
   events: 'Événements',
   members: 'Membres',
   messages: 'Messages',
-  skills: 'Compétences',
+  skills: 'Annuaire',
   resources: 'Ressources',
   notifications: 'Alertes',
   account: 'Mon compte',

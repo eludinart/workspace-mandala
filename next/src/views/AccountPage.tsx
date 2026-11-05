@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { notificationsApi } from '@/api/notifications'
 import { ACCOUNT_SKILLS_ANCHOR, SkillsProfileSection } from '@/components/skills/SkillsProfileSection'
+import { skillsApi } from '@/api/skills'
 import { MyResourcesSection } from '@/components/resources/MyResourcesSection'
 import { accountApi } from '@/api/account'
 import { authApi } from '@/api/auth'
@@ -76,6 +77,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [lastName, setLastName] = useState('')
   const [showFullLastName, setShowFullLastName] = useState(false)
   const [bio, setBio] = useState('')
+  const [residenceCity, setResidenceCity] = useState('')
+  const [practiceCitiesRaw, setPracticeCitiesRaw] = useState('')
   const [avatarEmoji, setAvatarEmoji] = useState('🌸')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [profilePublic, setProfilePublic] = useState(true)
@@ -125,6 +128,13 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       setAvatarEmoji(p.avatar_emoji ?? '🌸')
       setAvatarPreview(p.avatar ?? null)
       setProfilePublic(p.profile_public !== false)
+      try {
+        const skills = await skillsApi.getMine()
+        setResidenceCity(skills.profile.residence_city ?? '')
+        setPracticeCitiesRaw((skills.profile.practice_locations ?? []).join(', '))
+      } catch {
+        /* fiche compétences optionnelle */
+      }
     } catch {
       setFirstName(u?.first_name ?? '')
       setLastName(u?.last_name ?? '')
@@ -205,6 +215,25 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         profile_public: profilePublic,
         ...(avatarPreview ? { avatar: avatarPreview } : { avatar: '' }),
       })
+      try {
+        const skills = await skillsApi.getMine()
+        const practice_locations = practiceCitiesRaw
+          .split(/[,;\n]/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+        await skillsApi.saveMine({
+          scope: skills.profile.scope,
+          offer_text: skills.profile.offer_text,
+          seek_text: skills.profile.seek_text,
+          frame_text: skills.profile.frame_text,
+          place_ids: skills.profile.place_ids,
+          tags: skills.profile.tags,
+          residence_city: residenceCity.trim(),
+          practice_locations,
+        })
+      } catch {
+        /* profil identité déjà sauvé */
+      }
       await refreshUser()
       setMsg('Profil enregistré')
     } catch (e: unknown) {
@@ -425,6 +454,28 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={3}
+              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-500">Ville de résidence</span>
+            <input
+              value={residenceCity}
+              onChange={(e) => setResidenceCity(e.target.value)}
+              maxLength={120}
+              placeholder="Où vous vivez"
+              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-500">Lieux d’exercice</span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Villes séparées par des virgules — carte &amp; matching.
+            </span>
+            <input
+              value={practiceCitiesRaw}
+              onChange={(e) => setPracticeCitiesRaw(e.target.value)}
+              placeholder="Tours, Chinon…"
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2"
             />
           </label>

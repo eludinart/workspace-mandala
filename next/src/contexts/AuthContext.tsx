@@ -22,7 +22,8 @@ type AuthContextValue = {
     firstName: string,
     lastName: string,
     inviteToken?: string,
-    communitySlug?: string
+    communitySlug?: string,
+    geo?: { residence_city?: string; practice_locations?: string[] }
   ) => Promise<User>
   requestPasswordReset: (email: string) => Promise<string>
   completePasswordReset: (token: string, password: string) => Promise<User>
@@ -176,7 +177,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     firstName: string,
     lastName: string,
     inviteToken?: string,
-    communitySlug?: string
+    communitySlug?: string,
+    geo?: { residence_city?: string; practice_locations?: string[] }
   ) => {
     const { token, user: u } = (await authApi.register(
       email,
@@ -184,7 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       firstName,
       lastName,
       inviteToken,
-      communitySlug
+      communitySlug,
+      true,
+      geo
     )) as {
       token: string
       user: Record<string, unknown>

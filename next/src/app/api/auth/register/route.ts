@@ -6,6 +6,11 @@ import { jwtEncode } from '@/lib/jwt'
 import { setAuthCookie } from '@/lib/auth-cookie'
 import { clientIpFromRequest, rateLimitAllow } from '@/lib/rate-limit'
 import { acceptCurrentCguBundle } from '@/lib/db-legal'
+import { saveMySkillProfile } from '@/lib/db-skills'
+import {
+  normalizeCityLabel,
+  normalizePracticeLocations,
+} from '@/lib/practice-locations'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +63,25 @@ export async function POST(req: NextRequest) {
       ip,
       userAgent: req.headers.get('user-agent'),
     })
+
+    const residenceCity = normalizeCityLabel(body.residence_city)
+    const practiceLocations = normalizePracticeLocations(body.practice_locations)
+    if (residenceCity || practiceLocations.length) {
+      try {
+        await saveMySkillProfile(user.id, {
+          scope: 'hidden',
+          offer_text: '',
+          seek_text: '',
+          frame_text: '',
+          residence_city: residenceCity,
+          practice_locations: practiceLocations,
+          place_ids: [],
+          tags: [],
+        })
+      } catch {
+        /* inscription ok même si la fiche géo échoue */
+      }
+    }
 
     const communitySlug = String(body.community_slug ?? '').trim().toLowerCase()
     const inviteCode =

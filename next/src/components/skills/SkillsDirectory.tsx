@@ -78,6 +78,8 @@ export function SkillsDirectory({
   lockToPlace = false,
   initialUserId,
   peopleDirectory = false,
+  audience: audienceProp,
+  onAudienceChange,
   onOpenMessages,
   onOpenConversation,
   onOpenAlerts,
@@ -92,6 +94,9 @@ export function SkillsDirectory({
   /** Annuaire des personnes, y compris sans lieu. */
   peopleDirectory?: boolean
   initialUserId?: number | null
+  /** Contrôle externe du filtre Tous / Pro / Membres (ex. sync carte). */
+  audience?: 'all' | 'pro' | 'members'
+  onAudienceChange?: (audience: 'all' | 'pro' | 'members') => void
   onOpenMessages?: (userId: string, communitySlug?: string) => void
   onOpenConversation?: (channelId: number) => void
   onOpenAlerts?: () => void
@@ -106,7 +111,13 @@ export function SkillsDirectory({
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
-  const [mandalaProOnly, setMandalaProOnly] = useState(false)
+  /** Double vision : tout l’annuaire, Mandala Pro, ou membres sans badge Pro. */
+  const [audienceInternal, setAudienceInternal] = useState<'all' | 'pro' | 'members'>('all')
+  const audience = audienceProp ?? audienceInternal
+  const setAudience = (next: 'all' | 'pro' | 'members') => {
+    if (audienceProp === undefined) setAudienceInternal(next)
+    onAudienceChange?.(next)
+  }
   const [networkOnly, setNetworkOnly] = useState(false)
   const [cards, setCards] = useState<SkillCard[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(initialUserId ?? null)
@@ -192,7 +203,8 @@ export function SkillsDirectory({
       }
       if (peopleDirectory && placeFilter === 'unattached' && card.places.length > 0) return false
       if (networkOnly && !card.shares_place && !card.is_me) return false
-      if (mandalaProOnly && !(card.pro_boost || card.pro_verified)) return false
+      if (audience === 'pro' && !card.pro_verified) return false
+      if (audience === 'members' && card.pro_verified) return false
       if (register && !card.tags.some((t) => t.register === register)) return false
       if (!matchesTag(card.tags, tag)) return false
       if (!q) return true
@@ -204,6 +216,8 @@ export function SkillsDirectory({
         card.frame_text,
         card.pro_tagline,
         card.pro_service_area,
+        card.residence_city,
+        ...(card.practice_locations ?? []),
         ...card.tags.map((t) => `${t.label} ${SKILL_REGISTER_LABELS[t.register]}`),
         ...card.places.map((p) => p.name),
       ]
@@ -218,7 +232,7 @@ export function SkillsDirectory({
     query,
     peopleDirectory,
     placeFilter,
-    mandalaProOnly,
+    audience,
     networkOnly,
   ])
 
@@ -272,30 +286,69 @@ export function SkillsDirectory({
     : lockToPlace
       ? `Annuaire · ${communityName ?? 'ce lieu'}`
       : variant === 'public'
-        ? 'Annuaire des compétences'
+        ? audience === 'pro'
+          ? 'Mandala Pro'
+          : 'Annuaire Mandala'
         : view === 'place'
           ? `Annuaire · ${communityName ?? 'ce lieu'}`
-          : 'Annuaire Mandala'
+          : audience === 'pro'
+            ? 'Mandala Pro'
+            : 'Annuaire Mandala'
 
   const subtitle = peopleDirectory
     ? 'Personnes qui ont choisi Tout Mandala sur leur fiche, avec ou sans lieu.'
-    : lockToPlace || variant === 'public'
-      ? 'Personnes qui ont choisi de montrer leurs compétences à tout Mandala.'
-      : view === 'place'
-        ? 'Fiches visibles pour les membres de ce lieu, et celles ouvertes à Mandala.'
-        : 'Fiches ouvertes à tout membre connecté.'
+    : audience === 'pro'
+      ? 'Professionnels validés — badge, zone d’intervention, contact facilité.'
+      : audience === 'members'
+        ? 'Membres qui partagent leurs pratiques, sans badge Mandala Pro.'
+        : lockToPlace
+          ? 'Pros et membres de ce lieu, filtrables.'
+          : variant === 'public'
+            ? 'Pros validés et membres du réseau — filtrez selon ce que vous cherchez.'
+            : view === 'place'
+              ? 'Fiches du lieu : pros et membres, visibles ensemble.'
+              : 'Fiches ouvertes à Mandala : pros et membres, filtrables.'
 
   return (
     <div className="space-y-5">
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-[10px] uppercase tracking-[0.22em] text-violet-300/80">
-            {peopleDirectory ? 'Personnes' : 'Compétences'}
+            Annuaire
           </p>
           <h2 className="text-2xl sm:text-3xl font-semibold text-slate-50">{title}</h2>
           <p className="text-sm text-slate-400 max-w-xl">{subtitle}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5"
+            role="tablist"
+            aria-label="Filtrer pros et membres"
+          >
+            {(
+              [
+                ['all', 'Tous'],
+                ['pro', 'Mandala Pro'],
+                ['members', 'Membres'],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={audience === id}
+                onClick={() => {
+                  setAudience(id)
+                  setSelectedId(null)
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${
+                  audience === id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {peopleDirectory && (
             <div className="inline-flex rounded-full border border-slate-700 bg-slate-950/60 p-0.5" role="tablist">
               {(
@@ -448,15 +501,6 @@ export function SkillsDirectory({
                 ))}
               </select>
             </label>
-            <label className="text-xs text-slate-400 flex items-center gap-2 pt-5">
-              <input
-                type="checkbox"
-                checked={mandalaProOnly}
-                onChange={(e) => setMandalaProOnly(e.target.checked)}
-                className="rounded"
-              />
-              Mandala Pro uniquement
-            </label>
             {variant === 'app' && !lockToPlace && (
               <label className="text-xs text-slate-400 flex items-center gap-2 pt-5 sm:col-span-2">
                 <input
@@ -472,7 +516,7 @@ export function SkillsDirectory({
         )}
       </div>
 
-      {featuredPros.length > 0 && !mandalaProOnly && (
+      {featuredPros.length > 0 && audience !== 'pro' && audience !== 'members' && (
         <section className="space-y-2 rounded-2xl border border-violet-800/40 bg-violet-950/20 p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-violet-300">
             Pros mis en avant
@@ -548,12 +592,25 @@ export function SkillsDirectory({
                         </p>
                       )}
                       {card.places.length > 0 ? (
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {card.places.map((p) => p.name).join(' · ')}
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {card.places.map((p) => (
+                            <span
+                              key={p.id}
+                              className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-0.5 text-[11px] text-amber-100"
+                            >
+                              <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
+                              <span className="truncate">Lieu Mandala · {p.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-slate-500">Sans lieu Mandala</p>
+                      )}
+                      {(card.practice_locations?.length ?? 0) > 0 && (
+                        <p className="text-[11px] text-sky-300/90 truncate">
+                          Exerce · {(card.practice_locations ?? []).join(' · ')}
                         </p>
-                      ) : peopleDirectory ? (
-                        <p className="text-[11px] text-slate-500">Sans lieu</p>
-                      ) : null}
+                      )}
                     </div>
                   </div>
                   {(card.pro_tagline || card.offer_text) && (
@@ -616,13 +673,28 @@ export function SkillsDirectory({
                   {selected.skills_visible !== false && selected.scope === 'mandala' && (
                     <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
                   )}
-                  {selected.skills_visible !== false &&
-                    variant === 'app' &&
-                    (selected.places.length > 0 || selected.scope === 'mandala') && (
-                    <p className="mt-1 text-sm text-slate-500">
-                      {selected.places.length > 0
-                        ? selected.places.map((p) => p.name).join(' · ')
-                        : 'Sans lieu'}
+                  {selected.places.length > 0 ? (
+                    <ul className="mt-2 flex flex-wrap gap-1.5">
+                      {selected.places.map((p) => (
+                        <li key={p.id}>
+                          <a
+                            href={`/lieux/${p.slug}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/50 bg-amber-950/35 px-2.5 py-1 text-xs text-amber-100 hover:bg-amber-900/40"
+                          >
+                            <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
+                            <span>
+                              Rattaché au lieu Mandala · <strong>{p.name}</strong>
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">Sans rattachement à un lieu Mandala</p>
+                  )}
+                  {(selected.practice_locations?.length ?? 0) > 0 && (
+                    <p className="mt-1.5 text-xs text-sky-300/90">
+                      Exerce à {(selected.practice_locations ?? []).join(' · ')}
                     </p>
                   )}
                   {selected.is_me && selected.profile_views_30d != null && (

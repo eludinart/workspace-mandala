@@ -73,6 +73,8 @@ export function LoginPage() {
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
+  const [residenceCity, setResidenceCity] = useState('')
+  const [practiceCitiesRaw, setPracticeCitiesRaw] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -137,13 +139,22 @@ export function LoginPage() {
           return
         }
         const invite = pendingInvite ?? readPendingPlaceInvite()
+        const practice_locations = practiceCitiesRaw
+          .split(/[,;\n]/)
+          .map((s) => s.trim())
+          .filter(Boolean)
         await register(
           email.trim(),
           password,
           firstName.trim(),
           lastName.trim(),
           invite?.code,
-          invite?.slug
+          invite?.slug,
+          {
+            residence_city: residenceCity.trim() || undefined,
+            practice_locations:
+              practice_locations.length > 0 ? practice_locations : undefined,
+          }
         )
       }
     } catch (err: unknown) {
@@ -197,26 +208,47 @@ export function LoginPage() {
         )}
         <form onSubmit={submit} className="space-y-4">
           {mode === 'register' && (
-            <div className="grid grid-cols-2 gap-3">
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Prénom *"
+                  required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  autoComplete="given-name"
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder="Nom *"
+                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  autoComplete="family-name"
+                  className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
+                />
+              </div>
               <input
                 type="text"
-                placeholder="Prénom *"
-                required
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                autoComplete="given-name"
+                placeholder="Ville de résidence (optionnel)"
+                value={residenceCity}
+                onChange={(e) => setResidenceCity(e.target.value)}
+                autoComplete="address-level2"
                 className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
               />
               <input
                 type="text"
-                placeholder="Nom *"
-                required
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                autoComplete="family-name"
+                placeholder="Lieux d’exercice, séparés par des virgules (optionnel)"
+                value={practiceCitiesRaw}
+                onChange={(e) => setPracticeCitiesRaw(e.target.value)}
                 className="w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 text-sm"
               />
-            </div>
+              <p className="text-[11px] text-slate-500 -mt-2 leading-relaxed">
+                Les villes d’exercice alimentent l’annuaire et la carte. La résidence
+                reste privée de ce point de vue.
+              </p>
+            </>
           )}
           {mode !== 'reset' && !(mode === 'forgot' && info) && (
             <input
