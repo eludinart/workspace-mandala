@@ -15,16 +15,10 @@ import {
 
 export function MandalaMark({ className = '' }: { className?: string }) {
   return (
-    <Link href="/" className={`flex flex-col items-center gap-1.5 shrink-0 ${className}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/brand-mark.png"
-        alt=""
-        width={48}
-        height={48}
-        className="m-landing-brand-btn"
-        aria-hidden
-      />
+    <Link href="/" className={`flex flex-col items-center gap-1 shrink-0 ${className}`}>
+      <span className="text-2xl sm:text-3xl leading-none text-slate-400/70" aria-hidden>
+        ॐ
+      </span>
       <span className="m-landing-logo text-slate-200">Mandala</span>
     </Link>
   )
