@@ -1,7 +1,14 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { skillsApi, type SkillCard, type SkillProfile, type SkillTag } from '@/api/skills'
+import {
+  skillsApi,
+  type AnnuaireMapMarker,
+  type SkillCard,
+  type SkillProfile,
+  type SkillTag,
+} from '@/api/skills'
 import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { UserAvatar } from '@/components/UserAvatar'
@@ -14,6 +21,19 @@ import {
   type SkillRegister,
 } from '@/lib/skill-constants'
 import { ExplainCard } from '@/components/help/ExplainCard'
+
+const AnnuaireCitiesMap = dynamic(
+  () =>
+    import('@/components/public/AnnuaireCitiesMap').then((m) => m.AnnuaireCitiesMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[min(36vh,14rem)] sm:h-[min(42vh,18rem)] rounded-2xl border border-slate-800 bg-slate-950 flex items-center justify-center">
+        <p className="text-sm text-slate-500">Chargement de la carte…</p>
+      </div>
+    ),
+  }
+)
 
 export const OPEN_SKILL_USER_KEY = 'mandala_skill_user'
 
@@ -128,6 +148,16 @@ export function SkillsDirectory({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [mine, setMine] = useState<SkillProfile | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [mapMarkers, setMapMarkers] = useState<AnnuaireMapMarker[]>([])
+  const [mapLoading, setMapLoading] = useState(false)
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
+
+  /** Carte sur l’annuaire app (Ce lieu / Mandala) et sur la fiche publique d’un lieu — pas sur /competences (déjà une carte au-dessus). */
+  const showMap =
+    (variant === 'app' && !peopleDirectory) || (variant === 'public' && lockToPlace)
+
+  const placeScoped =
+    lockToPlace || (variant === 'app' && !peopleDirectory && view === 'place')
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -163,6 +193,34 @@ export function SkillsDirectory({
     const handle = window.setTimeout(() => void load(), 200)
     return () => window.clearTimeout(handle)
   }, [load])
+
+  const loadMap = useCallback(async () => {
+    if (!showMap) {
+      setMapMarkers([])
+      return
+    }
+    if (placeScoped && !communitySlug) {
+      setMapMarkers([])
+      return
+    }
+    setMapLoading(true)
+    try {
+      const res = await skillsApi.mapMarkers({
+        audience,
+        communitySlug: placeScoped ? communitySlug : undefined,
+      })
+      setMapMarkers(res.markers ?? [])
+    } catch {
+      setMapMarkers([])
+    } finally {
+      setMapLoading(false)
+    }
+  }, [showMap, placeScoped, communitySlug, audience])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => void loadMap(), 180)
+    return () => window.clearTimeout(handle)
+  }, [loadMap])
 
   useEffect(() => {
     if (!initialUserId) return
@@ -348,6 +406,7 @@ export function SkillsDirectory({
                 onClick={() => {
                   setAudience(id)
                   setSelectedId(null)
+                  setSelectedMarkerId(null)
                 }}
                 className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${
                   audience === id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
@@ -400,6 +459,7 @@ export function SkillsDirectory({
                   onClick={() => {
                     setView(id)
                     setSelectedId(null)
+                    setSelectedMarkerId(null)
                   }}
                   className={`px-3.5 py-1.5 rounded-full text-xs font-medium ${
                     view === id ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
@@ -443,6 +503,42 @@ export function SkillsDirectory({
               Compléter ma fiche
             </button>
           )}
+        </div>
+      )}
+
+      {showMap && (
+        <div id="annuaire-carte" className="space-y-2 scroll-mt-20">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-200">
+                {placeScoped ? 'Carte des membres du lieu' : 'Carte des membres'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {placeScoped
+                  ? 'Positions géographiques des fiches de ce lieu. Cliquez un pin pour ouvrir la fiche.'
+                  : 'Villes d’exercice sur tout Mandala. Le filtre Pros / Membres s’applique aussi ici.'}
+              </p>
+            </div>
+            {mapLoading && (
+              <p className="text-[11px] text-slate-500">Mise à jour carte…</p>
+            )}
+          </div>
+          <AnnuaireCitiesMap
+            markers={mapMarkers}
+            selectedId={selectedMarkerId}
+            heightClassName="h-[min(40vh,16rem)] sm:h-[min(48vh,22rem)]"
+            onSelectMarker={(m) => {
+              setSelectedMarkerId(m.id)
+              if ((m.kind === 'practice' || m.kind === 'residence') && m.user_id) {
+                setSelectedId(m.user_id)
+                window.setTimeout(() => {
+                  document
+                    .getElementById('annuaire-fiche')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }, 80)
+              }
+            }}
+          />
         </div>
       )}
 

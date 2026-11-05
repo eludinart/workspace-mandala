@@ -1,6 +1,6 @@
 /**
- * Marqueurs carte annuaire : pins personnes × ville d’exercice uniquement.
- * Les lieux Mandala suivent la même visibilité que le mur (`listed_public`).
+ * Marqueurs carte annuaire : une personne × une position (ville ou GPS exact).
+ * Résidence et exercice dans la même ville = un seul pin.
  */
 import { getPool, isDbConfigured, table } from '@/lib/db'
 import type { SkillCard } from '@/lib/db-skills'
@@ -19,15 +19,12 @@ export type AnnuaireMapMarker = {
   label: string
   user_id?: number
   display_name?: string
-  /** Photo de profil (data URL ou http) pour le pin. */
   avatar?: string | null
-  /** Emoji de profil si pas de photo. */
   avatar_emoji?: string | null
   pro_verified?: boolean
   community_id?: number
   community_slug?: string
   community_emoji?: string | null
-  /** Lieux Mandala listés publics rattachés (tooltip pin exercice). */
   place_names?: string[]
 }
 
@@ -56,19 +53,100 @@ async function loadListedPlaceNames(ids: number[]): Promise<Map<number, string>>
   return map
 }
 
+function cityKey(label: string): string {
+  return normalizeCityLabel(label).toLocaleLowerCase('fr')
+}
+
+/** Positions utiles pour une fiche : GPS exact prioritaire, sinon villes uniques. */
+function locationsForCard(card: SkillCard): Array<{
+  key: string
+  kind: 'practice' | 'residence'
+  label: string
+  latitude?: number
+  longitude?: number
+}> {
+  const out: Array<{
+    key: string
+    kind: 'practice' | 'residence'
+    label: string
+    latitude?: number
+    longitude?: number
+  }> = []
+  const seen = new Set<string>()
+
+  const lat = card.latitude
+  const lng = card.longitude
+  const hasExact =
+    lat != null &&
+    lng != null &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng)
+
+  const residence =
+    card.residence_public !== false ? normalizeCityLabel(card.residence_city) : ''
+  const practices = (card.practice_locations ?? [])
+    .map(normalizeCityLabel)
+    .filter(Boolean)
+
+  if (hasExact) {
+    const label = residence || practices[0] || 'Position'
+    const key = `exact:${card.user_id}`
+    out.push({
+      key,
+      kind: residence ? 'residence' : 'practice',
+      label,
+      latitude: Number(lat),
+      longitude: Number(lng),
+    })
+    seen.add(cityKey(label))
+    // Autres lieux d’exercice distincts de la résidence exacte
+    for (const city of practices) {
+      const k = cityKey(city)
+      if (seen.has(k)) continue
+      seen.add(k)
+      out.push({ key: `practice:${k}`, kind: 'practice', label: city })
+    }
+    return out
+  }
+
+  for (const city of practices) {
+    const k = cityKey(city)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push({ key: `practice:${k}`, kind: 'practice', label: city })
+  }
+  if (residence) {
+    const k = cityKey(residence)
+    if (!seen.has(k)) {
+      seen.add(k)
+      out.push({ key: `residence:${k}`, kind: 'residence', label: residence })
+    }
+  }
+  return out
+}
+
 export async function listAnnuaireMapMarkers(opts?: {
   audience?: AnnuaireAudience
   communitySlug?: string | null
+  /** Membre connecté : voir aussi les fiches limitées au lieu (scope places). */
+  viewerId?: number
+  publicAccess?: boolean
 }): Promise<AnnuaireMapMarker[]> {
   const audience = opts?.audience ?? 'all'
   const slug = (opts?.communitySlug ?? '').trim()
+  const viewerId = opts?.viewerId && opts.viewerId > 0 ? opts.viewerId : 0
+  const publicAccess = opts?.publicAccess ?? true
   let communityId: number | null = null
   if (slug && isDbConfigured()) {
     const pool = getPool()
     const [rows] = await pool.execute<RowDataPacket[]>(
-      `SELECT id FROM ${table('mandala_communities')}
-       WHERE slug = ? AND is_active = 1 AND COALESCE(listed_public, 1) = 1
-       LIMIT 1`,
+      publicAccess
+        ? `SELECT id FROM ${table('mandala_communities')}
+           WHERE slug = ? AND is_active = 1 AND COALESCE(listed_public, 1) = 1
+           LIMIT 1`
+        : `SELECT id FROM ${table('mandala_communities')}
+           WHERE slug = ? AND is_active = 1
+           LIMIT 1`,
       [slug]
     )
     communityId = rows[0] ? Number(rows[0].id) : null
@@ -77,24 +155,23 @@ export async function listAnnuaireMapMarkers(opts?: {
 
   const cards = filterByAudience(
     await listSkillDirectory({
-      viewerId: 0,
+      viewerId,
       view: slug ? 'place' : 'mandala',
       communityId,
-      publicAccess: true,
+      publicAccess: slug ? publicAccess : true,
     }),
     audience
   )
 
   const cityLabels = new Set<string>()
   const communityIds = new Set<number>()
+  const planned = new Map<number, ReturnType<typeof locationsForCard>>()
+
   for (const card of cards) {
-    for (const city of card.practice_locations ?? []) {
-      const c = normalizeCityLabel(city)
-      if (c) cityLabels.add(c)
-    }
-    if (card.residence_public !== false) {
-      const residence = normalizeCityLabel(card.residence_city)
-      if (residence) cityLabels.add(residence)
+    const locs = locationsForCard(card)
+    planned.set(card.user_id, locs)
+    for (const loc of locs) {
+      if (loc.latitude == null || loc.longitude == null) cityLabels.add(loc.label)
     }
     for (const p of card.places ?? []) {
       if (p.id > 0) communityIds.add(p.id)
@@ -120,35 +197,23 @@ export async function listAnnuaireMapMarkers(opts?: {
       pro_verified: Boolean(card.pro_verified),
       place_names: placeNames,
     }
-    for (const city of card.practice_locations ?? []) {
-      const label = normalizeCityLabel(city)
-      if (!label) continue
-      const coords = cityCoords.get(label.toLocaleLowerCase('fr'))
-      if (!coords) continue
+    for (const loc of planned.get(card.user_id) ?? []) {
+      let latitude = loc.latitude
+      let longitude = loc.longitude
+      if (latitude == null || longitude == null) {
+        const coords = cityCoords.get(cityKey(loc.label))
+        if (!coords) continue
+        latitude = coords.latitude
+        longitude = coords.longitude
+      }
       markers.push({
-        id: `practice:${card.user_id}:${label.toLocaleLowerCase('fr')}`,
-        kind: 'practice',
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        label,
+        id: `person:${card.user_id}:${loc.key}`,
+        kind: loc.kind,
+        latitude,
+        longitude,
+        label: loc.label,
         ...base,
       })
-    }
-    if (card.residence_public !== false) {
-      const label = normalizeCityLabel(card.residence_city)
-      if (label) {
-        const coords = cityCoords.get(label.toLocaleLowerCase('fr'))
-        if (coords) {
-          markers.push({
-            id: `residence:${card.user_id}:${label.toLocaleLowerCase('fr')}`,
-            kind: 'residence',
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            label,
-            ...base,
-          })
-        }
-      }
     }
   }
 
