@@ -100,11 +100,14 @@ export function SkillsDirectory({
   const [view, setView] = useState<'place' | 'mandala'>(
     peopleDirectory ? 'mandala' : lockToPlace || communitySlug ? 'place' : 'mandala'
   )
-  const [placeFilter, setPlaceFilter] = useState<'all' | 'mine' | 'unattached'>('all')
+  const [placeFilter, setPlaceFilter] = useState<'all' | 'mine' | 'unattached'>(
+    peopleDirectory ? 'mine' : 'all'
+  )
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
   const [mandalaProOnly, setMandalaProOnly] = useState(false)
+  const [networkOnly, setNetworkOnly] = useState(false)
   const [cards, setCards] = useState<SkillCard[]>([])
   const [selectedId, setSelectedId] = useState<number | null>(initialUserId ?? null)
   const [opened, setOpened] = useState<SkillCard | null>(null)
@@ -188,6 +191,7 @@ export function SkillsDirectory({
         return false
       }
       if (peopleDirectory && placeFilter === 'unattached' && card.places.length > 0) return false
+      if (networkOnly && !card.shares_place && !card.is_me) return false
       if (mandalaProOnly && !(card.pro_boost || card.pro_verified)) return false
       if (register && !card.tags.some((t) => t.register === register)) return false
       if (!matchesTag(card.tags, tag)) return false
@@ -198,6 +202,8 @@ export function SkillsDirectory({
         card.offer_text,
         card.seek_text,
         card.frame_text,
+        card.pro_tagline,
+        card.pro_service_area,
         ...card.tags.map((t) => `${t.label} ${SKILL_REGISTER_LABELS[t.register]}`),
         ...card.places.map((p) => p.name),
       ]
@@ -205,7 +211,35 @@ export function SkillsDirectory({
         .toLocaleLowerCase('fr')
       return hay.includes(q)
     })
-  }, [cards, register, tag, query, peopleDirectory, placeFilter, mandalaProOnly])
+  }, [
+    cards,
+    register,
+    tag,
+    query,
+    peopleDirectory,
+    placeFilter,
+    mandalaProOnly,
+    networkOnly,
+  ])
+
+  const featuredPros = useMemo(
+    () => visible.filter((c) => c.pro_verified).slice(0, 6),
+    [visible]
+  )
+
+  async function contactPro(card: SkillCard) {
+    if (variant !== 'app' || card.is_me) return
+    if (card.pro_verified || card.pro_boost) {
+      void skillsApi.notifyContactLead(card.user_id).catch(() => {})
+    }
+    if (card.shares_place && card.shared_place_slug && onOpenMessages) {
+      onOpenMessages(String(card.user_id), card.shared_place_slug)
+      return
+    }
+    if (card.pro_verified && onOpenMessages) {
+      onOpenMessages(String(card.user_id))
+    }
+  }
 
   const skillCloud = useMemo(() => {
     const counts = new Map<string, number>()
@@ -423,9 +457,45 @@ export function SkillsDirectory({
               />
               Mandala Pro uniquement
             </label>
+            {variant === 'app' && !lockToPlace && (
+              <label className="text-xs text-slate-400 flex items-center gap-2 pt-5 sm:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={networkOnly}
+                  onChange={(e) => setNetworkOnly(e.target.checked)}
+                  className="rounded"
+                />
+                Mon réseau de lieux seulement (personnes avec qui je partage un lieu)
+              </label>
+            )}
           </div>
         )}
       </div>
+
+      {featuredPros.length > 0 && !mandalaProOnly && (
+        <section className="space-y-2 rounded-2xl border border-violet-800/40 bg-violet-950/20 p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-violet-300">
+            Pros mis en avant
+            {communityName ? ` · ${communityName}` : ''}
+          </h3>
+          <p className="text-[11px] text-slate-500">
+            Badge endossé par un lieu du réseau — pas un simple abonnement.
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {featuredPros.map((card) => (
+              <li key={`feat-${card.user_id}`}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(card.user_id)}
+                  className="text-xs px-2.5 py-1.5 rounded-full border border-violet-600/50 bg-violet-900/40 text-violet-100 hover:bg-violet-800/50"
+                >
+                  {card.display_name || card.pseudo}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <p className="text-xs text-slate-500">
         {loading && cards.length === 0
@@ -472,6 +542,11 @@ export function SkillsDirectory({
                           </span>
                         )}
                       </p>
+                      {card.pro_verified && card.pro_endorsement_place && (
+                        <p className="text-[11px] text-violet-300/90 truncate">
+                          Endossé par {card.pro_endorsement_place}
+                        </p>
+                      )}
                       {card.places.length > 0 ? (
                         <p className="text-[11px] text-slate-500 truncate">
                           {card.places.map((p) => p.name).join(' · ')}
@@ -481,9 +556,11 @@ export function SkillsDirectory({
                       ) : null}
                     </div>
                   </div>
-                  {card.offer_text && (
+                  {(card.pro_tagline || card.offer_text) && (
                     <p className="min-w-0 text-sm leading-relaxed text-slate-400 line-clamp-3 break-words">
-                      {card.offer_text.replace(/\s+/g, ' ').trim()}
+                      {(card.pro_tagline || card.offer_text || '')
+                        .replace(/\s+/g, ' ')
+                        .trim()}
                     </p>
                   )}
                   <div className="flex flex-wrap gap-1.5 min-w-0">
@@ -528,6 +605,14 @@ export function SkillsDirectory({
                       </span>
                     )}
                   </h3>
+                  {selected.pro_verified && selected.pro_endorsement_place && (
+                    <p className="mt-1 text-xs text-violet-200">
+                      Endossé par {selected.pro_endorsement_place}
+                    </p>
+                  )}
+                  {selected.pro_tagline && (
+                    <p className="mt-1 text-sm text-slate-200">{selected.pro_tagline}</p>
+                  )}
                   {selected.skills_visible !== false && selected.scope === 'mandala' && (
                     <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
                   )}
@@ -540,8 +625,43 @@ export function SkillsDirectory({
                         : 'Sans lieu'}
                     </p>
                   )}
+                  {selected.is_me && selected.profile_views_30d != null && (
+                    <p className="mt-1 text-xs text-slate-400">
+                      {selected.profile_views_30d} vue
+                      {selected.profile_views_30d > 1 ? 's' : ''} de fiche sur 30 jours
+                    </p>
+                  )}
+                  <a
+                    href={`/competences/${selected.user_id}`}
+                    className="mt-2 inline-block text-xs text-violet-300 underline underline-offset-2"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Page publique SEO
+                  </a>
                 </div>
               </header>
+
+              {(selected.pro_modalities ||
+                selected.pro_service_area ||
+                selected.pro_external_url) && (
+                <section className="space-y-1 rounded-xl border border-violet-900/40 bg-violet-950/20 px-4 py-3 text-sm text-slate-300">
+                  {selected.pro_service_area && (
+                    <p>Zone : {selected.pro_service_area}</p>
+                  )}
+                  {selected.pro_modalities && <p>{selected.pro_modalities}</p>}
+                  {selected.pro_external_url && (
+                    <a
+                      href={selected.pro_external_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-violet-300 underline underline-offset-2"
+                    >
+                      Site / prise de rendez-vous
+                    </a>
+                  )}
+                </section>
+              )}
 
               {!!selected.bio?.trim() && (
                 <section className="space-y-2">
@@ -633,21 +753,34 @@ export function SkillsDirectory({
                   </p>
                 )}
 
-              {variant === 'app' && !selected.is_me && selected.shares_place && selected.shared_place_slug && onOpenMessages && (
-                <button
-                  type="button"
-                  onClick={() => onOpenMessages(String(selected.user_id), selected.shared_place_slug ?? undefined)}
-                  className="text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
-                >
-                  Envoyer un message
-                </button>
-              )}
-              {variant === 'app' && !selected.is_me && !selected.shares_place && (
-                <MeetRequestButton
-                  userId={selected.user_id}
-                  onOpenConversation={onOpenConversation}
-                  onOpenAlerts={onOpenAlerts}
-                />
+              {variant === 'app' && !selected.is_me && (
+                <div className="flex flex-wrap gap-2">
+                  {(selected.shares_place || selected.pro_verified) && onOpenMessages && (
+                    <button
+                      type="button"
+                      onClick={() => void contactPro(selected)}
+                      className="text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
+                    >
+                      {selected.pro_verified && !selected.shares_place
+                        ? 'Contacter (Mandala Pro)'
+                        : 'Envoyer un message'}
+                    </button>
+                  )}
+                  {!selected.shares_place && !selected.pro_verified && (
+                    <MeetRequestButton
+                      userId={selected.user_id}
+                      onOpenConversation={onOpenConversation}
+                      onOpenAlerts={onOpenAlerts}
+                    />
+                  )}
+                  {!selected.shares_place && selected.pro_verified && (
+                    <MeetRequestButton
+                      userId={selected.user_id}
+                      onOpenConversation={onOpenConversation}
+                      onOpenAlerts={onOpenAlerts}
+                    />
+                  )}
+                </div>
               )}
               {variant === 'public' && (
                 <a
