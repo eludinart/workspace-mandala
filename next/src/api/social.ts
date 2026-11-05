@@ -82,8 +82,19 @@ export const socialApi = {
   toggleMessageReaction: (messageId: number, emoji: string) =>
     api.post('/api/social/message_reaction', { messageId, emoji }) as Promise<{
       messageId: number
-      reactions: { emoji: string; userIds: number[] }[]
+      reactions: { emoji: string; userIds: number[]; users?: { id: number; display_name: string }[] }[]
       myEmoji: string | null
+    }>,
+  createPoll: (body: { channelId: number; question: string; options: string[] }) =>
+    api.post('/api/social/polls', body) as Promise<{
+      ok: boolean
+      message: Record<string, unknown>
+      poll: import('@/lib/db-chat-polls').ChatPollView
+    }>,
+  votePoll: (pollId: number, optionId: number) =>
+    api.post(`/api/social/polls/${pollId}/vote`, { optionId }) as Promise<{
+      ok: boolean
+      poll: import('@/lib/db-chat-polls').ChatPollView
     }>,
 }
 

@@ -14,9 +14,16 @@ export const MESSAGE_REACTION_EMOJIS = [
 
 export type MessageReactionEmoji = (typeof MESSAGE_REACTION_EMOJIS)[number]
 
+export type MessageReactionUser = {
+  id: number
+  display_name: string
+}
+
 export type MessageReactionSummary = {
   emoji: string
   userIds: number[]
+  /** Noms résolus côté serveur (affichage groupe). */
+  users?: MessageReactionUser[]
 }
 
 export function isAllowedReactionEmoji(emoji: string): boolean {

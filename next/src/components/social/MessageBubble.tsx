@@ -12,6 +12,8 @@ import {
   messageMediaUrl,
 } from '@/lib/chat-attachments'
 import type { MessageReceiptStatus } from '@/lib/chat-receipts'
+import { ChatPollCard } from '@/components/social/ChatPollCard'
+import type { ChatPollView } from '@/lib/db-chat-polls'
 
 export function MessageBubble({
   msg,
@@ -29,6 +31,7 @@ export function MessageBubble({
   onReact,
   onReply,
   onJumpTo,
+  onPollUpdated,
 }: {
   msg: ChannelMessage
   isMe: boolean
@@ -46,12 +49,17 @@ export function MessageBubble({
   onReact: (messageId: number, emoji: string) => void
   onReply?: (msg: ChannelMessage) => void
   onJumpTo?: (messageId: number) => void
+  onPollUpdated?: (messageId: number, poll: ChatPollView) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const holdRef = useRef<number | null>(null)
   const messageId = Number(msg.id ?? msg.messageId)
   const canReply = Number.isFinite(messageId) && messageId > 0
-  const body = msg.body || (msg.cardSlug ? `🃏 ${msg.cardSlug}` : '')
+  const poll = msg.poll ?? null
+  const body =
+    poll != null
+      ? null
+      : msg.body || (msg.cardSlug ? `🃏 ${msg.cardSlug}` : '')
   const reactions = msg.reactions ?? []
   const myReaction = reactions.find((r) => meId != null && r.userIds.includes(meId))?.emoji
   const time = formatChatBubbleTime(msg.createdAt)
@@ -194,6 +202,19 @@ export function MessageBubble({
               )}
             </a>
           )}
+          {poll && (
+            <div
+              className="mb-1"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ChatPollCard
+                poll={poll}
+                onUpdated={(next) => {
+                  if (messageId) onPollUpdated?.(messageId, next)
+                }}
+              />
+            </div>
+          )}
           {(body || time || showReceipt) && (
             <div className="min-w-0 max-w-full">
               {body ? (
@@ -222,7 +243,8 @@ export function MessageBubble({
                 key={r.emoji}
                 reaction={r}
                 active={meId != null && r.userIds.includes(meId)}
-                onClick={() => handleReact(r.emoji)}
+                meId={meId}
+                onToggle={() => handleReact(r.emoji)}
               />
             ))}
           </div>
@@ -321,29 +343,79 @@ function ReceiptTicks({ status }: { status: MessageReceiptStatus }) {
   )
 }
 
+function reactionNamesLabel(reaction: MessageReactionSummary, meId: number | null): string {
+  const names =
+    reaction.users?.map((u) =>
+      meId != null && u.id === meId ? 'Vous' : u.display_name,
+    ) ?? reaction.userIds.map((id) => (meId != null && id === meId ? 'Vous' : `Membre #${id}`))
+  return names.join(', ')
+}
+
 function ReactionChip({
   reaction,
   active,
-  onClick,
+  meId,
+  onToggle,
 }: {
   reaction: MessageReactionSummary
   active: boolean
-  onClick: () => void
+  meId: number | null
+  onToggle: () => void
 }) {
+  const [open, setOpen] = useState(false)
   const count = reaction.userIds.length
+  const namesLabel = reactionNamesLabel(reaction, meId)
+  const people =
+    reaction.users ??
+    reaction.userIds.map((id) => ({
+      id,
+      display_name: meId != null && id === meId ? 'Vous' : `Membre #${id}`,
+    }))
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-sm border transition-colors ${
-        active
-          ? 'border-violet-500/50 bg-violet-600/25 text-slate-100'
-          : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-slate-600'
-      }`}
-      title={`${count} réaction${count > 1 ? 's' : ''}`}
-    >
-      <span aria-hidden>{reaction.emoji}</span>
-      {count > 1 && <span className="text-[10px] text-slate-400">{count}</span>}
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-sm border transition-colors ${
+          active
+            ? 'border-violet-500/50 bg-violet-600/25 text-slate-100'
+            : 'border-slate-700 bg-slate-900/80 text-slate-200 hover:border-slate-600'
+        }`}
+        title={namesLabel}
+        aria-label={`${reaction.emoji} : ${namesLabel}`}
+        aria-expanded={open}
+      >
+        <span aria-hidden>{reaction.emoji}</span>
+        {count > 1 && <span className="text-[10px] text-slate-400">{count}</span>}
+      </button>
+      {open && (
+        <div
+          role="dialog"
+          className="absolute z-20 bottom-full left-0 mb-1 min-w-[10rem] max-w-[16rem] rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 shadow-xl"
+        >
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+            {reaction.emoji} · {count} réaction{count > 1 ? 's' : ''}
+          </p>
+          <ul className="space-y-1 max-h-40 overflow-y-auto">
+            {people.map((u) => (
+              <li key={u.id} className="text-xs text-slate-200 truncate">
+                {meId != null && u.id === meId ? 'Vous' : u.display_name}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false)
+              onToggle()
+            }}
+            className="mt-2 w-full text-[11px] rounded-lg border border-slate-700 px-2 py-1 text-slate-300 hover:bg-slate-900"
+          >
+            {active ? 'Retirer ma réaction' : 'Réagir aussi'}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }

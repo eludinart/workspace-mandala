@@ -1,7 +1,7 @@
 /**
  * Persistance billing Mandala (customers, subscriptions, Mandala Pro).
  */
-import type { RowDataPacket } from 'mysql2'
+import type { ResultSetHeader, RowDataPacket } from 'mysql2'
 import { getPool, isDbConfigured, table } from '@/lib/db'
 import type { PlanFamily } from '@/lib/billing-catalog'
 import {
@@ -413,6 +413,151 @@ export async function getActiveProSubscription(
     [userId]
   )
   return rows[0] ? mapSub(rows[0]) : null
+}
+
+/** Clé synthétique abo Pro cadeau / forçage admin (hors Stripe). */
+export function adminCompProSubscriptionKey(userId: number): string {
+  return `comp:pro:${userId}`.slice(0, 255)
+}
+
+/**
+ * Cadeau / forçage admin Pro : abo `comp` + profil `verified`.
+ * Ré-entrant. Ne touche pas aux abos Stripe/Play.
+ */
+export async function grantComplimentaryProSubscription(opts: {
+  userId: number
+  months?: number
+  planId?: string
+  reviewerId: number
+  endorsementCommunityId?: number | null
+  tagline?: string | null
+}): Promise<{ subscription: BillingSubRow | null; profile: ProProfileRow }> {
+  const months = Math.max(1, Math.min(36, Math.floor(opts.months ?? 12)))
+  if (!isDbConfigured() || opts.userId <= 0) {
+    throw new Error('Paramètres invalides')
+  }
+  await ensureBillingTables()
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  const tP = table('mandala_pro_profiles')
+  const compKey = adminCompProSubscriptionKey(opts.userId)
+  const planId = (opts.planId || 'pro_yearly').slice(0, 40)
+
+  const [existing] = await pool.execute<RowDataPacket[]>(
+    `SELECT current_period_end FROM ${t}
+     WHERE stripe_subscription_id = ? LIMIT 1`,
+    [compKey]
+  )
+  const prevEnd = existing[0]?.current_period_end
+    ? new Date(existing[0].current_period_end)
+    : null
+  const base = prevEnd && prevEnd.getTime() > Date.now() ? prevEnd : new Date()
+  const periodEnd = new Date(base)
+  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + months)
+
+  await pool.execute(
+    `INSERT INTO ${t}
+      (user_id, community_id, plan_family, plan_id, status, stripe_subscription_id,
+       stripe_price_id, payment_provider, current_period_end, cancel_at_period_end,
+       comp_warn_for_end, comp_grace_for_end)
+     VALUES (?, NULL, 'pro', ?, 'trialing', ?, NULL, 'comp', ?, 1, NULL, NULL)
+     ON DUPLICATE KEY UPDATE
+       user_id = VALUES(user_id),
+       community_id = NULL,
+       plan_family = 'pro',
+       plan_id = VALUES(plan_id),
+       status = 'trialing',
+       payment_provider = 'comp',
+       current_period_end = VALUES(current_period_end),
+       cancel_at_period_end = 1,
+       comp_warn_for_end = NULL,
+       comp_grace_for_end = NULL`,
+    [opts.userId, planId, compKey, periodEnd]
+  )
+
+  const tagline = (opts.tagline ?? '').trim().slice(0, 200) || 'Mandala Pro (admin test)'
+  const endorsementId =
+    opts.endorsementCommunityId != null && opts.endorsementCommunityId > 0
+      ? opts.endorsementCommunityId
+      : null
+  await pool.execute(
+    `INSERT INTO ${tP}
+      (user_id, verification, tagline, submitted_at, reviewed_at, reviewer_id,
+       endorsement_community_id, reject_reason)
+     VALUES (?, 'verified', ?, NOW(), NOW(), ?, ?, NULL)
+     ON DUPLICATE KEY UPDATE
+       verification = 'verified',
+       tagline = COALESCE(NULLIF(VALUES(tagline), ''), tagline),
+       reviewed_at = NOW(),
+       reviewer_id = VALUES(reviewer_id),
+       endorsement_community_id = COALESCE(VALUES(endorsement_community_id), endorsement_community_id),
+       reject_reason = NULL`,
+    [opts.userId, tagline, opts.reviewerId, endorsementId]
+  )
+
+  const profile = await getProProfile(opts.userId)
+  if (!profile) throw new Error('Profil Mandala Pro introuvable après forçage')
+  return { subscription: await getActiveProSubscription(opts.userId), profile }
+}
+
+/**
+ * Retire la visibilité Pro forcée (abo `comp:pro:{userId}` + verification → none).
+ * Ne touche pas Stripe/Play.
+ */
+export async function revokeAdminForcedProVisibility(opts: {
+  userId: number
+  reviewerId: number
+}): Promise<{ profile: ProProfileRow | null; revokedComp: boolean }> {
+  if (!isDbConfigured() || opts.userId <= 0) {
+    throw new Error('Paramètres invalides')
+  }
+  await ensureBillingTables()
+  const pool = getPool()
+  const t = table('mandala_billing_subscriptions')
+  const tP = table('mandala_pro_profiles')
+  const compKey = adminCompProSubscriptionKey(opts.userId)
+
+  const [res] = await pool.execute<ResultSetHeader>(
+    `UPDATE ${t}
+     SET status = 'canceled',
+         current_period_end = UTC_TIMESTAMP(),
+         cancel_at_period_end = 1,
+         comp_grace_for_end = NULL,
+         comp_warn_for_end = NULL
+     WHERE stripe_subscription_id = ?
+       AND payment_provider = 'comp'
+       AND plan_family = 'pro'`,
+    [compKey]
+  )
+  const revokedComp = Number(res.affectedRows ?? 0) > 0
+
+  await pool.execute(
+    `UPDATE ${tP}
+     SET verification = 'none',
+         reviewed_at = NOW(),
+         reviewer_id = ?,
+         endorsement_community_id = NULL,
+         reject_reason = 'Retrait forçage admin (test)'
+     WHERE user_id = ?`,
+    [opts.reviewerId, opts.userId]
+  )
+
+  return { profile: await getProProfile(opts.userId), revokedComp }
+}
+
+export type AdminProVisibilitySnapshot = {
+  verification: ProVerification | 'none'
+  pro_boost: boolean
+  pro_verified: boolean
+  endorsement_place_name: string | null
+  tagline: string | null
+  subscription: {
+    plan_id: string
+    status: string
+    payment_provider: string
+    current_period_end: string | null
+    is_admin_comp: boolean
+  } | null
 }
 
 export type CompPlaceSubRow = BillingSubRow & {

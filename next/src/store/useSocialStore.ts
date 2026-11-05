@@ -22,6 +22,7 @@ export type ChannelMessage = {
   senderAvatarEmoji?: string | null
   reactions?: MessageReactionSummary[]
   replyTo?: MessageReplyQuote | null
+  poll?: import('@/lib/db-chat-polls').ChatPollView | null
 }
 
 export interface LisiereData {

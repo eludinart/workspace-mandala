@@ -5,7 +5,11 @@
 import type { RowDataPacket } from 'mysql2'
 import { ensureOnce, exec, getPool, table } from './db'
 import { cacheDelPrefix } from './server-cache'
-import { isAllowedReactionEmoji, type MessageReactionSummary } from './message-reactions'
+import {
+  isAllowedReactionEmoji,
+  type MessageReactionSummary,
+  type MessageReactionUser,
+} from './message-reactions'
 import { messageReplyExcerpt, type MessageReplyQuote } from './chat-attachments'
 import { isAvatarImageUrl } from './user-avatar'
 import { removeUpload } from './resource-files'
@@ -446,7 +450,7 @@ export async function syncPlaceCoreChannel(communityId: number): Promise<void> {
   }
 }
 
-async function assertChannelAccess(
+export async function assertChannelAccess(
   pool: Awaited<ReturnType<typeof getPool>>,
   channelId: number,
   userId: number
@@ -1333,6 +1337,43 @@ function aggregateReactions(
   return out
 }
 
+async function resolveReactionDisplayNames(
+  pool: ReturnType<typeof getPool>,
+  userIds: number[],
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const unique = [...new Set(userIds.filter((id) => id > 0))]
+  if (!unique.length) return out
+  const tUsers = table('users')
+  const tMeta = table('usermeta')
+  const placeholders = unique.map(() => '?').join(', ')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT u.ID AS id,
+            COALESCE(p.meta_value, u.display_name, CONCAT('user_', u.ID)) AS display_name
+     FROM ${tUsers} u
+     LEFT JOIN ${tMeta} p ON p.user_id = u.ID AND p.meta_key = 'mdl_pseudo'
+     WHERE u.ID IN (${placeholders})`,
+    unique,
+  )
+  for (const r of rows ?? []) {
+    out.set(Number(r.id), String(r.display_name || `user_${r.id}`))
+  }
+  return out
+}
+
+function attachReactionUsers(
+  reactions: MessageReactionSummary[],
+  names: Map<number, string>,
+): MessageReactionSummary[] {
+  return reactions.map((r) => {
+    const users: MessageReactionUser[] = r.userIds.map((id) => ({
+      id,
+      display_name: names.get(id) || `Membre #${id}`,
+    }))
+    return { ...r, users }
+  })
+}
+
 export async function getReactionsForMessageIds(
   messageIds: number[],
 ): Promise<Record<number, MessageReactionSummary[]>> {
@@ -1345,7 +1386,17 @@ export async function getReactionsForMessageIds(
     `SELECT message_id, user_id, emoji FROM ${t} WHERE message_id IN (${placeholders})`,
     messageIds,
   )
-  return aggregateReactions(rows ?? [])
+  const aggregated = aggregateReactions(rows ?? [])
+  const allIds: number[] = []
+  for (const list of Object.values(aggregated)) {
+    for (const r of list) allIds.push(...r.userIds)
+  }
+  const names = await resolveReactionDisplayNames(pool, allIds)
+  const out: Record<number, MessageReactionSummary[]> = {}
+  for (const [messageId, list] of Object.entries(aggregated)) {
+    out[Number(messageId)] = attachReactionUsers(list, names)
+  }
+  return out
 }
 
 export async function toggleMessageReaction(
@@ -1407,6 +1458,8 @@ export type ChannelMessage = {
   senderAvatarEmoji?: string | null
   reactions?: MessageReactionSummary[]
   replyTo?: MessageReplyQuote | null
+  /** Présent si cardSlug = poll:{id} */
+  poll?: import('./db-chat-polls').ChatPollView | null
 }
 
 const MESSAGE_COLUMNS = `id, sender_id, body, card_slug, temperature, created_at,
@@ -1477,6 +1530,11 @@ export async function getChannelMessages(
   const byId = new Map(messages.map((m) => [m.id, m]))
   const ids = messages.map((m) => m.id)
   const reactionsMap = await getReactionsForMessageIds(ids)
+  const { getPollsForCardSlugs, parsePollIdFromCardSlug } = await import('./db-chat-polls')
+  const pollsById = await getPollsForCardSlugs(
+    messages.map((m) => m.cardSlug),
+    uid
+  )
   return messages.map((m) => {
     const parent = m.replyToId ? byId.get(m.replyToId) : undefined
     const replyTo: MessageReplyQuote | null = m.replyToId
@@ -1494,10 +1552,12 @@ export async function getChannelMessages(
           }
         : { id: m.replyToId, senderName: '', excerpt: '', missing: true }
       : null
+    const pollId = parsePollIdFromCardSlug(m.cardSlug)
     return {
       ...m,
       reactions: reactionsMap[m.id] ?? [],
       replyTo,
+      poll: pollId != null ? pollsById.get(pollId) ?? null : null,
     }
   })
 }

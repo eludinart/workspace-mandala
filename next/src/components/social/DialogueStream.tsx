@@ -7,6 +7,8 @@ import { socialApi } from '@/api/social'
 import { GroupParticipantsPreview } from './GroupParticipantsPreview'
 import { AddGroupMembersPanel } from './AddGroupMembersPanel'
 import { MessageBubble } from './MessageBubble'
+import { CreatePollSheet } from './CreatePollSheet'
+import type { ChatPollView } from '@/lib/db-chat-polls'
 import { UserAvatar } from '@/components/UserAvatar'
 import type { CommunityMember } from '@/api/members'
 import { chatDayKey, formatChatDayLabel } from '@/lib/format-datetime'
@@ -98,6 +100,8 @@ export function DialogueStream({
   const [sendError, setSendError] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [filePreview, setFilePreview] = useState<string | null>(null)
+  const [pollOpen, setPollOpen] = useState(false)
+  const [pollBusy, setPollBusy] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
   const [pendingMessages, setPendingMessages] = useState<ChannelMessage[]>([])
@@ -343,6 +347,61 @@ export function DialogueStream({
     window.setTimeout(() => {
       setHighlightId((current) => (current === id ? null : current))
     }, 1400)
+  }
+
+  const patchPollOnMessage = useCallback(
+    (messageId: number, poll: ChatPollView) => {
+      useSocialStore.setState((s) => {
+        const key = String(channelId)
+        const list = s.messagesByChannel[key] || []
+        return {
+          messagesByChannel: {
+            ...s.messagesByChannel,
+            [key]: list.map((m) =>
+              Number(m.id ?? m.messageId) === messageId ? { ...m, poll } : m
+            ),
+          },
+        }
+      })
+    },
+    [channelId]
+  )
+
+  const handleCreatePoll = async (payload: { question: string; options: string[] }) => {
+    setPollBusy(true)
+    setSendError(null)
+    try {
+      const res = await socialApi.createPoll({
+        channelId,
+        question: payload.question,
+        options: payload.options,
+      })
+      const msg = res.message as ChannelMessage
+      useSocialStore.setState((s) => {
+        const key = String(channelId)
+        const list = s.messagesByChannel[key] || []
+        return {
+          messagesByChannel: {
+            ...s.messagesByChannel,
+            [key]: [
+              ...list,
+              {
+                ...msg,
+                id: Number(msg.id ?? msg.messageId),
+                poll: res.poll,
+                reactions: [],
+              },
+            ],
+          },
+        }
+      })
+      requestAnimationFrame(() => {
+        const el = listRef.current
+        if (el) el.scrollTop = el.scrollHeight
+      })
+    } finally {
+      setPollBusy(false)
+    }
   }
 
   const handleSendText = async () => {
@@ -830,11 +889,19 @@ export function DialogueStream({
                 onReact={handleReact}
                 onReply={startReply}
                 onJumpTo={jumpToMessage}
+                onPollUpdated={patchPollOnMessage}
               />
             </div>
           )
         })}
       </div>
+
+      <CreatePollSheet
+        open={pollOpen}
+        busy={pollBusy}
+        onClose={() => setPollOpen(false)}
+        onSubmit={handleCreatePoll}
+      />
 
       <div className="m-chat-composer min-w-0 border-t border-slate-800 bg-slate-950/95 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] space-y-2">
         {replyDraft && (
@@ -895,6 +962,18 @@ export function DialogueStream({
           >
             📎
           </button>
+          {isGroup && (
+            <button
+              type="button"
+              onClick={() => setPollOpen(true)}
+              disabled={sending || pollBusy}
+              className="shrink-0 h-11 w-11 rounded-full border border-slate-700 text-lg text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+              aria-label="Créer un sondage"
+              title="Sondage"
+            >
+              📊
+            </button>
+          )}
           <textarea
             ref={messageInputRef}
             value={input}
