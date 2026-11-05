@@ -296,6 +296,7 @@ export function BillingOffersPage({ onNavigate, communityId }: Props) {
           </p>
           <ul className="text-sm text-slate-300 space-y-1.5 list-disc pl-4">
             <li>Catalogue & carte en avant</li>
+            <li>Plafond de 40 membres levé (illimité)</li>
             <li>Tous les membres couverts</li>
             <li>Outils d’organisation du lieu</li>
           </ul>

@@ -23,11 +23,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const body = await req.json().catch(() => ({}))
     const userId = Number(body.user_id ?? 0)
     if (!userId) return NextResponse.json({ error: 'user_id requis' }, { status: 400 })
-    const result = await addMemberToCommunityByManager(communityId, userId)
+    const result = await addMemberToCommunityByManager(communityId, userId, {
+      isAppAdmin: isAppSiteManager,
+    })
     return NextResponse.json({ ok: true, ...result })
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string }
-    return NextResponse.json({ error: e.message ?? 'Erreur' }, { status: e.status ?? 400 })
+    const e = err as { status?: number; message?: string; code?: string }
+    return NextResponse.json(
+      { error: e.message ?? 'Erreur', ...(e.code ? { code: e.code } : {}) },
+      { status: e.status ?? 400 }
+    )
   }
 }
 

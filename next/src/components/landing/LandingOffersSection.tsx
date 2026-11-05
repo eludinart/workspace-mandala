@@ -35,7 +35,7 @@ const FREE_FEATURES = [
 const PLACE_FEATURES = [
   'Badge lieu vérifié / listé',
   'Présence catalogue et carte publique',
-  'Mise en avant possible',
+  'Plafond de 40 membres levé (illimité)',
   'Membres couverts sans abo individuel',
 ] as const
 
@@ -79,9 +79,9 @@ export function LandingOffersSection() {
           <p className="m-landing-eyebrow">Offres</p>
           <h2 className="m-landing-offers-title">Soutenir les lieux et les pratiques</h2>
           <p className="m-landing-offers-lede">
-            La vie du lieu — mur, messages, événements — reste ouverte à tous les membres. Les
-            offres ci-dessous aident les lieux et les pratiques à être visibles dans le Mandala
-            public.
+            La vie du lieu — mur, messages, événements — reste ouverte à tous les membres. Sans
+            offre Lieu, un lieu peut accueillir jusqu’à 40 membres ; au-delà, l’abonnement lève le
+            plafond et active la carte publique.
           </p>
         </header>
 
@@ -90,8 +90,8 @@ export function LandingOffersSection() {
             <p className="m-landing-eyebrow">Gratuit · pour toujours</p>
             <h3 className="m-landing-offer-name">S’inscrire, c’est déjà beaucoup</h3>
             <p className="m-landing-offer-desc">
-              L’abonnement n’est pas requis pour vivre un lieu. Dès l’inscription, chaque membre
-              dispose du cœur de Mandala — sans carte bancaire.
+              L’abonnement n’est pas requis pour vivre un lieu (jusqu’à 40 membres). Dès
+              l’inscription, chaque membre dispose du cœur de Mandala — sans carte bancaire.
             </p>
           </div>
           <ul className="m-landing-offer-grid">
@@ -103,8 +103,9 @@ export function LandingOffersSection() {
             ))}
           </ul>
           <p className="m-landing-offer-note">
-            Les offres Lieu et Mandala Pro ci-dessous ajoutent de la visibilité publique et des
-            mises en avant — elles ne débloquent pas la vie interne du lieu.
+            Mur, messages et événements restent libres pour les membres déjà présents. L’offre
+            Lieu lève le plafond de 40 et ajoute la présence publique ; Mandala Pro met en avant
+            une pratique.
           </p>
           <div className="m-landing-offer-cta">
             <Link href={ctaHref} className="m-landing-btn">
@@ -119,7 +120,8 @@ export function LandingOffersSection() {
               <p className="m-landing-eyebrow">Visibilité lieu</p>
               <h3 className="m-landing-offer-name">Offre Lieu</h3>
               <p className="m-landing-offer-desc">
-                Pour qui fait vivre un lieu et souhaite le faire figurer dans le Mandala public.
+                Pour qui fait grandir un lieu au-delà de 40 membres et souhaite le faire figurer
+                dans le Mandala public.
               </p>
             </div>
             <ul className="m-landing-offer-list">
@@ -128,8 +130,8 @@ export function LandingOffersSection() {
               ))}
             </ul>
             <p className="m-landing-offer-note">
-              Sans cette offre, le lieu vit pour ses membres ; il n’apparaît pas comme présence
-              officielle dans le Mandala public.
+              Sans cette offre : jusqu’à 40 membres, vie interne ouverte ; au plafond, les nouvelles
+              adhésions sont bloquées. Pas de présence officielle sur la carte publique.
             </p>
             <div className="m-landing-offer-prices" aria-live="polite">
               {loading ? (

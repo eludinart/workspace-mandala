@@ -25,6 +25,7 @@ import { MemberCityPrompt } from '@/components/members/MemberCityPrompt'
 import { MembersCitiesMap } from '@/components/members/MembersCitiesMap'
 import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
+import { PlaceMemberCapBanner } from '@/components/billing/PlaceMemberCapBanner'
 
 type MemberCardData = CommunityMember | MemberDirectoryEntry
 
@@ -337,6 +338,10 @@ export function MembersPage({
           </div>
         </details>
       )}
+
+      {organisationMode && canManageActiveCommunity && active?.id ? (
+        <PlaceMemberCapBanner communityId={active.id} />
+      ) : null}
 
       {organisationMode && canManageActiveCommunity && (
         <p className="text-sm text-slate-400 rounded-xl border border-sky-900/40 bg-sky-950/20 px-4 py-3">

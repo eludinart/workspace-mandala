@@ -2,8 +2,15 @@
  * Résolution d’accès Lieu / Mandala Pro.
  */
 import {
+  PLACE_FREE_MEMBER_CAP,
+  PLACE_FREE_MEMBER_SOFT_AT,
+  PLACE_MEMBER_CAP_REACHED_CODE,
+  PLACE_MEMBER_CAP_REACHED_MESSAGE,
+  canAcceptNewPlaceMember,
   canAccessFeature,
+  placeMemberCapState,
   type EntitlementFlags,
+  type PlaceMemberCapState,
 } from '@/lib/billing-entitlements'
 import { isBillingPublic } from '@/lib/billing-door'
 import {
@@ -25,6 +32,14 @@ export type SubStatus =
   | 'canceled'
   | 'unpaid'
 
+export type PlaceMemberCapInfo = {
+  enforced: boolean
+  limit: number | null
+  softAt: number | null
+  count: number
+  state: PlaceMemberCapState
+}
+
 export type PlaceBilling = {
   communityId: number
   status: SubStatus
@@ -33,6 +48,27 @@ export type PlaceBilling = {
   coveredMemberCount: number
   featured: boolean
   partner: boolean
+  memberCap: PlaceMemberCapInfo
+}
+
+function buildMemberCapInfo(opts: {
+  placeActive: boolean
+  memberCount: number
+}): PlaceMemberCapInfo {
+  const billingPublic = isBillingPublic()
+  const state = placeMemberCapState({
+    billingPublic,
+    placeActive: opts.placeActive,
+    memberCount: opts.memberCount,
+  })
+  const enforced = billingPublic && !opts.placeActive
+  return {
+    enforced,
+    limit: enforced ? PLACE_FREE_MEMBER_CAP : null,
+    softAt: enforced ? PLACE_FREE_MEMBER_SOFT_AT : null,
+    count: opts.memberCount,
+    state,
+  }
 }
 
 export type ProBilling = {
@@ -79,6 +115,10 @@ export async function resolvePlaceBilling(communityId: number): Promise<PlaceBil
       coveredMemberCount,
       featured: true,
       partner: true,
+      memberCap: buildMemberCapInfo({
+        placeActive: true,
+        memberCount: coveredMemberCount,
+      }),
     }
   }
 
@@ -96,6 +136,10 @@ export async function resolvePlaceBilling(communityId: number): Promise<PlaceBil
     coveredMemberCount,
     featured: active || Boolean(flags?.billing_featured),
     partner,
+    memberCap: buildMemberCapInfo({
+      placeActive: active,
+      memberCount: coveredMemberCount,
+    }),
   }
 }
 
@@ -178,4 +222,34 @@ export async function assertCanListPlacePublic(
       { status: 403 }
     )
   }
+}
+
+/**
+ * Gate freemium : refuse une nouvelle adhésion si le lieu non abonné est au plafond.
+ * Porte billing fermée → no-op. Offre Lieu / partner / admin → illimité.
+ * Ne retire jamais de membres existants.
+ */
+export async function assertCanAcceptNewPlaceMember(
+  communityId: number,
+  isAppAdmin: boolean
+): Promise<void> {
+  if (isAppAdmin) return
+  if (!isBillingPublic()) return
+  const place = await resolvePlaceBilling(communityId)
+  const placeActive =
+    place.partner || place.status === 'active' || place.status === 'trialing'
+  if (
+    canAcceptNewPlaceMember({
+      billingPublic: true,
+      placeActive,
+      isAppAdmin: false,
+      memberCount: place.coveredMemberCount,
+    })
+  ) {
+    return
+  }
+  throw Object.assign(new Error(PLACE_MEMBER_CAP_REACHED_MESSAGE), {
+    status: 403,
+    code: PLACE_MEMBER_CAP_REACHED_CODE,
+  })
 }

@@ -18,7 +18,10 @@ import {
 import { weatherFromMetaRow } from './db-weather'
 import { WEATHER_META_KEY } from './weather-status'
 import { geocodeAddress } from './geocode'
-import { assertCanListPlacePublic } from './billing-access'
+import {
+  assertCanAcceptNewPlaceMember,
+  assertCanListPlacePublic,
+} from './billing-access'
 import { getProBoostFlagsForUsers } from './db-billing'
 
 export type CommunityRecord = {
@@ -807,6 +810,7 @@ export async function joinCommunity(params: {
   userId: number
   slug: string
   inviteCode?: string | null
+  isAppAdmin?: boolean
 }): Promise<CommunityRecord & { role: CommunityRole }> {
   const slug = params.slug.trim().toLowerCase()
   if (!slug) throw Object.assign(new Error('Slug requis'), { status: 400 })
@@ -843,6 +847,8 @@ export async function joinCommunity(params: {
       throw Object.assign(new Error('Code d’invitation requis ou incorrect'), { status: 403 })
     }
   }
+
+  await assertCanAcceptNewPlaceMember(community.id, Boolean(params.isAppAdmin))
 
   await pool.execute(
     `INSERT INTO ${tM} (community_id, user_id, role) VALUES (?, ?, 'member')
@@ -1309,7 +1315,8 @@ export async function setCommunityMemberCircle(
 /** Ajoute un compte Mandala déjà existant au lieu (gestionnaire), sans code d’invitation. */
 export async function addMemberToCommunityByManager(
   communityId: number,
-  targetUserId: number
+  targetUserId: number,
+  opts?: { isAppAdmin?: boolean }
 ): Promise<{ already_member: boolean }> {
   await ensureCommunitiesTables()
   const pool = getPool()
@@ -1325,6 +1332,7 @@ export async function addMemberToCommunityByManager(
     [communityId, targetUserId]
   )
   if (existing[0]) return { already_member: true }
+  await assertCanAcceptNewPlaceMember(communityId, Boolean(opts?.isAppAdmin))
   await pool.execute(
     `INSERT INTO ${tM} (community_id, user_id, role) VALUES (?, ?, 'member')`,
     [communityId, targetUserId]

@@ -15,6 +15,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { useManagedPlaces } from '@/hooks/useManagedPlaces'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import { ApiError } from '@/lib/api-client'
+import { PlaceMemberCapBanner } from '@/components/billing/PlaceMemberCapBanner'
 
 export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { active, refresh: refreshCommunities } = useCommunity()
@@ -150,6 +151,8 @@ export function PlaceInvitesPage({ onNavigate }: { onNavigate?: MandalaNavigate 
           <span className="text-slate-200">{active.name}</span> — même s’il n’apparaît pas en public.
         </p>
       </header>
+
+      {communityId ? <PlaceMemberCapBanner communityId={communityId} /> : null}
 
       {msg && (
         <p className={`text-sm rounded-lg px-3 py-2 ${msgOk ? 'bg-emerald-950/40 text-emerald-300' : 'bg-amber-950/30 text-amber-200'}`}>

@@ -36,7 +36,10 @@ export async function POST(req: NextRequest) {
     const community = await joinCommunity({ userId: uid, slug, inviteCode })
     return NextResponse.json({ community })
   } catch (err: unknown) {
-    const e = err as { status?: number; message?: string }
-    return NextResponse.json({ error: e.message ?? 'Erreur' }, { status: e.status ?? 400 })
+    const e = err as { status?: number; message?: string; code?: string }
+    return NextResponse.json(
+      { error: e.message ?? 'Erreur', ...(e.code ? { code: e.code } : {}) },
+      { status: e.status ?? 400 }
+    )
   }
 }

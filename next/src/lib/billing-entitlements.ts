@@ -12,6 +12,17 @@ export type FeatureKey =
   | 'pro_contact_cta'
   | 'billing_cta'
 
+/** Plafond freemium lieux non abonnés (stock permanent). Spec 2026-11-05. */
+export const PLACE_FREE_MEMBER_CAP = 40
+/** Soft warning à 80 % du plafond. */
+export const PLACE_FREE_MEMBER_SOFT_AT = 32
+export const PLACE_MEMBER_CAP_REACHED_CODE = 'place_member_cap_reached'
+
+export const PLACE_MEMBER_CAP_REACHED_MESSAGE =
+  'Ce lieu a atteint la limite de 40 membres en gratuit. Souscrivez à l’offre Lieu pour accueillir sans plafond et figurer sur la carte publique.'
+
+export type PlaceMemberCapState = 'ok' | 'soft' | 'hard'
+
 export type EntitlementFlags = {
   isAppAdmin: boolean
   billingPublic: boolean
@@ -19,6 +30,35 @@ export type EntitlementFlags = {
   proActive: boolean
   proVerified: boolean
   memberCovered: boolean
+}
+
+export function placeMemberCapState(opts: {
+  billingPublic: boolean
+  placeActive: boolean
+  memberCount: number
+}): PlaceMemberCapState {
+  if (!opts.billingPublic || opts.placeActive) return 'ok'
+  const n = Math.max(0, Math.floor(Number(opts.memberCount) || 0))
+  if (n >= PLACE_FREE_MEMBER_CAP) return 'hard'
+  if (n >= PLACE_FREE_MEMBER_SOFT_AT) return 'soft'
+  return 'ok'
+}
+
+/** true si une nouvelle adhésion est autorisée (pas encore au plafond). */
+export function canAcceptNewPlaceMember(opts: {
+  billingPublic: boolean
+  placeActive: boolean
+  isAppAdmin: boolean
+  memberCount: number
+}): boolean {
+  if (opts.isAppAdmin) return true
+  return (
+    placeMemberCapState({
+      billingPublic: opts.billingPublic,
+      placeActive: opts.placeActive,
+      memberCount: opts.memberCount,
+    }) !== 'hard'
+  )
 }
 
 export function canAccessFeature(

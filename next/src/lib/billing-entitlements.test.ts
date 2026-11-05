@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
+  PLACE_FREE_MEMBER_CAP,
+  PLACE_FREE_MEMBER_SOFT_AT,
+  PLACE_MEMBER_CAP_REACHED_CODE,
+  canAcceptNewPlaceMember,
   canAccessFeature,
   compareSkillBoost,
+  placeMemberCapState,
   type EntitlementFlags,
 } from './billing-entitlements'
 
@@ -82,6 +87,133 @@ describe('compareSkillBoost', () => {
     assert.deepEqual(
       sorted.map((x) => x.label),
       ['Bob', 'Zoé', 'Alice']
+    )
+  })
+})
+
+describe('place member freemium cap', () => {
+  it('exposes 40 cap and soft at 32', () => {
+    assert.equal(PLACE_FREE_MEMBER_CAP, 40)
+    assert.equal(PLACE_FREE_MEMBER_SOFT_AT, 32)
+    assert.equal(PLACE_MEMBER_CAP_REACHED_CODE, 'place_member_cap_reached')
+  })
+
+  it('is ok under soft threshold when billing public and unpaid', () => {
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: false,
+        memberCount: 31,
+      }),
+      'ok'
+    )
+  })
+
+  it('is soft from 32 to 39 when unpaid', () => {
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: false,
+        memberCount: 32,
+      }),
+      'soft'
+    )
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: false,
+        memberCount: 39,
+      }),
+      'soft'
+    )
+  })
+
+  it('is hard at 40+ when unpaid', () => {
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: false,
+        memberCount: 40,
+      }),
+      'hard'
+    )
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: false,
+        memberCount: 55,
+      }),
+      'hard'
+    )
+  })
+
+  it('skips cap when billing door closed or place active', () => {
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: false,
+        placeActive: false,
+        memberCount: 99,
+      }),
+      'ok'
+    )
+    assert.equal(
+      placeMemberCapState({
+        billingPublic: true,
+        placeActive: true,
+        memberCount: 99,
+      }),
+      'ok'
+    )
+  })
+
+  it('allows 40th member then blocks 41st when unpaid', () => {
+    assert.equal(
+      canAcceptNewPlaceMember({
+        billingPublic: true,
+        placeActive: false,
+        isAppAdmin: false,
+        memberCount: 39,
+      }),
+      true
+    )
+    assert.equal(
+      canAcceptNewPlaceMember({
+        billingPublic: true,
+        placeActive: false,
+        isAppAdmin: false,
+        memberCount: 40,
+      }),
+      false
+    )
+  })
+
+  it('allows join when place paid, door closed, or app admin', () => {
+    assert.equal(
+      canAcceptNewPlaceMember({
+        billingPublic: true,
+        placeActive: true,
+        isAppAdmin: false,
+        memberCount: 200,
+      }),
+      true
+    )
+    assert.equal(
+      canAcceptNewPlaceMember({
+        billingPublic: false,
+        placeActive: false,
+        isAppAdmin: false,
+        memberCount: 200,
+      }),
+      true
+    )
+    assert.equal(
+      canAcceptNewPlaceMember({
+        billingPublic: true,
+        placeActive: false,
+        isAppAdmin: true,
+        memberCount: 200,
+      }),
+      true
     )
   })
 })

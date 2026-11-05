@@ -28,7 +28,7 @@ const PROMISES: PromiseDef[] = [
       'Fiche lieu : présentation, adresse, lien profil',
       'Charte à accepter avant d’intégrer l’espace',
       'Lieux amis (Relier) pour croiser les agendas quand la porte est ouverte',
-      'Offre Lieu pour figurer au catalogue public',
+      'Offre Lieu : plafond 40 levé + catalogue / carte publics',
     ],
     links: [
       { href: '/#lieux', label: 'Voir les lieux' },

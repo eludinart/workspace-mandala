@@ -13,6 +13,8 @@ import {
   type PaymentSurface,
 } from '@/lib/play-distribution-context'
 import { buildCheckoutReturnPath } from '@/lib/checkout-return'
+import { PlaceMemberCapBanner } from '@/components/billing/PlaceMemberCapBanner'
+import type { PlaceMemberCapState } from '@/lib/billing-entitlements'
 
 type PlaceAccess = {
   communityId: number
@@ -24,6 +26,7 @@ type PlaceAccess = {
   partner: boolean
   inGrace: boolean
   graceEndsAt: string | null
+  memberCapState: PlaceMemberCapState
 }
 
 function formatPrice(cents: number, unit: string): string {
@@ -61,6 +64,12 @@ function parsePlace(raw: Record<string, unknown>): PlaceAccess | null {
     (alertGrace ||
       (periodPast && (status === 'active' || status === 'trialing')))
   const graceEndsRaw = raw.graceEndsAt ?? raw.grace_ends_at
+  const capRaw = (raw.memberCap ?? raw.member_cap) as
+    | Record<string, unknown>
+    | undefined
+  const stateRaw = String(capRaw?.state ?? 'ok')
+  const memberCapState: PlaceMemberCapState =
+    stateRaw === 'soft' || stateRaw === 'hard' ? stateRaw : 'ok'
   return {
     communityId,
     status,
@@ -81,6 +90,7 @@ function parsePlace(raw: Record<string, unknown>): PlaceAccess | null {
       graceEndsRaw != null && String(graceEndsRaw).trim()
         ? String(graceEndsRaw)
         : null,
+    memberCapState,
   }
 }
 
@@ -131,11 +141,27 @@ function statusCopy(place: PlaceAccess | null): {
       detail: 'Régularisez l’abonnement pour conserver la présence publique.',
     }
   }
+  if (place.memberCapState === 'hard') {
+    return {
+      label: 'Plafond gratuit atteint',
+      tone: 'bad',
+      detail:
+        '40 membres max sans offre Lieu. Souscrivez pour lever le plafond et figurer sur la carte publique. Les membres déjà présents gardent mur, messages et événements.',
+    }
+  }
+  if (place.memberCapState === 'soft') {
+    return {
+      label: 'Limite gratuite approchée',
+      tone: 'warn',
+      detail:
+        'Votre lieu approche de 40 membres. L’offre Lieu lève le plafond et active la carte publique.',
+    }
+  }
   return {
     label: 'Inactif',
     tone: 'neutral',
     detail:
-      'Sans offre Lieu, le lieu peut vivre pour ses membres mais n’apparaît pas comme présence officielle dans le Mandala public.',
+      'Sans offre Lieu : jusqu’à 40 membres, vie interne ouverte ; pas de présence officielle dans le Mandala public.',
   }
 }
 
@@ -312,9 +338,11 @@ export function PlaceBillingSettingsPanel({
             )}
           </div>
 
+          <PlaceMemberCapBanner communityId={communityId} />
+
           <p className="text-xs text-slate-500 leading-relaxed">
-            L’offre Lieu rend le lieu visible dans le catalogue et la carte publics.
-            Les habitants restent gratuits. Paiement :{' '}
+            L’offre Lieu lève le plafond de 40 membres et rend le lieu visible dans le catalogue
+            et la carte publics. Les habitants restent gratuits. Paiement :{' '}
             {onPlaySurface
               ? playBillingOk
                 ? 'Google Play'
