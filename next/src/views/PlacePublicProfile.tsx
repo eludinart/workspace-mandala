@@ -164,6 +164,13 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
             <ReturnsBlock mode="place" communitySlug={place.slug} />
 
             <section id="competences" className="space-y-4 scroll-mt-20">
+              <div className="space-y-1">
+                <h2 className="text-xl font-semibold">Compétences du lieu</h2>
+                <p className="text-sm text-slate-400">
+                  Les Mandala Pro endossés apparaissent en tête — une mise en avant
+                  liée à ce lieu, pas à la publicité.
+                </p>
+              </div>
               <SkillsDirectory
                 variant="public"
                 lockToPlace
