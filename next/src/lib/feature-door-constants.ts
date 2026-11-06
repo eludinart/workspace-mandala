@@ -6,6 +6,7 @@ export const FEATURE_DOOR_KEYS = [
   'seuil',
   'carte_membres',
   'aide_contextuelle',
+  'mur_engagement',
 ] as const
 
 export type FeatureDoorKey = (typeof FEATURE_DOOR_KEYS)[number]
@@ -23,6 +24,7 @@ export const FEATURE_DOOR_LABELS: Record<FeatureDoorKey, string> = {
   seuil: 'Seuil — écrire à quelqu’un d’un lieu ami',
   carte_membres: 'Carte des membres (ville, points)',
   aide_contextuelle: 'Cartes d’explication',
+  mur_engagement: 'Mur — réactions, commentaires, partage',
 }
 
 /** Texte d’aide admin — ce que la porte contrôle dans l’app. */
@@ -35,6 +37,8 @@ export const FEATURE_DOOR_HELP: Record<FeatureDoorKey, string> = {
     'Affiche la carte des villes des membres du lieu (après qu’ils aient indiqué leur ville et accepté d’y figurer). Prompt une fois + carte sur la page Membres.',
   aide_contextuelle:
     'Cartes d’explication une fois par personne et par écran (accueil, membres, messages, calendrier, annuaire). Bouton « Compris » pour ne plus les revoir.',
+  mur_engagement:
+    'Sous les publications du mur (Agora, annonces, événements) : réagir avec des emoji, commenter, partager un lien ou envoyer dans une conversation. Respecte le mur public pour le partage externe.',
 }
 
 export function isFeatureDoorKey(v: unknown): v is FeatureDoorKey {

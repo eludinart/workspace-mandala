@@ -6,9 +6,11 @@ import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 import { formatMandalaDate } from '@/lib/format-datetime'
 import { UserAvatar } from '@/components/UserAvatar'
 import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
+import { ContentEngagementBar } from '@/components/engagement/ContentEngagementBar'
 
 export function PlaceAnnouncementCard({
   announcement,
+  placeSlug,
   canManage,
   onEdit,
   onDelete,
@@ -17,6 +19,7 @@ export function PlaceAnnouncementCard({
   deleting,
 }: {
   announcement: PlaceAnnouncement
+  placeSlug?: string
   canManage?: boolean
   onEdit?: () => void
   onDelete?: () => void
@@ -125,6 +128,15 @@ export function PlaceAnnouncementCard({
           checked={announcement.wall_public}
           disabled={wallPublicBusy}
           onChange={(next) => void onWallPublicChange(next)}
+        />
+      )}
+      {placeSlug && (
+        <ContentEngagementBar
+          kind="announcement"
+          targetId={announcement.id}
+          placeSlug={placeSlug}
+          wallPublic={announcement.wall_public}
+          title={announcement.title}
         />
       )}
     </article>

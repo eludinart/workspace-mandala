@@ -155,7 +155,7 @@ function canManageEvents(role: CommunityRole, isAppAdmin: boolean): boolean {
   return isAppAdmin || canOrganizeCommunityEvents(role)
 }
 
-async function getEventRow(eventId: number): Promise<EventRecord | null> {
+export async function getEventRow(eventId: number): Promise<EventRecord | null> {
   await ensureEventsTables()
   const pool = getPool()
   const tE = table('events')

@@ -163,6 +163,7 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
             ) : (
               <PlaceAnnouncementCard
                 announcement={a}
+                placeSlug={active?.slug}
                 canManage
                 onEdit={() => {
                   setComposerOpen(false)

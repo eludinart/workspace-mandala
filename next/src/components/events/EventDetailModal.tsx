@@ -9,6 +9,7 @@ import { enumerateEventDays } from '@/lib/event-dates'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 import { formatEventDateRange, phaseBadgeClass, phaseLabel } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
+import { ContentEngagementBar } from '@/components/engagement/ContentEngagementBar'
 
 type EventDetailData = {
   event: {
@@ -21,6 +22,7 @@ type EventDetailData = {
     phase: string
     status: string
     cover_image?: string | null
+    wall_public?: boolean
   }
   staff: Array<{ pseudo: string; role: string }>
   tasks: Array<{ title: string; is_done: boolean }>
@@ -241,6 +243,16 @@ export function EventDetailModal({
                         {event.description}
                       </p>
                     </div>
+                  )}
+
+                  {data.host_slug && (
+                    <ContentEngagementBar
+                      kind="event"
+                      targetId={event.id}
+                      placeSlug={data.host_slug}
+                      wallPublic={!!event.wall_public}
+                      title={event.title}
+                    />
                   )}
 
                   {media.length > 0 && (

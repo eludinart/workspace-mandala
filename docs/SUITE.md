@@ -21,6 +21,7 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 ## À faire
 
 - [x] **Ouvrir un événement ou une ressource.** Une ligne « Les lieux amis peuvent s’inscrire », seulement s’il existe déjà un lien. Même ligne sur une ressource. Sans lien, la ligne n’est pas affichée.
+- [x] **Engagement mur.** Réactions (noms), commentaires plats, partage (deep link + copier / Web Share + envoyer en conversation) sur Agora, annonces, événements. Porte `mur_engagement`. Spec `docs/superpowers/specs/2026-11-06-mur-engagement-design.md`.
 - [ ] **Conversation au premier message.** Bouton « Écrire aux gestionnaires » sur le lieu relié. Le fil apparaît dans Messages au premier envoi, nommé par les deux lieux. Pas de groupe vide créé à l’acceptation.
 - [ ] **Traits sur la carte.** Uniquement les liens du lieu touché, et seulement les liens que la personne a le droit de voir.
 - [ ] **Ville, une fois.** Après la charte, « Vous venez de quelle ville ? », on peut passer. Aussi pour les comptes déjà créés, une seule fois. Les gestionnaires voient des totaux par ville. Derrière la porte `carte_membres` pour l’affichage ; la question elle-même derrière `aide_contextuelle` ou la même porte, fermée par défaut.
@@ -39,6 +40,7 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 
 ## Fait
 
+- [x] **2026-11-06 — Engagement mur.** Réactions + commentaires + partage (deep links `/lieux/…`, mur public respecté) ; porte `mur_engagement` ; schéma `023_mandala_content_engagement.sql`.
 - [x] **2026-11-05 — Freemium lieu plafond 40.** Gates `joinCommunity` / `addMemberToCommunityByManager`, bandeau soft 32, landing + offres app, entitlements testés. Spec `2026-11-05-freemium-lieu-plafond-membres-design.md`.
 - [x] **2026-11-04 — Landing Offres + polish.** Section `#tarifs` (Lieu / Pro, habitants gratuits), `listBillingProductsHydrated` Stripe, nav Offres, hero / projet / CTA plus soignés.
 - [x] **2026-11-04 — Ouvrir événement / ressource aux lieux amis.** Toggle « Les lieux amis peuvent s’inscrire » (événements + ressources scope lieux), visible seulement si lien accepted ; colonne `open_to_friend_places` ressources (`022_…`) ; garde serveur 422 sans lien.

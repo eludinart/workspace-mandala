@@ -13,6 +13,7 @@ import { ExplainCard } from '@/components/help/ExplainCard'
 import { FeedSection } from '@/components/community/FeedSection'
 import { WallPublicBadge, WallPublicToggle } from '@/components/wall/WallPublicToggle'
 import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
+import { ContentEngagementBar } from '@/components/engagement/ContentEngagementBar'
 
 export function AgoraFeed() {
   const { active } = useCommunity()
@@ -430,6 +431,15 @@ export function AgoraFeed() {
                       onChange={(next) => void toggleWallPublic(p.id, next)}
                     />
                   </div>
+                )}
+                {active?.slug && (
+                  <ContentEngagementBar
+                    kind="post"
+                    targetId={p.id}
+                    placeSlug={active.slug}
+                    wallPublic={p.wall_public}
+                    title={p.content.slice(0, 80)}
+                  />
                 )}
               </div>
             </div>

@@ -162,6 +162,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
             ) : (
               <PlaceAnnouncementCard
                 announcement={a}
+                placeSlug={active?.slug}
                 canManage={canManage}
                 onEdit={() => setEditing(a)}
                 onDelete={() => void handleDelete(a.id)}
