@@ -42,7 +42,7 @@ export function ExplainCard({ screen }: { screen: ExplainScreen }) {
       await api.post('/api/explain-cards', { screen })
       setVisible(false)
     } catch {
-      setVisible(false)
+      // Garder la carte visible si la persistance échoue — sinon « Compris » semble OK puis revient.
     } finally {
       setBusy(false)
     }
