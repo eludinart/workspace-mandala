@@ -106,7 +106,7 @@ export function MembersPage({
 
   const loadDirectory = useCallback(async (opts?: { soft?: boolean }) => {
     const soft = opts?.soft ?? false
-    if (!soft || directoryMembers.length === 0) setDirectoryLoading(true)
+    if (!soft) setDirectoryLoading(true)
     setDirectoryError(null)
     try {
       const data = await membersApi.directory()
@@ -121,7 +121,7 @@ export function MembersPage({
     } finally {
       setDirectoryLoading(false)
     }
-  }, [directoryMembers.length])
+  }, [])
 
   const onPull = useCallback(async () => {
     if (directoryMode) {

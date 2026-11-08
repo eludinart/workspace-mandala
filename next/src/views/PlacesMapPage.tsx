@@ -5,8 +5,6 @@ import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { placeLinksApi } from '@/api/place-links'
 import { PlacesCarousel } from '@/components/landing/PlacesCarousel'
-import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
-
 const PlacesMap = dynamic(
   () => import('@/components/public/PlacesMap').then((m) => m.PlacesMap),
   {
@@ -45,11 +43,6 @@ export function PlacesMapPage() {
   useEffect(() => {
     void loadPlaces()
   }, [loadPlaces])
-
-  const onPull = useCallback(async () => {
-    await loadPlaces({ soft: true })
-  }, [loadPlaces])
-  useRegisterPullRefresh('places-map', onPull)
 
   useEffect(() => {
     if (!selectedSlug) {

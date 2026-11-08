@@ -6,7 +6,7 @@
 
 ## Commit
 
-`feat(pull-refresh): soft handlers mur membres alertes listes`
+`b5f6a4e` — `feat(pull-refresh): soft handlers mur membres alertes listes`
 
 ## Summary
 
@@ -36,3 +36,8 @@
 ## Files touched
 
 13 files under `next/src/` (components, views, NotificationContext).
+
+## Review fixes (Task 5 findings)
+
+- **places-map**: `DiscoverWallPage` registers `useRegisterPullRefresh('places-map', …)` and dispatches `mandala-pull-refresh` with `page: 'places-map'`. `WallDiscoverSection` + `WallFeed` listen and soft-refetch map/places and wall feed without blanking. Removed dead `PlacesMapPage` registration (view not mounted in `MandalaApp`).
+- **MembersPage `loadDirectory`**: `if (!soft) setDirectoryLoading(true)`; `useCallback` deps `[]` (no `directoryMembers.length`).

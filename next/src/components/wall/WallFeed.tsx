@@ -56,8 +56,9 @@ export function WallFeed({
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [memberPlaceCount, setMemberPlaceCount] = useState(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       if (channel === 'people') {
@@ -87,6 +88,16 @@ export function WallFeed({
     const onEventsChanged = () => void load()
     window.addEventListener('mandala-events-changed', onEventsChanged)
     return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
+  }, [load])
+
+  useEffect(() => {
+    const onPull = (ev: Event) => {
+      const page = (ev as CustomEvent<{ page?: string }>).detail?.page
+      if (page !== 'places-map') return
+      void load({ soft: true })
+    }
+    window.addEventListener('mandala-pull-refresh', onPull)
+    return () => window.removeEventListener('mandala-pull-refresh', onPull)
   }, [load])
 
   const visibleItems = useMemo(

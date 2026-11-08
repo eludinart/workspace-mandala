@@ -45,8 +45,9 @@ export function WallDiscoverSection({
   const [friendIds, setFriendIds] = useState<number[]>([])
   const [mapFullscreen, setMapFullscreen] = useState(false)
 
-  const loadPlaces = useCallback(async () => {
-    setLoading(true)
+  const loadPlaces = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     try {
       const res = await communitiesApi.publicList()
       setPlaces(res.items ?? [])
@@ -59,6 +60,16 @@ export function WallDiscoverSection({
 
   useEffect(() => {
     void loadPlaces()
+  }, [loadPlaces])
+
+  useEffect(() => {
+    const onPull = (ev: Event) => {
+      const page = (ev as CustomEvent<{ page?: string }>).detail?.page
+      if (page !== 'places-map') return
+      void loadPlaces({ soft: true })
+    }
+    window.addEventListener('mandala-pull-refresh', onPull)
+    return () => window.removeEventListener('mandala-pull-refresh', onPull)
   }, [loadPlaces])
 
   useEffect(() => {

@@ -1,6 +1,8 @@
 'use client'
 
+import { useCallback } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { SkillsCarousel } from '@/components/landing/SkillsCarousel'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
@@ -11,6 +13,11 @@ import { OPEN_SKILL_USER_KEY, queueSkillFiche } from '@/components/skills/Skills
  * Remplace l'ancienne « Carte des lieux » par une vue unifiée découverte.
  */
 export function DiscoverWallPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
+  const onPull = useCallback(async () => {
+    window.dispatchEvent(new CustomEvent('mandala-pull-refresh', { detail: { page: 'places-map' } }))
+  }, [])
+  useRegisterPullRefresh('places-map', onPull)
+
   return (
     <div className="m-landing w-full space-y-8 pb-8">
       <ExplainCard screen="discover" />
