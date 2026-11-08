@@ -9,7 +9,11 @@ export function ResourcesPage({ onNavigate }: { onNavigate?: MandalaNavigate }) 
   void onNavigate
   return (
     <div className="w-full">
-      <ResourceLibrary communitySlug={active?.slug} communityName={active?.name} />
+      <ResourceLibrary
+        communitySlug={active?.slug}
+        communityName={active?.name}
+        pullRefreshPage="resources"
+      />
     </div>
   )
 }

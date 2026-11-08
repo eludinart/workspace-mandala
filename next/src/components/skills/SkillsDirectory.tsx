@@ -22,6 +22,8 @@ import {
 } from '@/lib/skill-constants'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
+import type { MandalaPage } from '@/components/MandalaApp'
+import { registerPullRefreshHandler } from '@/lib/pull-refresh'
 
 const AnnuaireCitiesMap = dynamic(
   () =>
@@ -106,6 +108,7 @@ export function SkillsDirectory({
   onOpenConversation,
   onOpenAlerts,
   onEditProfile,
+  pullRefreshPage,
 }: {
   /** `public` : fiches ouvertes à Mandala, sans compte. */
   variant?: 'app' | 'public'
@@ -123,6 +126,7 @@ export function SkillsDirectory({
   onOpenConversation?: (channelId: number) => void
   onOpenAlerts?: () => void
   onEditProfile?: () => void
+  pullRefreshPage?: MandalaPage
 }) {
   const [view, setView] = useState<'place' | 'mandala'>(
     peopleDirectory ? 'mandala' : lockToPlace || communitySlug ? 'place' : 'mandala'
@@ -222,6 +226,16 @@ export function SkillsDirectory({
     const handle = window.setTimeout(() => void loadMap(), 180)
     return () => window.clearTimeout(handle)
   }, [loadMap])
+
+  const onPull = useCallback(async () => {
+    await load()
+    if (showMap) await loadMap()
+  }, [load, loadMap, showMap])
+
+  useEffect(() => {
+    if (!pullRefreshPage || variant !== 'app') return
+    return registerPullRefreshHandler(pullRefreshPage, onPull)
+  }, [pullRefreshPage, variant, onPull])
 
   useEffect(() => {
     if (!initialUserId) return

@@ -25,14 +25,15 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
   const [removingId, setRemovingId] = useState<number | null>(null)
   const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (!active?.slug) {
       setAnnouncements([])
       setCanManage(false)
       setLoading(false)
       return
     }
-    setLoading(true)
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       const res = await placeAnnouncementsApi.list(active.slug, 20)
@@ -58,6 +59,16 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    const onPull = (ev: Event) => {
+      const page = (ev as CustomEvent<{ page?: string }>).detail?.page
+      if (page !== 'home') return
+      void load({ soft: true })
+    }
+    window.addEventListener('mandala-pull-refresh', onPull)
+    return () => window.removeEventListener('mandala-pull-refresh', onPull)
   }, [load])
 
   const handleCreate = async (data: PlaceAnnouncementDraft) => {
@@ -145,7 +156,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
         </div>
       }
     >
-      {loading && (
+      {loading && announcements.length === 0 && (
         <p className="text-sm text-slate-500">
           Chargement{active?.name ? ` — ${active.name}` : ''}…
         </p>
@@ -159,8 +170,7 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
       )}
 
       <div className="space-y-6">
-        {!loading &&
-          preview.map((a, i) => (
+        {preview.map((a, i) => (
           <div key={a.id} className={i > 0 ? 'pt-6 border-t border-amber-900/30' : ''}>
             {editing?.id === a.id ? (
               <AnnouncementEditorForm

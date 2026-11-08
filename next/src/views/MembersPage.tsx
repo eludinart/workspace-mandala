@@ -26,6 +26,7 @@ import { MembersCitiesMap } from '@/components/members/MembersCitiesMap'
 import { CORE_CIRCLE_LABEL } from '@/lib/community-role-labels'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import { PlaceMemberCapBanner } from '@/components/billing/PlaceMemberCapBanner'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 
 type MemberCardData = CommunityMember | MemberDirectoryEntry
 
@@ -83,13 +84,14 @@ export function MembersPage({
   const [removing, setRemoving] = useState(false)
   const [circleBusyId, setCircleBusyId] = useState<number | null>(null)
 
-  const loadCommunity = useCallback(async () => {
+  const loadCommunity = useCallback(async (opts?: { soft?: boolean }) => {
     if (!active?.slug) {
       setCommunityMembers([])
       setLoading(false)
       return
     }
-    setLoading(true)
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       const data = (await membersApi.listCommunity(active.slug)) as { members?: CommunityMember[] }
@@ -102,8 +104,9 @@ export function MembersPage({
     }
   }, [active?.slug])
 
-  const loadDirectory = useCallback(async () => {
-    setDirectoryLoading(true)
+  const loadDirectory = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft || directoryMembers.length === 0) setDirectoryLoading(true)
     setDirectoryError(null)
     try {
       const data = await membersApi.directory()
@@ -118,7 +121,17 @@ export function MembersPage({
     } finally {
       setDirectoryLoading(false)
     }
-  }, [])
+  }, [directoryMembers.length])
+
+  const onPull = useCallback(async () => {
+    if (directoryMode) {
+      await loadDirectory({ soft: true })
+    } else {
+      await loadCommunity({ soft: true })
+    }
+  }, [directoryMode, loadCommunity, loadDirectory])
+  useRegisterPullRefresh('members', onPull)
+  useRegisterPullRefresh('place-members', onPull)
 
   useEffect(() => {
     void loadCommunity()
@@ -350,7 +363,8 @@ export function MembersPage({
         </p>
       )}
 
-      {(loading || (directoryMode && directoryLoading)) && (
+      {((loading && communityMembers.length === 0) ||
+        (directoryMode && directoryLoading && directoryMembers.length === 0)) && (
         <p className="text-slate-400 text-sm">Chargement…</p>
       )}
       {(error || (directoryMode && directoryError)) && (
@@ -360,7 +374,8 @@ export function MembersPage({
 
       <div className="flex gap-4">
         <div className="flex-1 min-w-0">
-          {!loading && !(directoryMode && directoryLoading) && (
+          {(!(loading && communityMembers.length === 0) &&
+            !(directoryMode && directoryLoading && directoryMembers.length === 0)) && (
             <MemberGrid
               members={displayMembers}
               directoryMode={directoryMode}

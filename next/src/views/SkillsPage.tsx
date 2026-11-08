@@ -24,6 +24,7 @@ export function SkillsPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         communitySlug={active?.slug}
         communityName={active?.name}
         initialUserId={openUserId}
+        pullRefreshPage="skills"
         onOpenMessages={
           onNavigate
             ? (userId, communitySlug) =>

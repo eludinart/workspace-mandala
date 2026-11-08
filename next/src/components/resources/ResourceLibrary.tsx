@@ -8,17 +8,21 @@ import { ResourceReader } from '@/components/resources/ResourceReader'
 import { ApiError } from '@/lib/api-client'
 import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { RESOURCE_KINDS, resourceKindMeta, type ResourceKind } from '@/lib/resource-constants'
+import type { MandalaPage } from '@/components/MandalaApp'
+import { registerPullRefreshHandler } from '@/lib/pull-refresh'
 
 export function ResourceLibrary({
   variant = 'app',
   communitySlug,
   communityName,
   lockToPlace = false,
+  pullRefreshPage,
 }: {
   variant?: 'app' | 'public'
   communitySlug?: string
   communityName?: string
   lockToPlace?: boolean
+  pullRefreshPage?: MandalaPage
 }) {
   const [view, setView] = useState<'place' | 'mandala'>(lockToPlace || communitySlug ? 'place' : 'mandala')
   const [query, setQuery] = useState('')
@@ -55,6 +59,15 @@ export function ResourceLibrary({
     const handle = window.setTimeout(() => void load(), 200)
     return () => window.clearTimeout(handle)
   }, [load])
+
+  const onPull = useCallback(async () => {
+    await load()
+  }, [load])
+
+  useEffect(() => {
+    if (!pullRefreshPage || variant !== 'app') return
+    return registerPullRefreshHandler(pullRefreshPage, onPull)
+  }, [pullRefreshPage, variant, onPull])
 
   useEffect(() => {
     if (variant !== 'app') return

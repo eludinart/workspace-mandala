@@ -24,7 +24,10 @@ type NotificationContextValue = {
   unreadCount: number
   items: NotificationItem[]
   loading: boolean
-  fetchList: (params?: Record<string, unknown>) => Promise<unknown>
+  fetchList: (
+    params?: Record<string, unknown>,
+    opts?: { soft?: boolean },
+  ) => Promise<unknown>
   fetchUnread: () => Promise<void>
   markRead: (ids: string[]) => Promise<void>
   markAllRead: () => Promise<void>
@@ -75,9 +78,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [userId])
 
   const fetchList = useCallback(
-    async (params: Record<string, unknown> = {}) => {
+    async (params: Record<string, unknown> = {}, opts?: { soft?: boolean }) => {
       if (!userId) return null
-      setLoading(true)
+      const soft = opts?.soft ?? false
+      if (!soft) setLoading(true)
       try {
         const data = (await notificationsApi.list(params)) as {
           items?: NotificationItem[]

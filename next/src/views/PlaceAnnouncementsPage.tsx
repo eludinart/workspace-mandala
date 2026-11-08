@@ -6,6 +6,7 @@ import { placeAnnouncementsApi, type PlaceAnnouncement, type PlaceAnnouncementDr
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 import {
   AnnouncementEditorForm,
   PlaceAnnouncementCard,
@@ -23,9 +24,10 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
   const [removingId, setRemovingId] = useState<number | null>(null)
   const [wallPublicBusyId, setWallPublicBusyId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (!active?.slug) return
-    setLoading(true)
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       const res = await placeAnnouncementsApi.list(active.slug, 50)
@@ -42,6 +44,11 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
   useEffect(() => {
     void load()
   }, [load])
+
+  const onPull = useCallback(async () => {
+    await load({ soft: true })
+  }, [load])
+  useRegisterPullRefresh('place-announcements', onPull)
 
   const handleCreate = async (data: PlaceAnnouncementDraft) => {
     if (!active?.slug) return
@@ -140,7 +147,9 @@ export function PlaceAnnouncementsPage({ onNavigate }: { onNavigate: MandalaNavi
         </section>
       )}
 
-      {loading && <p className="text-slate-500 text-sm">Chargement…</p>}
+      {loading && announcements.length === 0 && (
+        <p className="text-slate-500 text-sm">Chargement…</p>
+      )}
 
       <ul className="space-y-4">
         {announcements.map((a) => (

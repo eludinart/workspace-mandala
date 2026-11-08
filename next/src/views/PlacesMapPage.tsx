@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
 import { placeLinksApi } from '@/api/place-links'
 import { PlacesCarousel } from '@/components/landing/PlacesCarousel'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 
 const PlacesMap = dynamic(
   () => import('@/components/public/PlacesMap').then((m) => m.PlacesMap),
@@ -28,8 +29,9 @@ export function PlacesMapPage() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [friendIds, setFriendIds] = useState<number[]>([])
 
-  const loadPlaces = useCallback(async () => {
-    setLoading(true)
+  const loadPlaces = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     try {
       const res = await communitiesApi.publicList()
       setPlaces(res.items ?? [])
@@ -43,6 +45,11 @@ export function PlacesMapPage() {
   useEffect(() => {
     void loadPlaces()
   }, [loadPlaces])
+
+  const onPull = useCallback(async () => {
+    await loadPlaces({ soft: true })
+  }, [loadPlaces])
+  useRegisterPullRefresh('places-map', onPull)
 
   useEffect(() => {
     if (!selectedSlug) {
@@ -112,7 +119,9 @@ export function PlacesMapPage() {
           Faites défiler pour découvrir chaque lieu du réseau.
         </p>
 
-        {loading && <p className="text-sm text-slate-500">Chargement des lieux…</p>}
+        {loading && places.length === 0 && (
+          <p className="text-sm text-slate-500">Chargement des lieux…</p>
+        )}
 
         {!loading && places.length === 0 && (
           <p className="text-sm text-slate-500 rounded-xl border border-slate-800 p-6 text-center">
@@ -120,7 +129,7 @@ export function PlacesMapPage() {
           </p>
         )}
 
-        {!loading && places.length > 0 && (
+        {places.length > 0 && (
           <PlacesCarousel
             places={places}
             selectedSlug={selectedSlug}

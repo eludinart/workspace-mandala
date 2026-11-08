@@ -49,14 +49,15 @@ export function AgoraFeed() {
   const [reportPostId, setReportPostId] = useState<number | null>(null)
   const [reportAuthorId, setReportAuthorId] = useState<number | undefined>(undefined)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
     if (!active?.id) {
       setPosts([])
       setCanManage(false)
       setLoading(false)
       return
     }
-    setLoading(true)
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       const res = await postsApi.list(active.id, 20)
@@ -82,6 +83,16 @@ export function AgoraFeed() {
 
   useEffect(() => {
     void load()
+  }, [load])
+
+  useEffect(() => {
+    const onPull = (ev: Event) => {
+      const page = (ev as CustomEvent<{ page?: string }>).detail?.page
+      if (page !== 'home') return
+      void load({ soft: true })
+    }
+    window.addEventListener('mandala-pull-refresh', onPull)
+    return () => window.removeEventListener('mandala-pull-refresh', onPull)
   }, [load])
 
   const pickImage = useCallback(async (file: File | null) => {
@@ -348,7 +359,7 @@ export function AgoraFeed() {
         {error && <p className="text-sm text-red-400">{error}</p>}
       </div>
 
-      {loading && (
+      {loading && posts.length === 0 && (
         <p className="text-sm text-slate-500">
           Chargement du mur{active?.name ? ` — ${active.name}` : ''}…
         </p>
@@ -360,8 +371,7 @@ export function AgoraFeed() {
       )}
 
       <ul className="space-y-4">
-        {!loading &&
-          posts.map((p) => (
+        {posts.map((p) => (
           <li
             key={p.id}
             className={`rounded-xl border bg-slate-900/50 p-5 shadow-sm shadow-black/10 ${

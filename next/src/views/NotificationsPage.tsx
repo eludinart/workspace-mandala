@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 import { useNotifications } from '@/contexts/NotificationContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import type { MandalaNavigate } from '@/components/MandalaApp'
@@ -19,6 +20,11 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
   useEffect(() => {
     void fetchList({ per_page: 50 })
   }, [fetchList])
+
+  const onPull = useCallback(async () => {
+    await fetchList({ per_page: 50 }, { soft: true })
+  }, [fetchList])
+  useRegisterPullRefresh('notifications', onPull)
 
   const openNotification = (n: NotificationItem) => {
     if (!onNavigate) return
@@ -67,7 +73,9 @@ export function NotificationsPage({ onNavigate }: { onNavigate?: MandalaNavigate
         </div>
       </div>
 
-      {loading && <p className="text-slate-500 text-sm">Chargement…</p>}
+      {loading && inbox.length === 0 && (
+        <p className="text-slate-500 text-sm">Chargement…</p>
+      )}
 
       {!loading && unread.length === 0 && read.length === 0 && (
         <p className="text-slate-500 text-sm italic">Aucune notification pour le moment.</p>

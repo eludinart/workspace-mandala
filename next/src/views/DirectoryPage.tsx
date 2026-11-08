@@ -8,6 +8,7 @@ export function DirectoryPage({ onNavigate }: { onNavigate: MandalaNavigate }) {
     <div className="w-full">
       <SkillsDirectory
         peopleDirectory
+        pullRefreshPage="directory"
         onOpenMessages={(userId, communitySlug) =>
           onNavigate('messages', { messagesUserId: userId, communitySlug })
         }
