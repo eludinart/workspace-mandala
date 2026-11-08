@@ -14,6 +14,8 @@ import { membersApi, type CommunityMember } from '@/api/members'
 import { formatChatListTime } from '@/lib/format-datetime'
 import { isCommunityManagerRole } from '@/lib/community-role-labels'
 import { ExplainCard } from '@/components/help/ExplainCard'
+import { PullToRefresh } from '@/components/PullToRefresh'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 
 type Channel = {
   channelId: number
@@ -103,8 +105,9 @@ export function MessagesPage({
   const openedChannelRef = useRef<string | null>(null)
   const selectedIdRef = useRef<number | null>(null)
 
-  const loadChannels = useCallback(async () => {
-    setLoading(true)
+  const loadChannels = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setError(null)
     try {
       const slug = active?.slug
@@ -128,9 +131,18 @@ export function MessagesPage({
       setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
       return []
     } finally {
-      setLoading(false)
+      if (!soft) setLoading(false)
     }
   }, [active?.slug, fetchClairiereUnread])
+
+  const onPull = useCallback(async () => {
+    await loadChannels({ soft: true })
+    const id = selectedIdRef.current
+    if (id != null) {
+      await useSocialStore.getState().loadChannelMessages(id)
+    }
+  }, [loadChannels])
+  useRegisterPullRefresh('messages', onPull)
 
   useEffect(() => {
     void loadChannels()
@@ -494,7 +506,11 @@ export function MessagesPage({
             </section>
           )}
 
-          <div className="flex-1 min-h-0 overflow-y-auto">
+          <PullToRefresh
+            page="messages"
+            className="flex-1 min-h-0 overflow-y-auto"
+            disabled={chatOpen && listTab === 'dialogues'}
+          >
             {loading && channels.length === 0 && (
               <p className="text-slate-500 text-sm text-center py-10">Chargement…</p>
             )}
@@ -611,7 +627,7 @@ export function MessagesPage({
                 </div>
               )
             })}
-          </div>
+          </PullToRefresh>
           </>
           )}
         </section>

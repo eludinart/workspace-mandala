@@ -28,6 +28,7 @@ import {
 import { ApiError } from '@/lib/api-client'
 import { moderationApi } from '@/api/moderation'
 import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
+import { PullToRefresh } from '@/components/PullToRefresh'
 
 export function DialogueStream({
   channelId,
@@ -124,7 +125,17 @@ export function DialogueStream({
   const [replyDraft, setReplyDraft] = useState<MessageReplyQuote | null>(null)
   const [highlightId, setHighlightId] = useState<number | null>(null)
   const [readCursorReady, setReadCursorReady] = useState(false)
-  const listRef = useRef<HTMLDivElement>(null)
+  const listAnchorRef = useRef<HTMLDivElement>(null)
+
+  const getListScrollEl = useCallback((): HTMLDivElement | null => {
+    let el = listAnchorRef.current?.parentElement ?? null
+    while (el) {
+      const oy = window.getComputedStyle(el).overflowY
+      if (oy === 'auto' || oy === 'scroll') return el as HTMLDivElement
+      el = el.parentElement
+    }
+    return null
+  }, [])
   const unreadBoundaryRef = useRef<HTMLDivElement>(null)
   const readCursorCaptured = useRef(false)
   const initialScrollDone = useRef(false)
@@ -215,7 +226,7 @@ export function DialogueStream({
   }, [channelId, loadChannelMessages, markChannelRead])
 
   useEffect(() => {
-    const el = listRef.current
+    const el = getListScrollEl()
     if (!el || !readCursorReady || visibleMessages.length === 0) return
     if (!initialScrollDone.current) {
       requestAnimationFrame(() => {
@@ -232,7 +243,7 @@ export function DialogueStream({
     }
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
     if (nearBottom) el.scrollTop = el.scrollHeight
-  }, [readCursorReady, unreadFromId, visibleMessages.length])
+  }, [getListScrollEl, readCursorReady, unreadFromId, visibleMessages.length])
 
   const resolveSender = useCallback(
     (msg: ChannelMessage, isMe: boolean) => {
@@ -396,7 +407,7 @@ export function DialogueStream({
         }
       })
       requestAnimationFrame(() => {
-        const el = listRef.current
+        const el = getListScrollEl()
         if (el) el.scrollTop = el.scrollHeight
       })
     } finally {
@@ -442,7 +453,7 @@ export function DialogueStream({
       })
       setReplyDraft(null)
       requestAnimationFrame(() => {
-        const el = listRef.current
+        const el = getListScrollEl()
         if (el) el.scrollTop = el.scrollHeight
       })
     } catch (e: unknown) {
@@ -829,7 +840,11 @@ export function DialogueStream({
         title="Signaler un membre"
       />
 
-      <div ref={listRef} className="m-chat-wallpaper min-h-0 min-w-0 overflow-y-auto overflow-x-hidden px-3 py-3 space-y-1">
+      <PullToRefresh
+        page="messages"
+        className="m-chat-wallpaper min-h-0 min-w-0 overflow-y-auto overflow-x-hidden"
+      >
+        <div ref={listAnchorRef} className="px-3 py-3 space-y-1">
         {visibleMessages.length === 0 && (
           <p className="text-center text-sm text-slate-500 py-16">Envoyez le premier message.</p>
         )}
@@ -894,7 +909,8 @@ export function DialogueStream({
             </div>
           )
         })}
-      </div>
+        </div>
+      </PullToRefresh>
 
       <CreatePollSheet
         open={pollOpen}
