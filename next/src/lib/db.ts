@@ -12,6 +12,8 @@ const DB_USER = process.env.MARIADB_USER ?? 'mariadb'
 const DB_PASSWORD = process.env.MARIADB_PASSWORD ?? process.env.MARIADB_PASS ?? ''
 const DB_PREFIX = process.env.DB_PREFIX ?? 'wp_'
 
+// Multi-user: keep enough concurrent DB slots. MariaDB Mandala max_connections≈151;
+// Coolify historically set MARIADB_POOL_LIMIT=2 which caused « Queue limit reached ».
 const POOL_CONNECTION_LIMIT = (() => {
   const raw = process.env.MARIADB_POOL_LIMIT ?? ''
   const n = parseInt(raw, 10)
@@ -21,7 +23,7 @@ const POOL_CONNECTION_LIMIT = (() => {
 const POOL_QUEUE_LIMIT = (() => {
   const raw = process.env.MARIADB_POOL_QUEUE_LIMIT ?? ''
   const n = parseInt(raw, 10)
-  return Number.isFinite(n) && n >= 0 ? n : 10
+  return Number.isFinite(n) && n >= 0 ? n : 50
 })()
 
 const POOL_IDLE_TIMEOUT_MS = (() => {

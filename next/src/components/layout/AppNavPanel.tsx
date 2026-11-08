@@ -149,11 +149,12 @@ export function AppNavPanel({
           <div>
             <Link
               href="/"
+              onClick={() => onItemClick?.()}
               className="block rounded-lg -mx-1 px-1 py-0.5 hover:bg-slate-800/60 transition-colors"
-              aria-label="Accueil Mandala"
+              aria-label="Accueil Mandala — site public"
             >
               <p className="text-lg font-bold tracking-tight">Mandala</p>
-              <p className="text-[10px] text-slate-500">Communautés & événements</p>
+              <p className="text-[10px] text-slate-500">Communautés & événements · site public</p>
             </Link>
             <p className="mt-2 inline-flex items-center rounded-full border border-slate-700 bg-slate-900/60 px-2 py-0.5 text-[10px] text-slate-400">
               {roleLabel}

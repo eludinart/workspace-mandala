@@ -42,8 +42,7 @@ export function MobileNavDrawer({
         onClick={onClose}
       />
       <aside className="absolute inset-y-0 left-0 w-[min(100vw-3rem,18rem)] bg-slate-950 border-r border-slate-800 shadow-2xl flex flex-col pb-[max(env(safe-area-inset-bottom,0px),var(--vv-bottom-inset,0px))]">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 shrink-0">
-          <p className="text-sm font-semibold text-slate-200">Menu</p>
+        <div className="flex items-center justify-end px-2 pt-1 shrink-0">
           <button
             type="button"
             onClick={onClose}
@@ -53,12 +52,12 @@ export function MobileNavDrawer({
             ✕
           </button>
         </div>
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 -mt-1">
           <AppNavPanel
             page={page}
             onNavigate={onNavigate}
             onItemClick={onClose}
-            showBranding={false}
+            showBranding
             adminTab={adminTab}
           />
         </div>

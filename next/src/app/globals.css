@@ -599,6 +599,28 @@ html.light .m-landing-top {
   color: #fff;
 }
 
+/* Menu mobile (liste verticale sous le bandeau) */
+@media (max-width: 767px) {
+  .m-landing-nav a {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    min-height: 44px;
+    padding: 0.75rem 0.5rem;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  }
+
+  .m-landing-nav a:last-child {
+    border-bottom: 0;
+  }
+
+  .m-landing-logo {
+    letter-spacing: 0.28em;
+    font-size: 1.15rem;
+  }
+}
+
 .m-landing-hero {
   position: relative;
   overflow: hidden;

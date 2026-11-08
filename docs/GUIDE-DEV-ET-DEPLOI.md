@@ -150,7 +150,8 @@ Script local : `scripts/setup-mariadb-tunnel-mandala.sh` (à exécuter sur le VP
 | `JWT_EXPIRE_HOURS` | `720` |
 | `NEXT_PUBLIC_APP_URL` | `https://mandala.eludein.art` |
 | `NEXT_PUBLIC_API_URL` | *(vide)* |
-| `MARIADB_POOL_LIMIT` | `2` |
+| `MARIADB_POOL_LIMIT` | `10` (multi-users ; éviter `2` → « Queue limit reached ») |
+| `MARIADB_POOL_QUEUE_LIMIT` | `50` |
 | `VAPID_SUBJECT` | `mailto:admin@mandala.eludein.art` |
 | `VAPID_PUBLIC_KEY` | sortie de `npx web-push generate-vapid-keys` |
 | `VAPID_PRIVATE_KEY` | idem (secret serveur) |

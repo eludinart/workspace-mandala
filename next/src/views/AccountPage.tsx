@@ -120,6 +120,15 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       const main = document.querySelector('main')
       if (main instanceof HTMLElement) main.scrollTo({ top: 0, behavior: 'smooth' })
       else window.scrollTo({ top: 0, behavior: 'smooth' })
+      // Pastille active visible dans la rangée scrollable (évite qu’elle reste hors écran).
+      requestAnimationFrame(() => {
+        const pill = document.querySelector(
+          `nav[aria-label="Sections du compte"] button[aria-current="page"]`
+        )
+        if (pill instanceof HTMLElement) {
+          pill.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
+        }
+      })
     }
   }, [])
 
@@ -359,7 +368,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
 
   const navPillClass = (active: boolean) =>
     [
-      'px-2.5 py-1 rounded-lg border text-sm transition-colors',
+      'px-2.5 py-1 rounded-full border text-xs sm:text-sm transition-colors',
       active
         ? 'border-violet-500/70 bg-violet-600/20 text-violet-100'
         : 'border-slate-700 text-slate-300 hover:border-violet-500/50 hover:text-violet-200',
@@ -368,13 +377,13 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   return (
     <div className="m-user-form w-full space-y-6">
       <ExplainCard screen="account" />
-      <header className="-mx-1 space-y-3 border-b border-slate-800/70 bg-slate-950/95 px-1 pb-3 pt-1">
+      <header className="-mx-1 space-y-2 border-b border-slate-800/70 px-1 pb-2 pt-1">
         <div>
-          <p className="m-user-eyebrow mb-1">Espace personnel</p>
-          <h1 className="m-user-title text-3xl">Mon compte</h1>
+          <p className="m-user-eyebrow mb-0.5">Espace personnel</p>
+          <h1 className="m-user-title text-2xl sm:text-3xl">Mon compte</h1>
         </div>
         <nav
-          className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
+          className="flex flex-nowrap gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           aria-label="Sections du compte"
         >
           {SECTIONS.map((s) => (
@@ -383,7 +392,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               type="button"
               aria-current={activeSection === s.id ? 'page' : undefined}
               onClick={() => selectSection(s.id)}
-              className={`shrink-0 ${navPillClass(activeSection === s.id)}`}
+              className={`shrink-0 whitespace-nowrap ${navPillClass(activeSection === s.id)}`}
             >
               {s.label}
             </button>

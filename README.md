@@ -62,7 +62,7 @@ Ouvrir http://localhost:3002 — test : `/api/health` → `"db": "connected"`.
 | `JWT_SECRET` | nouveau secret (≠ Fleur) |
 | `NEXT_PUBLIC_APP_URL` | URL publique HTTPS |
 | `NEXT_PUBLIC_API_URL` | vide (même origine) |
-| `MARIADB_POOL_LIMIT` | `2` sur petit VPS |
+| `MARIADB_POOL_LIMIT` | `10` (multi-users ; + `MARIADB_POOL_QUEUE_LIMIT=50`) |
 
 ### 4. Vérification
 

@@ -54,7 +54,8 @@ Copier dans Coolify → Application → **Environment** (pas dans le repo) :
 | `NEXT_PUBLIC_APP_URL` | `https://mandala.eludein.art` |
 | `NEXT_PUBLIC_API_URL` | *(vide)* |
 | `NEXT_PUBLIC_BASE_PATH` | *(vide)* |
-| `MARIADB_POOL_LIMIT` | `2` |
+| `MARIADB_POOL_LIMIT` | `10` (multi-users ; éviter `2` → « Queue limit reached ») |
+| `MARIADB_POOL_QUEUE_LIMIT` | `50` |
 | `NODE_ENV` | `production` |
 
 **Build arguments** (même écran ou section Build) :
