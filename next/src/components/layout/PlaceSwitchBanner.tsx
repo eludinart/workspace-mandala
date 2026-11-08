@@ -3,25 +3,32 @@
 import { useCommunity } from '@/contexts/CommunityContext'
 
 export function PlaceSwitchBanner() {
-  const { placeSwitchNotice, dismissPlaceSwitch } = useCommunity()
+  const { placeSwitchNotice, dismissPlaceSwitch, active } = useCommunity()
   if (!placeSwitchNotice) return null
+
+  const placeName = placeSwitchNotice.placeName
+  const placeSlug = active?.name === placeName ? active.slug : null
 
   return (
     <div
-      className="shrink-0 mx-4 md:mx-6 mt-2 rounded-xl border border-violet-500/35 bg-violet-950/50 px-4 py-2.5 flex items-start justify-between gap-3 shadow-lg shadow-violet-950/30"
+      className="shrink-0 mx-4 md:mx-6 mt-2 rounded-xl border border-violet-400/50 bg-violet-950 px-4 py-3 flex items-start justify-between gap-3 shadow-lg shadow-violet-950/40"
       role="status"
       aria-live="polite"
     >
-      <p className="text-sm text-violet-100">
-        <span className="font-medium">Lieu changé</span>
-        <span className="text-violet-200/90"> — vous consultez maintenant </span>
-        <span className="font-semibold text-white">{placeSwitchNotice.placeName}</span>
-        {placeSwitchNotice.reason === 'notification' && (
-          <span className="block text-xs text-violet-300/80 mt-0.5">
-            Ouverture depuis une notification de message.
-          </span>
+      <div className="min-w-0 text-sm">
+        <p className="text-violet-200/90">Lieu connecté</p>
+        <p className="font-semibold text-white text-base leading-snug break-words mt-0.5">
+          {placeName}
+        </p>
+        {placeSlug && (
+          <p className="text-xs text-violet-300/90 mt-0.5 truncate">/{placeSlug}</p>
         )}
-      </p>
+        {placeSwitchNotice.reason === 'notification' && (
+          <p className="text-xs text-violet-300/80 mt-1">
+            Ouverture depuis une notification de message.
+          </p>
+        )}
+      </div>
       <button
         type="button"
         onClick={dismissPlaceSwitch}

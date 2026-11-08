@@ -2,13 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { eventsApi } from '@/api/events'
+import { calendarApi } from '@/api/calendar'
 import { useNotifyPlaceEventsChanged } from '@/hooks/usePlaceEvents'
 import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
+import { enumerateEventDays } from '@/lib/event-dates'
 import { formatEventDateRange } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
 import { WallPublicToggle } from '@/components/wall/WallPublicToggle'
 import { OpenToFriendPlacesToggle } from '@/components/place/OpenToFriendPlacesToggle'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
+import { EventPresenceActions } from '@/components/events/EventPresenceActions'
 
 type DetailTab = 'overview' | 'team' | 'tasks' | 'photos'
 
@@ -42,6 +45,10 @@ type EventDetail = {
   media: Array<{ id: number; image_data: string; caption: string | null }>
   can_manage: boolean
   can_offer_friend_signup?: boolean
+  via_friend_place?: boolean
+  host_slug?: string | null
+  host_name?: string | null
+  host_accent_color?: string | null
 }
 
 type Member = { user_id: number; pseudo: string }
@@ -97,6 +104,7 @@ export function EventDetailPage({
   const [editStatus, setEditStatus] = useState('')
   const [editWallPublic, setEditWallPublic] = useState(false)
   const [editOpenToFriends, setEditOpenToFriends] = useState(false)
+  const [openCalendarDays, setOpenCalendarDays] = useState(false)
   const notifyEventsChanged = useNotifyPlaceEventsChanged()
 
   const emitEventsChanged = useCallback(() => {
@@ -334,6 +342,16 @@ export function EventDetailPage({
               {event.description && (
                 <p className="mt-4 text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{event.description}</p>
               )}
+              <div className="mt-4">
+                <EventPresenceActions
+                  hostSlug={data.host_slug ?? communitySlug}
+                  startsAt={event.starts_at}
+                  endsAt={event.ends_at}
+                  viaFriendPlace={!!data.via_friend_place}
+                  hostName={data.host_name}
+                  hostAccentColor={data.host_accent_color}
+                />
+              </div>
             </article>
           )}
           {can_manage && (
@@ -346,18 +364,35 @@ export function EventDetailPage({
                   setMsg('Titre requis')
                   return
                 }
+                const starts_at = editStarts ? editStarts.replace('T', ' ') : null
+                const ends_at = editEnds ? editEnds.replace('T', ' ') : null
                 void eventsApi
                   .update(eventId, {
                     title,
                     description: editDescription.trim() || null,
                     location: editLocation || null,
-                    starts_at: editStarts ? editStarts.replace('T', ' ') : null,
-                    ends_at: editEnds ? editEnds.replace('T', ' ') : null,
+                    starts_at,
+                    ends_at,
                     status: editStatus,
                     wall_public: editWallPublic,
                     open_to_friend_places: editOpenToFriends,
                   })
                   .then(async () => {
+                    if (openCalendarDays && starts_at) {
+                      const days = enumerateEventDays(starts_at, ends_at)
+                      if (days.length > 0) {
+                        await calendarApi.setDays({
+                          community_slug: communitySlug,
+                          days,
+                          is_disabled: false,
+                        })
+                      }
+                    }
+                    setMsg(
+                      openCalendarDays && starts_at
+                        ? 'Enregistré · jours ouverts dans l’agenda'
+                        : 'Enregistré'
+                    )
                     await load()
                     emitEventsChanged()
                   })
@@ -380,7 +415,10 @@ export function EventDetailPage({
                   <input
                     type="datetime-local"
                     value={editStarts}
-                    onChange={(e) => setEditStarts(e.target.value)}
+                    onChange={(e) => {
+                      setEditStarts(e.target.value)
+                      setOpenCalendarDays(true)
+                    }}
                     className={fieldClass}
                   />
                 </label>
@@ -389,7 +427,10 @@ export function EventDetailPage({
                   <input
                     type="datetime-local"
                     value={editEnds}
-                    onChange={(e) => setEditEnds(e.target.value)}
+                    onChange={(e) => {
+                      setEditEnds(e.target.value)
+                      setOpenCalendarDays(true)
+                    }}
                     className={fieldClass}
                   />
                   <span className="mt-1.5 block text-[11px] text-slate-400">
@@ -397,6 +438,20 @@ export function EventDetailPage({
                   </span>
                 </label>
               </div>
+              <label className="flex items-start gap-2.5 rounded-xl border border-violet-300/15 bg-violet-400/10 px-3 py-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={openCalendarDays}
+                  onChange={(e) => setOpenCalendarDays(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm text-slate-100">Ouvrir ces jours dans l’agenda</span>
+                  <span className="block text-[11px] text-slate-400 mt-0.5">
+                    Les membres pourront s’inscrire « Je viens » sur ces dates.
+                  </span>
+                </span>
+              </label>
               <label className="block">
                 <span className="text-[11px] uppercase tracking-[0.16em] text-violet-200/75">Lieu</span>
                 <input
@@ -453,6 +508,17 @@ export function EventDetailPage({
                 Enregistrer
               </button>
             </form>
+          )}
+          {can_manage && (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+              <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Ma présence</p>
+              <EventPresenceActions
+                hostSlug={data.host_slug ?? communitySlug}
+                startsAt={event.starts_at}
+                endsAt={event.ends_at}
+                viaFriendPlace={false}
+              />
+            </div>
           )}
           {can_manage && (
             <div className="flex flex-wrap gap-2">

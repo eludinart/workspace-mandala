@@ -1766,3 +1766,27 @@ html.light .m-home-about-body {
   gap: 1.75rem;
   align-items: center;
 }
+
+.m-upcoming-card {
+  display: grid;
+  gap: 1.15rem;
+  align-items: center;
+  padding: 0.85rem;
+  border-radius: 1.35rem;
+  border: 1px solid rgb(var(--slate-800) / 0.85);
+  background: rgb(var(--slate-900) / 0.45);
+}
+
+html.light .m-upcoming-card {
+  background: #fff;
+  border-color: rgb(180 150 140 / 0.22);
+  box-shadow: 0 12px 34px rgb(90 50 40 / 0.06);
+}
+
+@media (min-width: 640px) {
+  .m-upcoming-card {
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.2fr);
+    gap: 1.5rem;
+    padding: 1rem;
+  }
+}

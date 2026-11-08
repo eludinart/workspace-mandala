@@ -155,15 +155,15 @@ export function TodayBoard({
           {data.presence.show_presence && (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700/70 bg-slate-950/40 px-3 py-2.5">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-100">Présents</p>
+                <p className="text-sm font-semibold text-slate-100">Présents sur le lieu</p>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {data.presence.is_disabled
                     ? data.presence.disabled_reason
                       ? `Journée fermée — ${data.presence.disabled_reason}`
                       : 'Journée fermée'
                     : data.presence.present_count >= data.presence.max_participants
-                      ? `Complet (${data.presence.present_count} / ${data.presence.max_participants})`
-                      : `${data.presence.present_count} / ${data.presence.max_participants}`}
+                      ? `Complet aujourd’hui (${data.presence.present_count} / ${data.presence.max_participants})`
+                      : `${data.presence.present_count} / ${data.presence.max_participants} aujourd’hui`}
                   {data.presence.present_users.length > 0 && (
                     <span className="text-slate-500">
                       {' '}
@@ -192,7 +192,7 @@ export function TodayBoard({
                     : 'bg-violet-600 text-white'
                 }`}
               >
-                {data.presence.i_am_present ? 'Annuler' : 'Je viens'}
+                {data.presence.i_am_present ? 'Annuler' : 'Je viens aujourd’hui'}
               </button>
             </div>
           )}

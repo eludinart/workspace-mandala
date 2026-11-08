@@ -12,7 +12,7 @@ Les badges météo (`WeatherBadge`) s’affichent déjà sur les cartes de la pa
 ## Décision
 
 1. **Ancrage** : sélecteur complet en **bandeau sous le titre** de la page **Membres**, avant la barre de recherche. Retirer entièrement le bloc du Profil.
-2. **Invitation discrète** : carte douce sur **Accueil** si aucune météo du jour pour le lieu actif, avec « Plus tard » (session) et disparition dès qu’un choix est posé.
+2. **Invitation discrète** : carte douce sur **Accueil** si aucune météo du jour pour le lieu actif, avec « Plus tard » (jusqu’à demain, jour civil Paris) et disparition dès qu’un choix est posé.
 
 ## Approches écartées
 
@@ -36,10 +36,10 @@ Les badges météo (`WeatherBadge`) s’affichent déjà sur les cartes de la pa
 ## Comportement cible — Accueil (invitation)
 
 1. **Où** : `HomePage`, juste sous le hero, avant les raccourcis — uniquement si un lieu est actif.
-2. **Quand afficher** : lieu actif **et** aucune météo du jour pour ce lieu **et** pas reportée pour la session (`sessionStorage`).
+2. **Quand afficher** : lieu actif **et** aucune météo du jour pour ce lieu **et** pas reportée pour le jour civil Paris (`localStorage`).
 3. **Quoi** : composant dédié `HeartWeatherHomeCard` — pastilles + note courte optionnelle + « Plus tard ». Ton discret, pas de modal.
 4. **Après choix** : enregistre via `weatherApi`, la carte disparaît. Édition ultérieure sur Membres.
-5. **Plus tard** : cache pour la session navigateur (même onglet).
+5. **Plus tard** : cache jusqu’au lendemain (jour civil Paris) ; une seule invitation par lieu et par jour.
 
 ## Fichiers touchés
 

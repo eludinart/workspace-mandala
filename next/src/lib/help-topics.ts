@@ -13,7 +13,8 @@ const TIPS: Partial<Record<MandalaPage, string[]>> = {
   ],
   events: [
     'Liste des événements du lieu. Ouvrez une carte pour le programme.',
-    'Les gestionnaires peuvent créer et modifier un événement.',
+    'Sur la fiche ou la carte, « Je viens » inscrit la présence sur les jours de l’événement dans l’agenda.',
+    'À la création, les gestionnaires peuvent ouvrir ces jours dans l’agenda.',
     'Après la date, une personne présente peut écrire un retour. L’équipe de l’événement ne le fait pas.',
   ],
   members: [

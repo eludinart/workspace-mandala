@@ -4,21 +4,29 @@ import { useCallback, useEffect, useState } from 'react'
 import { weatherApi } from '@/api/weather'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
+import {
+  isWeatherHomeInviteHiddenForDay,
+  weatherHomeInviteHideDayValue,
+  weatherHomeInviteStorageKey,
+} from '@/lib/weather-home-invite'
 import { WEATHER_OPTIONS, type WeatherStatus } from '@/lib/weather-status'
 
-const SESSION_HIDE_KEY = 'mdl_weather_home_invite_hidden'
-
-function isHiddenThisSession(communityId: number): boolean {
+function isHiddenForToday(communityId: number): boolean {
   try {
-    return sessionStorage.getItem(`${SESSION_HIDE_KEY}:${communityId}`) === '1'
+    return isWeatherHomeInviteHiddenForDay(
+      localStorage.getItem(weatherHomeInviteStorageKey(communityId))
+    )
   } catch {
     return false
   }
 }
 
-function hideThisSession(communityId: number): void {
+function hideForToday(communityId: number): void {
   try {
-    sessionStorage.setItem(`${SESSION_HIDE_KEY}:${communityId}`, '1')
+    localStorage.setItem(
+      weatherHomeInviteStorageKey(communityId),
+      weatherHomeInviteHideDayValue()
+    )
   } catch {
     /* ignore */
   }
@@ -39,7 +47,7 @@ export function HeartWeatherHomeCard() {
       setVisible(false)
       return
     }
-    if (isHiddenThisSession(active.id)) {
+    if (isHiddenForToday(active.id)) {
       setReady(true)
       setVisible(false)
       return
@@ -61,7 +69,7 @@ export function HeartWeatherHomeCard() {
 
   const dismiss = () => {
     if (!active?.id) return
-    hideThisSession(active.id)
+    hideForToday(active.id)
     setVisible(false)
   }
 
@@ -75,6 +83,7 @@ export function HeartWeatherHomeCard() {
         weather_status: next,
         weather_note: note.trim() || undefined,
       })
+      hideForToday(active.id)
       setVisible(false)
     } catch (e: unknown) {
       setErr(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')

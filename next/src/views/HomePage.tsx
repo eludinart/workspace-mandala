@@ -25,6 +25,7 @@ import { HeartWeatherHomeCard } from '@/components/community/HeartWeatherHomeCar
 import { PlaceAnnouncementsSection } from '@/components/place/PlaceAnnouncementsSection'
 import { TodayBoard } from '@/components/place/TodayBoard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
+import { UpcomingEventCard } from '@/components/events/UpcomingEventCard'
 import { CommunitySwitcher } from '@/components/layout/CommunitySwitcher'
 import { ExplainCard } from '@/components/help/ExplainCard'
 
@@ -314,40 +315,17 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
               <p className="m-landing-eyebrow">Agenda</p>
               <h2 className="text-3xl sm:text-4xl">Événements à venir</h2>
             </div>
-            <ul className="space-y-3">
-              {otherUpcoming.slice(0, 5).map((ev) => {
-                const parts = eventDateParts(ev.starts_at)
-                return (
-                  <li key={ev.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedEventId(ev.id)}
-                      className="m-landing-card w-full text-left px-4 py-3.5 flex items-center gap-4 hover:border-violet-500/40 transition-colors"
-                    >
-                      {parts ? (
-                        <span className="m-home-date">
-                          <span className="m-home-date-day">{parts.day}</span>
-                          <span className="m-home-date-month">{parts.month}</span>
-                        </span>
-                      ) : (
-                        <span className="m-home-date">
-                          <span className="m-home-date-month">Date</span>
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-lg text-slate-100 leading-snug">{ev.title}</span>
-                        <span className="block text-sm text-slate-400 mt-0.5">
-                          {formatEventDateRange(ev.starts_at, ev.ends_at)}
-                          {ev.location ? ` · ${ev.location}` : ''}
-                        </span>
-                      </span>
-                      <span className="hidden sm:inline text-[10px] uppercase tracking-[0.16em] text-violet-300 shrink-0">
-                        Infos
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
+            <ul className="space-y-4 sm:space-y-5">
+              {otherUpcoming.slice(0, 5).map((ev) => (
+                <li key={ev.id}>
+                  <UpcomingEventCard
+                    event={ev}
+                    accent={accent}
+                    onOpen={() => setSelectedEventId(ev.id)}
+                    eyebrow="À venir"
+                  />
+                </li>
+              ))}
             </ul>
             <div className="text-center">
               <button type="button" onClick={() => onNavigate('events')} className="m-landing-btn">
@@ -363,50 +341,16 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
               <p className="m-landing-eyebrow">Lieux amis</p>
               <h2 className="text-3xl sm:text-4xl">Ailleurs</h2>
             </div>
-            <ul className="space-y-3">
-              {elsewhereList.slice(0, 6).map((ev) => {
-                const parts = eventDateParts(ev.starts_at)
-                const hostAccent = ev.host_accent_color?.trim() || accent
-                return (
-                  <li key={`elsewhere-${ev.id}`}>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedEventId(ev.id)}
-                      className="m-landing-card w-full text-left px-4 py-3.5 flex items-center gap-4 transition-colors"
-                      style={{ borderColor: `${hostAccent}66` }}
-                    >
-                      {parts ? (
-                        <span
-                          className="m-home-date"
-                          style={{ borderColor: `${hostAccent}88`, color: hostAccent }}
-                        >
-                          <span className="m-home-date-day">{parts.day}</span>
-                          <span className="m-home-date-month">{parts.month}</span>
-                        </span>
-                      ) : (
-                        <span className="m-home-date">
-                          <span className="m-home-date-month">Date</span>
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        {ev.host_name && (
-                          <span
-                            className="block text-[10px] uppercase tracking-[0.16em] mb-0.5"
-                            style={{ color: hostAccent }}
-                          >
-                            {ev.host_name}
-                          </span>
-                        )}
-                        <span className="block text-lg text-slate-100 leading-snug">{ev.title}</span>
-                        <span className="block text-sm text-slate-400 mt-0.5">
-                          {formatEventDateRange(ev.starts_at, ev.ends_at)}
-                          {ev.location ? ` · ${ev.location}` : ''}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
+            <ul className="space-y-4 sm:space-y-5">
+              {elsewhereList.slice(0, 6).map((ev) => (
+                <li key={`elsewhere-${ev.id}`}>
+                  <UpcomingEventCard
+                    event={ev}
+                    accent={accent}
+                    onOpen={() => setSelectedEventId(ev.id)}
+                  />
+                </li>
+              ))}
             </ul>
           </section>
         )}

@@ -9,8 +9,8 @@ import { useNotifyPlaceEventsChanged, usePlaceEvents } from '@/hooks/usePlaceEve
 import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
 import { queryKeys } from '@/lib/query-keys'
 import { EventDetailPage } from '@/views/EventDetailPage'
-import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
+import { UpcomingEventCard } from '@/components/events/UpcomingEventCard'
 import { EVENT_PHASES } from '@/lib/event-constants'
 import { type HomeEventPreview, isEventUpcoming } from '@/lib/event-preview'
 import { parseWallClockDateTime } from '@/lib/format-datetime'
@@ -24,19 +24,30 @@ function EventListSection({
   title,
   events,
   onSelect,
+  accent,
+  eyebrow,
 }: {
   title: string
   events: HomeEventPreview[]
   onSelect: (id: number) => void
+  accent: string
+  eyebrow?: string
 }) {
   if (events.length === 0) return null
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">{title}</h2>
-      <ul className="space-y-4">
+      <ul className="space-y-4 sm:space-y-5">
         {events.map((ev) => (
           <li key={ev.id}>
-            <EventPreviewCard event={ev} onClick={() => onSelect(ev.id)} />
+            <UpcomingEventCard
+              event={ev}
+              accent={accent}
+              onOpen={() => onSelect(ev.id)}
+              eyebrow={eyebrow}
+              showPhase
+              showExcerpt
+            />
           </li>
         ))}
       </ul>
@@ -388,9 +399,26 @@ export function EventsPage({
       )}
       {!loading && !error && (events.length > 0 || elsewhereUpcoming.length > 0) && (
         <div className="space-y-6">
-          <EventListSection title="À venir" events={upcoming} onSelect={openModal} />
-          <EventListSection title="Passés" events={past} onSelect={openModal} />
-          <EventListSection title="Ailleurs" events={elsewhereUpcoming} onSelect={openModal} />
+          <EventListSection
+            title="À venir"
+            events={upcoming}
+            onSelect={openModal}
+            accent={active?.accent_color ?? '#7c3aed'}
+            eyebrow="À venir"
+          />
+          <EventListSection
+            title="Passés"
+            events={past}
+            onSelect={openModal}
+            accent={active?.accent_color ?? '#7c3aed'}
+            eyebrow="Passé"
+          />
+          <EventListSection
+            title="Ailleurs"
+            events={elsewhereUpcoming}
+            onSelect={openModal}
+            accent={active?.accent_color ?? '#7c3aed'}
+          />
         </div>
       )}
 
