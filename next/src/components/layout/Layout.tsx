@@ -17,6 +17,7 @@ import { MobileNavDrawer } from '@/components/layout/MobileNavDrawer'
 import { InstallAppPrompt } from '@/components/InstallAppPrompt'
 import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { HelpButton } from '@/components/help/HelpButton'
+import { PullToRefresh } from '@/components/PullToRefresh'
 import type { CheckoutReturnState } from '@/lib/checkout-return'
 import { useEffect, useState } from 'react'
 
@@ -119,11 +120,16 @@ export function Layout({
         <InstallAppPrompt />
         <PushNotificationPriming />
         <main
-          className={`flex-1 min-h-0 min-w-0 w-full ${
-            page === 'home' ? 'overflow-auto p-0' : 'overflow-auto p-4 md:p-6'
+          className={`flex-1 min-h-0 min-w-0 w-full flex flex-col ${
+            page === 'home' ? 'p-0' : 'p-0'
           }`}
         >
-          {children}
+          <PullToRefresh
+            page={page}
+            className={`flex-1 overflow-auto ${page === 'home' ? 'p-0' : 'p-4 md:p-6'}`}
+          >
+            {children}
+          </PullToRefresh>
         </main>
         <BottomNav page={page} onNavigate={onNavigate} />
         <HelpButton page={page} />
