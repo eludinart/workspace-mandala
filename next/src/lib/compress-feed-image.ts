@@ -108,6 +108,63 @@ export async function compressFeedImage(
   }
 }
 
+/**
+ * Compresse une capture pour un retour support : conserve le ratio (pas de crop),
+ * plafonne la plus grande dimension, JPEG léger.
+ */
+export async function compressSupportImage(
+  file: File,
+  opts?: { maxBytes?: number; maxEdge?: number }
+): Promise<{ dataUrl: string; error?: string }> {
+  if (!looksLikeImage(file)) {
+    return { dataUrl: '', error: 'Fichier image requis (JPEG, PNG, WebP ou GIF)' }
+  }
+
+  const maxBytes = opts?.maxBytes ?? 300_000
+  const maxEdge = opts?.maxEdge ?? 1600
+
+  let bitmap: ImageBitmap
+  try {
+    bitmap = await loadBitmap(file)
+  } catch {
+    return {
+      dataUrl: '',
+      error: 'Impossible de lire cette image — essayez JPEG ou PNG',
+    }
+  }
+
+  const srcW = bitmap.width
+  const srcH = bitmap.height
+  const scale = Math.min(1, maxEdge / Math.max(srcW, srcH))
+  const dstW = Math.max(1, Math.round(srcW * scale))
+  const dstH = Math.max(1, Math.round(srcH * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dstW
+  canvas.height = dstH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    bitmap.close()
+    return { dataUrl: '', error: 'Canvas non disponible' }
+  }
+  ctx.drawImage(bitmap, 0, 0, dstW, dstH)
+  bitmap.close()
+
+  for (const quality of [0.86, 0.74, 0.62, 0.5, 0.38]) {
+    const dataUrl = canvas.toDataURL('image/jpeg', quality)
+    const b64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
+    const approxBytes = Math.ceil((b64.length * 3) / 4)
+    if (approxBytes <= maxBytes) {
+      return { dataUrl }
+    }
+  }
+
+  return {
+    dataUrl: '',
+    error: 'Image trop lourde même après compression — choisissez une capture plus légère',
+  }
+}
+
 /** Extrait le premier fichier image d’un événement presse-papiers ou drop. */
 export function imageFileFromDataTransfer(data: DataTransfer | null | undefined): File | null {
   if (!data) return null

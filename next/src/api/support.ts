@@ -15,6 +15,7 @@ export type SupportReportItem = {
   user_agent: string | null
   status: SupportStatus
   created_at: string | null
+  images: string[]
 }
 
 export const supportApi = {
@@ -23,6 +24,7 @@ export const supportApi = {
     message: string
     page: string
     community_slug?: string | null
+    images?: string[]
   }) => api.post('/api/support', body) as Promise<{ ok: boolean; id: number }>,
 
   list: () => api.get('/api/support') as Promise<{ items: SupportReportItem[] }>,
@@ -31,4 +33,7 @@ export const supportApi = {
     api.patch(`/api/support/${id}`, { status }) as Promise<{ ok: boolean }>,
 
   remove: (id: number) => api.delete(`/api/support/${id}`) as Promise<{ ok: boolean }>,
+
+  removeMany: (ids: number[]) =>
+    api.delete('/api/support', { ids }) as Promise<{ ok: boolean; deleted: number }>,
 }

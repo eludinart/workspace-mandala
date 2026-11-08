@@ -5,8 +5,10 @@ import type { MandalaPage } from '@/components/MandalaApp'
 import { supportApi, type SupportKind } from '@/api/support'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError } from '@/lib/api-client'
+import { compressSupportImage, imageFileFromDataTransfer } from '@/lib/compress-feed-image'
 import { helpForPage } from '@/lib/help-topics'
 import { PAGE_LABELS } from '@/lib/nav'
+import { SUPPORT_MAX_IMAGES } from '@/lib/support-images'
 
 const POS_KEY = 'mdl_help_button_pos'
 const DRAG_THRESHOLD_PX = 8
@@ -55,6 +57,9 @@ export function HelpButton({ page }: { page: MandalaPage }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
+  const [images, setImages] = useState<string[]>([])
+  const [imageBusy, setImageBusy] = useState(false)
+  const imageInputRef = useRef<HTMLInputElement>(null)
   const [pos, setPos] = useState<FabPos | null>(null)
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{
@@ -199,10 +204,38 @@ export function HelpButton({ page }: { page: MandalaPage }) {
     setOpen(true)
   }
 
+  const pickImage = async (file: File | null) => {
+    if (!file) return
+    if (images.length >= SUPPORT_MAX_IMAGES) {
+      setError(`Maximum ${SUPPORT_MAX_IMAGES} images.`)
+      return
+    }
+    setImageBusy(true)
+    setError(null)
+    try {
+      const res = await compressSupportImage(file)
+      if (res.error || !res.dataUrl) {
+        setError(res.error || 'Impossible de préparer l’image')
+        return
+      }
+      setImages((prev) =>
+        prev.length >= SUPPORT_MAX_IMAGES ? prev : [...prev, res.dataUrl]
+      )
+    } catch {
+      setError('Impossible de préparer l’image')
+    } finally {
+      setImageBusy(false)
+    }
+  }
+
   const submit = async () => {
     const text = message.trim()
     if (text.length < 8) {
       setError('Décrivez le sujet en quelques mots.')
+      return
+    }
+    if (imageBusy) {
+      setError('Attendez la fin de la préparation des images.')
       return
     }
     setSending(true)
@@ -213,9 +246,11 @@ export function HelpButton({ page }: { page: MandalaPage }) {
         message: text,
         page,
         community_slug: active?.slug ?? null,
+        images: images.length ? images : undefined,
       })
       setSent(true)
       setMessage('')
+      setImages([])
     } catch (err: unknown) {
       setError(err instanceof ApiError ? err.detail : 'Envoi impossible pour le moment.')
     } finally {
@@ -367,15 +402,89 @@ export function HelpButton({ page }: { page: MandalaPage }) {
                 <textarea
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
+                  onPaste={(event) => {
+                    const file = imageFileFromDataTransfer(event.clipboardData)
+                    if (!file) return
+                    event.preventDefault()
+                    void pickImage(file)
+                  }}
                   rows={5}
                   maxLength={4000}
                   placeholder={
                     kind === 'bug'
-                      ? 'Que s’est-il passé, et qu’attendiez-vous ?'
-                      : 'Votre question sur l’utilisation…'
+                      ? 'Que s’est-il passé, et qu’attendiez-vous ? (Ctrl+V pour coller une capture)'
+                      : 'Votre question… (Ctrl+V pour coller une image)'
                   }
                   className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
                 />
+                <div
+                  className="space-y-2 rounded-lg border border-dashed border-slate-700 p-2"
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'copy'
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    const file = imageFileFromDataTransfer(event.dataTransfer)
+                    void pickImage(file)
+                  }}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/*"
+                      className="hidden"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0] ?? null
+                        event.target.value = ''
+                        void pickImage(file)
+                      }}
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        sending || imageBusy || images.length >= SUPPORT_MAX_IMAGES
+                      }
+                      onClick={() => imageInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
+                    >
+                      {imageBusy
+                        ? 'Préparation…'
+                        : images.length >= SUPPORT_MAX_IMAGES
+                          ? `${SUPPORT_MAX_IMAGES} images max`
+                          : 'Joindre une image'}
+                    </button>
+                    <span className="text-xs text-slate-500">
+                      Optionnel · {images.length}/{SUPPORT_MAX_IMAGES}
+                    </span>
+                  </div>
+                  {images.length > 0 && (
+                    <ul className="flex flex-wrap gap-2">
+                      {images.map((src, index) => (
+                        <li key={`${index}-${src.slice(0, 32)}`} className="relative">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={`Capture ${index + 1}`}
+                            className="h-16 w-16 rounded-lg object-cover border border-slate-700"
+                          />
+                          <button
+                            type="button"
+                            disabled={sending || imageBusy}
+                            onClick={() =>
+                              setImages((prev) => prev.filter((_, i) => i !== index))
+                            }
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-200 border border-slate-600"
+                            aria-label={`Retirer l’image ${index + 1}`}
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
                 {error && <p className="text-sm text-red-400">{error}</p>}
                 {sent && (
                   <p className="text-sm text-emerald-400">
@@ -384,7 +493,7 @@ export function HelpButton({ page }: { page: MandalaPage }) {
                 )}
                 <button
                   type="submit"
-                  disabled={sending}
+                  disabled={sending || imageBusy}
                   className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-500 disabled:opacity-60"
                 >
                   {sending ? 'Envoi…' : 'Envoyer'}

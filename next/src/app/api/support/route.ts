@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ApiError, requireAdmin, requireAuth } from '@/lib/api-auth'
 import { authMe } from '@/lib/db-auth'
-import { insertSupportReport, listSupportReports, type SupportKind } from '@/lib/db-support'
+import {
+  deleteDoneSupportReportsBatch,
+  insertSupportReport,
+  listSupportReports,
+  type SupportKind,
+} from '@/lib/db-support'
 import { PAGE_LABELS } from '@/lib/nav'
 import { sendTransactionalEmail } from '@/lib/mandala-mail'
+import { assertSupportImageDataUrls } from '@/lib/support-images'
 import type { MandalaPage } from '@/components/MandalaApp'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +48,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message trop long (4000 caractères maximum).' }, { status: 400 })
     }
 
+    let images: string[]
+    try {
+      images = assertSupportImageDataUrls(body.images)
+    } catch (err: unknown) {
+      const status =
+        err && typeof err === 'object' && 'status' in err
+          ? Number((err as { status: number }).status)
+          : 400
+      const msg = err instanceof Error ? err.message : 'Images invalides'
+      return NextResponse.json({ error: msg }, { status: status || 400 })
+    }
+
     const page = cleanPage(body.page)
     const communitySlug = cleanSlug(body.community_slug)
     const userAgent = req.headers.get('user-agent')?.slice(0, 512) ?? null
@@ -52,6 +70,7 @@ export async function POST(req: NextRequest) {
       kind,
       message,
       userAgent,
+      images,
     })
 
     const supportTo = process.env.SUPPORT_EMAIL?.trim()
@@ -70,6 +89,7 @@ export async function POST(req: NextRequest) {
           `De : ${who}`,
           `Page : ${pageLabel} (${page})`,
           communitySlug ? `Lieu : ${communitySlug}` : '',
+          images.length ? `Images jointes : ${images.length}` : '',
           '',
           message,
         ]
@@ -93,6 +113,41 @@ export async function GET(req: NextRequest) {
     await requireAdmin(req)
     const items = await listSupportReports()
     return NextResponse.json({ items })
+  } catch (err: unknown) {
+    if (err instanceof ApiError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    const message = err instanceof Error ? err.message : 'Erreur'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
+
+/** Suppression en lot des retours traités uniquement (tout ou rien). */
+export async function DELETE(req: NextRequest) {
+  try {
+    await requireAdmin(req)
+    const body = await req.json().catch(() => ({}))
+    const rawIds = Array.isArray(body.ids) ? body.ids : []
+    const ids = rawIds
+      .map((value: unknown) => parseInt(String(value), 10))
+      .filter((id: number) => Number.isFinite(id) && id > 0)
+    if (!ids.length) {
+      return NextResponse.json({ error: 'Aucun identifiant fourni' }, { status: 400 })
+    }
+    const result = await deleteDoneSupportReportsBatch(ids)
+    if (result === 'empty') {
+      return NextResponse.json({ error: 'Aucun identifiant fourni' }, { status: 400 })
+    }
+    if (result === 'not_found') {
+      return NextResponse.json({ error: 'Un ou plusieurs retours sont introuvables' }, { status: 404 })
+    }
+    if (result === 'not_done') {
+      return NextResponse.json(
+        { error: 'Seuls les retours traités peuvent être supprimés.' },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json({ ok: true, deleted: ids.length })
   } catch (err: unknown) {
     if (err instanceof ApiError) {
       return NextResponse.json({ error: err.message }, { status: err.status })
