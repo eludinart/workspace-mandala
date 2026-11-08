@@ -15,6 +15,7 @@ import { UserAvatar } from '@/components/UserAvatar'
 import { ACCOUNT_SKILLS_ANCHOR } from '@/components/skills/SkillsProfileSection'
 import { ApiError } from '@/lib/api-client'
 import { RESOURCE_KINDS } from '@/lib/resource-constants'
+import { publicPlaceProfileHref } from '@/lib/skill-place-link'
 import {
   SKILL_REGISTER_LABELS,
   SKILL_REGISTERS,
@@ -787,19 +788,32 @@ export function SkillsDirectory({
                   )}
                   {selected.places.length > 0 ? (
                     <ul className="mt-2 flex flex-wrap gap-1.5">
-                      {selected.places.map((p) => (
-                        <li key={p.id}>
-                          <a
-                            href={`/lieux/${p.slug}`}
-                            className="inline-flex items-center gap-1.5 rounded-full border border-amber-700/50 bg-amber-950/35 px-2.5 py-1 text-xs text-amber-100 hover:bg-amber-900/40"
-                          >
+                      {selected.places.map((p) => {
+                        const href = publicPlaceProfileHref(p)
+                        const label = (
+                          <>
                             <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
                             <span>
                               Rattaché au lieu Mandala · <strong>{p.name}</strong>
                             </span>
-                          </a>
-                        </li>
-                      ))}
+                          </>
+                        )
+                        const className =
+                          'inline-flex items-center gap-1.5 rounded-full border border-amber-700/50 bg-amber-950/35 px-2.5 py-1 text-xs text-amber-100'
+                        return (
+                          <li key={p.id}>
+                            {href ? (
+                              <a href={href} className={`${className} hover:bg-amber-900/40`}>
+                                {label}
+                              </a>
+                            ) : (
+                              <span className={className} title="Profil du lieu privé">
+                                {label}
+                              </span>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
                   ) : (
                     <p className="mt-2 text-xs text-slate-500">Sans rattachement à un lieu Mandala</p>

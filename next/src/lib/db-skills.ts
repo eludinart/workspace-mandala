@@ -56,6 +56,8 @@ export type SkillPlaceRef = {
   slug: string
   name: string
   logo_emoji: string | null
+  /** Fiche /lieux/[slug] ; faux → pas de lien (la page répond 404). */
+  profile_public: boolean
 }
 
 export type SkillProfile = {
@@ -358,7 +360,7 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
   const tPlaces = table('mandala_skill_profile_places')
   const tC = table('mandala_communities')
   const [placeRows] = await pool.execute<RowDataPacket[]>(
-    `SELECT c.id, c.slug, c.name, c.logo_emoji
+    `SELECT c.id, c.slug, c.name, c.logo_emoji, c.profile_public
      FROM ${tPlaces} sp
      JOIN ${tC} c ON c.id = sp.community_id AND c.is_active = 1
      WHERE sp.user_id = ?
@@ -384,11 +386,22 @@ async function loadProfile(userId: number): Promise<SkillProfile> {
 }
 
 function mapPlace(r: RowDataPacket): SkillPlaceRef {
+  const rawProfile = r.profile_public
+  const profilePublic =
+    rawProfile == null || rawProfile === ''
+      ? true
+      : !(
+          rawProfile === 0 ||
+          rawProfile === false ||
+          String(rawProfile).trim().toLowerCase() === '0' ||
+          String(rawProfile).trim().toLowerCase() === 'false'
+        )
   return {
     id: Number(r.id ?? r.community_id),
     slug: String(r.slug ?? ''),
     name: String(r.name ?? ''),
     logo_emoji: r.logo_emoji != null ? String(r.logo_emoji) : null,
+    profile_public: profilePublic,
   }
 }
 
@@ -696,13 +709,20 @@ function cardFromProfile(
 }
 
 function toPlaceRefs(
-  rows: Array<{ id: number; slug: string; name: string; logo_emoji?: string | null }>
+  rows: Array<{
+    id: number
+    slug: string
+    name: string
+    logo_emoji?: string | null
+    profile_public?: boolean
+  }>
 ): SkillPlaceRef[] {
   return rows.map((c) => ({
     id: c.id,
     slug: c.slug,
     name: c.name,
     logo_emoji: c.logo_emoji ?? null,
+    profile_public: c.profile_public !== false,
   }))
 }
 
@@ -1004,7 +1024,7 @@ export async function listVisibleSkillNotes(
     let places: SkillPlaceRef[] = []
     if (scope === 'places') {
       const [placeRows] = await pool.execute<RowDataPacket[]>(
-        `SELECT c.id, c.slug, c.name, c.logo_emoji
+        `SELECT c.id, c.slug, c.name, c.logo_emoji, c.profile_public
          FROM ${tNotePlaces} np
          JOIN ${tC} c ON c.id = np.community_id AND c.is_active = 1
          WHERE np.note_id = ?

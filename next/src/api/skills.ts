@@ -9,6 +9,8 @@ export type SkillPlaceRef = {
   slug: string
   name: string
   logo_emoji: string | null
+  /** Fiche /lieux/[slug] ; faux → pas de lien (la page répond 404). */
+  profile_public: boolean
 }
 
 export type SkillProfile = {
