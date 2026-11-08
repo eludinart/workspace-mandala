@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { calendarApi } from '@/api/calendar'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,6 +14,8 @@ import { CalendarMonthGrid } from '@/components/calendar/CalendarMonthGrid'
 import { CalendarWeekView } from '@/components/calendar/CalendarWeekView'
 import { CalendarDayPanel, type DayDetailData } from '@/components/calendar/CalendarDayPanel'
 import { ExplainCard } from '@/components/help/ExplainCard'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
+import { queryKeys } from '@/lib/query-keys'
 import {
   type CalendarViewMode,
   type DayEvent,
@@ -34,7 +37,8 @@ import {
 } from '@/components/calendar/calendar-utils'
 
 export function CalendarPage() {
-  const { active } = useCommunity()
+  const queryClient = useQueryClient()
+  const { active, refresh: refreshCommunities } = useCommunity()
   const { user } = useAuth()
   const viewerId = user?.id != null ? Number(user.id) : null
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month')
@@ -57,10 +61,13 @@ export function CalendarPage() {
   const today = useMemo(() => new Date(), [])
   const weekDays = useMemo(() => weekDaysFromMonday(weekAnchor), [weekAnchor])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (opts?: { background?: boolean }) => {
     if (!active?.slug) return
-    setLoading(true)
-    setError(null)
+    const background = opts?.background === true
+    if (!background) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       if (viewMode === 'month') {
         const res = (await calendarApi.month(active.slug, ym)) as MonthData
@@ -73,10 +80,12 @@ export function CalendarPage() {
         setData(mergeMonthData(results))
       }
     } catch (e: unknown) {
-      setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
-      setData(null)
+      if (!background) {
+        setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
+        setData(null)
+      }
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [active?.slug, ym, viewMode, weekAnchor])
 
@@ -162,6 +171,23 @@ export function CalendarPage() {
     },
     [active?.slug]
   )
+
+  const onPull = useCallback(async () => {
+    await refreshCommunities({ background: true })
+    if (active?.slug) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.placeEvents(active.slug) })
+    }
+    await loadData({ background: true })
+    if (selectedDay) await openDay(selectedDay)
+  }, [
+    active?.slug,
+    loadData,
+    openDay,
+    queryClient,
+    refreshCommunities,
+    selectedDay,
+  ])
+  useRegisterPullRefresh('calendar', onPull)
 
   useEffect(() => {
     if (!active?.slug) return

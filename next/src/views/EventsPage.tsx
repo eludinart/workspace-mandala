@@ -1,14 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { eventsApi } from '@/api/events'
+import { calendarApi } from '@/api/calendar'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNotifyPlaceEventsChanged, usePlaceEvents } from '@/hooks/usePlaceEvents'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
+import { queryKeys } from '@/lib/query-keys'
 import { EventDetailPage } from '@/views/EventDetailPage'
 import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { EVENT_PHASES } from '@/lib/event-constants'
+import { enumerateEventDays } from '@/lib/event-dates'
 import { type HomeEventPreview, isEventUpcoming } from '@/lib/event-preview'
 import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { ApiError } from '@/lib/api-client'
@@ -56,6 +61,7 @@ function CreateEventWizard({
   const [location, setLocation] = useState('')
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
+  const [openCalendarDays, setOpenCalendarDays] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,15 +72,27 @@ function CreateEventWizard({
     setSubmitting(true)
     setError(null)
     try {
+      const starts_at = startsAt ? startsAt.replace('T', ' ') : undefined
+      const ends_at = endsAt ? endsAt.replace('T', ' ') : undefined
       const res = (await eventsApi.create({
         community_slug: communitySlug,
         title: title.trim(),
         description: description.trim() || undefined,
         location: location.trim() || undefined,
-        starts_at: startsAt ? startsAt.replace('T', ' ') : undefined,
-        ends_at: endsAt ? endsAt.replace('T', ' ') : undefined,
+        starts_at,
+        ends_at,
         phase: 'preparation',
       })) as { event?: { id: number } }
+      if (openCalendarDays && starts_at) {
+        const days = enumerateEventDays(starts_at, ends_at ?? null)
+        if (days.length > 0) {
+          await calendarApi.setDays({
+            community_slug: communitySlug,
+            days,
+            is_disabled: false,
+          })
+        }
+      }
       if (res.event?.id) onCreated(res.event.id)
       else onClose()
     } catch (e: unknown) {
@@ -150,6 +168,23 @@ function CreateEventWizard({
               className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm"
             />
           </label>
+          <label className="flex items-start gap-2.5 rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2.5 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={openCalendarDays}
+              onChange={(e) => setOpenCalendarDays(e.target.checked)}
+              disabled={!startsAt}
+            />
+            <span>
+              <span className="block text-sm text-slate-200">Ouvrir ces jours dans l’agenda</span>
+              <span className="block text-[11px] text-slate-500 mt-0.5">
+                {startsAt
+                  ? 'Les membres pourront s’inscrire « Je viens » sur ces dates.'
+                  : 'Indiquez d’abord une date de début.'}
+              </span>
+            </span>
+          </label>
         </div>
       )}
       {step === 3 && (
@@ -177,6 +212,16 @@ function CreateEventWizard({
             <div>
               <dt className="text-slate-500 text-xs">Fin</dt>
               <dd>{endsAt ? endsAt.replace('T', ' ') : '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-500 text-xs">Agenda</dt>
+              <dd>
+                {startsAt && openCalendarDays
+                  ? 'Jours ouverts à la création'
+                  : startsAt
+                    ? 'Jours non ouverts automatiquement'
+                    : '—'}
+              </dd>
             </div>
             <div>
               <dt className="text-slate-500 text-xs">Phase initiale</dt>
@@ -235,9 +280,18 @@ export function EventsPage({
   openEventId?: number | null
   onOpenEvent?: (id: number | null) => void
 }) {
-  const { active } = useCommunity()
+  const queryClient = useQueryClient()
+  const { active, refresh: refreshCommunities } = useCommunity()
   const eventsQuery = usePlaceEvents(active?.slug)
   const notifyEventsChanged = useNotifyPlaceEventsChanged()
+
+  const onPull = useCallback(async () => {
+    await refreshCommunities({ background: true })
+    if (active?.slug) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.placeEvents(active.slug) })
+    }
+  }, [active?.slug, queryClient, refreshCommunities])
+  useRegisterPullRefresh('events', onPull)
   const events = eventsQuery.data?.events ?? []
   const elsewhere = eventsQuery.data?.elsewhere ?? []
   const canManage = eventsQuery.data?.can_manage ?? false

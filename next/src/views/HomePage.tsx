@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { usePlaceEvents } from '@/hooks/usePlaceEvents'
+import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
+import { queryKeys } from '@/lib/query-keys'
 import {
   descriptionExcerpt,
   formatEventDateRange,
@@ -35,8 +38,18 @@ function eventDateParts(startsAt: string | null): { day: string; month: string }
 }
 
 export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
-  const { active } = useCommunity()
+  const queryClient = useQueryClient()
+  const { active, refresh: refreshCommunities } = useCommunity()
   const eventsQuery = usePlaceEvents(active?.slug)
+
+  const onPull = useCallback(async () => {
+    await refreshCommunities({ background: true })
+    if (active?.slug) {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.placeEvents(active.slug) })
+    }
+    window.dispatchEvent(new CustomEvent('mandala-pull-refresh', { detail: { page: 'home' } }))
+  }, [active?.slug, queryClient, refreshCommunities])
+  useRegisterPullRefresh('home', onPull)
   const events = eventsQuery.data?.events ?? []
   const elsewhere = eventsQuery.data?.elsewhere ?? []
   const canManage = eventsQuery.data?.can_manage ?? false
