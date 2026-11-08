@@ -46,6 +46,16 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
     }
   }, [active?.slug])
 
+  // Switch de lieu : ne jamais montrer les annonces de l’ancien lieu.
+  useEffect(() => {
+    setAnnouncements([])
+    setCanManage(false)
+    setError(null)
+    setComposerOpen(false)
+    setEditing(null)
+    setLoading(Boolean(active?.slug))
+  }, [active?.slug])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -135,7 +145,11 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
         </div>
       }
     >
-      {loading && <p className="text-sm text-slate-500">Chargement…</p>}
+      {loading && (
+        <p className="text-sm text-slate-500">
+          Chargement{active?.name ? ` — ${active.name}` : ''}…
+        </p>
+      )}
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       {!loading && announcements.length === 0 && canManage && (
@@ -145,7 +159,8 @@ export function PlaceAnnouncementsSection({ onNavigate }: { onNavigate: MandalaN
       )}
 
       <div className="space-y-6">
-        {preview.map((a, i) => (
+        {!loading &&
+          preview.map((a, i) => (
           <div key={a.id} className={i > 0 ? 'pt-6 border-t border-amber-900/30' : ''}>
             {editing?.id === a.id ? (
               <AnnouncementEditorForm

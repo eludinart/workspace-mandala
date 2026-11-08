@@ -12,16 +12,18 @@ La table `mdl_push_subscriptions` est créée automatiquement au premier enregis
 
 1. Ouvrir Mandala en HTTPS, se connecter.
 2. Accepter le modal « Activer les notifications », ou **Compte → Préférences alertes → Activer**.
-3. Mettre l’app en arrière-plan (pas forcer l’arrêt).
+3. Laisser l’app **ouverte** (premier plan) **ou** la mettre en arrière-plan (pas forcer l’arrêt).
 4. Depuis un autre compte : envoyer un message, **ou** Compte → **Envoyer un test push**.
-5. Attendu : notification OS ; un tap ouvre `/app` (messages / notifications).
+5. Attendu :
+   - app ouverte → toast in-app (et souvent aussi notif OS) ;
+   - app en arrière-plan → notification OS ; un tap ouvre `/app` (messages / notifications).
 
 ## iPhone (Safari 16.4+)
 
 1. Partager → **Sur l’écran d’accueil** (PWA obligatoire pour Web Push iOS).
 2. Ouvrir Mandala depuis l’icône d’accueil (pas l’onglet Safari seul).
 3. Activer les notifications (modal ou Compte).
-4. Même test qu’Android (message ou test push) avec l’app en arrière-plan.
+4. Même test qu’Android (message ou test push) — app ouverte (toast) ou en arrière-plan (notif OS).
 
 ## Contrôles utiles
 

@@ -34,7 +34,8 @@ type CommunityContextValue = {
   loading: boolean
   /** Échec du chargement des lieux : ne pas le confondre avec « aucun lieu ». */
   loadError: string | null
-  refresh: () => Promise<void>
+  /** `background: true` = refresh sans basculer toute l’UI en « Chargement ». */
+  refresh: (opts?: { background?: boolean }) => Promise<void>
   joinCommunity: (slug: string, inviteCode?: string | null) => Promise<void>
 }
 
@@ -61,14 +62,15 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { background?: boolean }) => {
     if (!user) {
       setCommunities([])
       setLoadError(null)
       setLoading(false)
       return
     }
-    setLoading(true)
+    const background = !!opts?.background
+    if (!background) setLoading(true)
     try {
       setLoadError(null)
       const res = (await communitiesApi.mine()) as { items?: Community[] }
@@ -91,7 +93,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
       communitiesRef.current = []
       setLoadError('Impossible de charger vos lieux.')
     } finally {
-      setLoading(false)
+      if (!background) setLoading(false)
     }
   }, [user])
 
@@ -109,7 +111,8 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
         const name = communitiesRef.current.find((c) => c.slug === slug)?.name ?? slug
         setPlaceSwitchNotice({ placeName: name, reason: opts.reason })
         if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
-        dismissTimerRef.current = setTimeout(() => setPlaceSwitchNotice(null), 6000)
+        const ms = opts.reason === 'notification' ? 6000 : 3500
+        dismissTimerRef.current = setTimeout(() => setPlaceSwitchNotice(null), ms)
       }
     },
     []
@@ -133,8 +136,8 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const joinCommunity = useCallback(
     async (slug: string, inviteCode?: string | null) => {
       await communitiesApi.join(slug, inviteCode)
-      await refresh()
-      setActiveSlug(slug)
+      await refresh({ background: true })
+      setActiveSlug(slug, { notify: true })
     },
     [refresh, setActiveSlug]
   )

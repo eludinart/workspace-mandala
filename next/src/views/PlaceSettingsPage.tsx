@@ -134,7 +134,7 @@ export function PlaceSettingsPage({
       if (activeTab !== 'charter' && avatar !== null) body.avatar = avatar
       const data = await communitiesApi.updateSettings(active.slug, body)
       applySettings(data.settings)
-      await refresh()
+      await refresh({ background: true })
       setMsg('Paramètres enregistrés.')
       setMsgOk(true)
     } catch (e: unknown) {

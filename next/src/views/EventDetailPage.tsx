@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { eventsApi } from '@/api/events'
+import { useNotifyPlaceEventsChanged } from '@/hooks/usePlaceEvents'
 import { EVENT_PHASES, STAFF_ROLES } from '@/lib/event-constants'
 import { formatEventDateRange } from '@/lib/event-preview'
 import { ApiError } from '@/lib/api-client'
@@ -96,15 +97,11 @@ export function EventDetailPage({
   const [editStatus, setEditStatus] = useState('')
   const [editWallPublic, setEditWallPublic] = useState(false)
   const [editOpenToFriends, setEditOpenToFriends] = useState(false)
+  const notifyEventsChanged = useNotifyPlaceEventsChanged()
 
   const emitEventsChanged = useCallback(() => {
-    if (typeof window === 'undefined') return
-    window.dispatchEvent(
-      new CustomEvent('mandala-events-changed', {
-        detail: { communitySlug, eventId },
-      }),
-    )
-  }, [communitySlug, eventId])
+    notifyEventsChanged({ communitySlug, eventId })
+  }, [communitySlug, eventId, notifyEventsChanged])
 
   const load = useCallback(async () => {
     setLoading(true)

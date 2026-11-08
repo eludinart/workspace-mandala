@@ -8,6 +8,7 @@ import { parseWallClockDateTime } from '@/lib/format-datetime'
 import { enumerateEventDays, getEventSpanPosition } from '@/lib/event-dates'
 import { ApiError } from '@/lib/api-client'
 import { eventsApi } from '@/api/events'
+import { emitEventsChanged } from '@/lib/events-changed'
 import { CalendarMonthGrid } from '@/components/calendar/CalendarMonthGrid'
 import { CalendarWeekView } from '@/components/calendar/CalendarWeekView'
 import { CalendarDayPanel, type DayDetailData } from '@/components/calendar/CalendarDayPanel'
@@ -82,6 +83,16 @@ export function CalendarPage() {
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  // Switch de lieu : ne pas garder le panneau jour / multi-select de l’ancien lieu.
+  useEffect(() => {
+    setSelectedDay(null)
+    setSelectedDays([])
+    setAnchorDay(null)
+    setDayDetail(null)
+    setActionMsg(null)
+    setMultiSelect(false)
+  }, [active?.slug])
 
   const daysMap = useMemo(() => {
     const map = new Map<string, MonthDay>()
@@ -289,9 +300,7 @@ export function CalendarPage() {
           is_disabled: false,
         })
       }
-      window.dispatchEvent(
-        new CustomEvent('mandala-events-changed', { detail: { communitySlug: active.slug } })
-      )
+      emitEventsChanged({ communitySlug: active.slug })
       await refreshAfterBulk()
       setActionMsg('Événement créé.')
     } catch (e: unknown) {

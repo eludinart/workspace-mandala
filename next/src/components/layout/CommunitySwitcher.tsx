@@ -72,7 +72,10 @@ export function CommunitySwitcher({ open, onClose }: { open: boolean; onClose: (
                 <li key={c.slug}>
                   <button
                     type="button"
-                    onClick={() => { setActiveSlug(c.slug); onClose() }}
+                    onClick={() => {
+                      setActiveSlug(c.slug, { notify: c.slug !== active?.slug })
+                      onClose()
+                    }}
                     className={`w-full text-left flex items-center gap-3 rounded-xl border p-3 transition-colors ${
                       active?.slug === c.slug
                         ? 'border-violet-500/50 bg-violet-950/40'

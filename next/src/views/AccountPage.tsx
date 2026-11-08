@@ -49,7 +49,7 @@ const SECTIONS = [
   { id: 'communautes', label: 'Mes communautés' },
   { id: 'abonnements', label: 'Abonnements' },
   { id: 'alertes', label: 'Préférences alertes' },
-  { id: 'danger', label: 'Zone sensible' },
+  { id: 'danger', label: 'Supprimer mon compte définitivement' },
 ] as const
 
 type AccountSectionId = (typeof SECTIONS)[number]['id']
@@ -284,7 +284,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       await communitiesApi.leave(leaveSlug)
       setLeaveSlug(null)
       setMsg('Vous avez quitté ce lieu')
-      await refreshCommunities()
+      await refreshCommunities({ background: true })
       const remaining = communities.filter((c) => c.slug !== leaveSlug)
       if (remaining[0]) setActiveSlug(remaining[0].slug)
     } catch (e: unknown) {
@@ -345,7 +345,10 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         sent?: number
         devices?: number
       }
-      if (res.ok) setPushMsg(`Test envoyé (${res.sent ?? 0} appareil(s)). Mettez l’app en arrière-plan pour vérifier.`)
+      if (res.ok)
+        setPushMsg(
+          `Test envoyé (${res.sent ?? 0} appareil(s)). Une alerte doit apparaître même si Mandala reste ouvert.`
+        )
       else setPushMsg(res.error ?? 'Échec du test push')
     } catch (e: unknown) {
       setPushMsg(e instanceof ApiError ? e.detail : 'Erreur lors du test')
@@ -365,19 +368,22 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   return (
     <div className="m-user-form w-full space-y-6">
       <ExplainCard screen="account" />
-      <header className="sticky top-0 z-20 -mx-1 space-y-3 border-b border-slate-800/70 bg-slate-950/95 px-1 pb-3 pt-1 backdrop-blur-md">
+      <header className="-mx-1 space-y-3 border-b border-slate-800/70 bg-slate-950/95 px-1 pb-3 pt-1">
         <div>
           <p className="m-user-eyebrow mb-1">Espace personnel</p>
           <h1 className="m-user-title text-3xl">Mon compte</h1>
         </div>
-        <nav className="flex flex-wrap gap-2" aria-label="Sections du compte">
+        <nav
+          className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
+          aria-label="Sections du compte"
+        >
           {SECTIONS.map((s) => (
             <button
               key={s.id}
               type="button"
               aria-current={activeSection === s.id ? 'page' : undefined}
               onClick={() => selectSection(s.id)}
-              className={navPillClass(activeSection === s.id)}
+              className={`shrink-0 ${navPillClass(activeSection === s.id)}`}
             >
               {s.label}
             </button>
@@ -668,8 +674,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         </h2>
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
           <p className="text-sm text-slate-400 leading-relaxed">
-            Activez les notifications push pour recevoir les messages même lorsque Mandala est en
-            arrière-plan.
+            Activez les notifications push pour recevoir les messages — app ouverte ou en
+            arrière-plan, sur poste comme sur smartphone.
           </p>
           {iosHomeScreen ? (
             <p className="text-sm text-amber-200/90 leading-relaxed">
@@ -711,7 +717,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       {activeSection === 'danger' && (
       <section id="danger" className="space-y-4" aria-labelledby="account-section-title">
         <h2 id="account-section-title" className="text-lg font-semibold text-red-300">
-          Zone sensible
+          Supprimer mon compte définitivement
         </h2>
         <div className="rounded-xl border border-red-900/40 bg-red-950/10 p-4 space-y-4">
           <div className="space-y-2">

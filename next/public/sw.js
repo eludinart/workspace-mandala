@@ -64,27 +64,32 @@ self.addEventListener('push', (event) => {
   }
 
   const tag = data.tag ? String(data.tag).slice(0, 64) : ''
+  const url = data.url || '/app?page=notifications'
+  const title = data.title || 'Mandala'
+  const body = data.body || ''
   const options = {
-    body: data.body || '',
+    body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     silent: false,
     // Sans vibration, Android peut classer l'alerte comme silencieuse et ne pas la montrer.
     vibrate: [120, 40, 120],
-    data: { url: data.url || '/app?page=notifications' },
+    // Toujours une alerte OS visible — y compris si un onglet/app Mandala est au premier plan.
+    requireInteraction: false,
+    data: { url },
     ...(tag ? { tag, renotify: true } : {}),
   }
   event.waitUntil(
-    Promise.all([
-      self.registration.showNotification(data.title || 'Mandala', options),
-      // Rafraîchir la cloche / le sous-menu si l'app est ouverte
-      notifyOpenClients({
+    (async () => {
+      // D’abord prévenir les fenêtres ouvertes (toast in-app + cloche), puis notif OS.
+      await notifyOpenClients({
         type: 'MDL_PUSH_RECEIVED',
-        title: data.title,
-        body: data.body,
-        url: data.url,
-      }),
-    ])
+        title,
+        body,
+        url,
+      })
+      await self.registration.showNotification(title, options)
+    })()
   )
 })
 

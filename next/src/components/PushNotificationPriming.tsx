@@ -245,7 +245,7 @@ export function PushNotificationPriming() {
                   </h2>
                   <p className="mt-2 text-sm text-slate-400 leading-relaxed">
                     Elles ne sont pas encore actives sur cet appareil. Activez-les pour recevoir les
-                    messages et alertes même lorsque Mandala est en arrière-plan.
+                    messages et alertes, même lorsque Mandala est déjà ouvert.
                   </p>
                 </div>
               </div>

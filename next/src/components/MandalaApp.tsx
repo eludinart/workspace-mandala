@@ -31,6 +31,7 @@ import { BillingOffersPage } from '@/views/BillingOffersPage'
 import { OnboardingGate } from '@/components/onboarding/OnboardingGate'
 import { TermsAcceptanceGate } from '@/components/legal/TermsAcceptanceGate'
 import { TelemetryTracker } from '@/components/TelemetryTracker'
+import { ForegroundPushToast } from '@/components/ForegroundPushToast'
 import type { AdminTabId } from '@/lib/nav'
 import {
   clearCheckoutParamsFromUrl,
@@ -608,6 +609,7 @@ export function MandalaApp() {
       <TermsAcceptanceGate>
         <OnboardingGate>
           <TelemetryTracker page={page} />
+          <ForegroundPushToast onNavigate={navigate} />
           <Layout
             page={page}
             onNavigate={navigate}

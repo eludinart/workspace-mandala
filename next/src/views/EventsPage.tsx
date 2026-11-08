@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { eventsApi } from '@/api/events'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { useCommunity } from '@/contexts/CommunityContext'
+import { useNotifyPlaceEventsChanged, usePlaceEvents } from '@/hooks/usePlaceEvents'
 import { EventDetailPage } from '@/views/EventDetailPage'
 import { EventPreviewCard } from '@/components/events/EventPreviewCard'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
@@ -235,14 +236,25 @@ export function EventsPage({
   onOpenEvent?: (id: number | null) => void
 }) {
   const { active } = useCommunity()
-  const [events, setEvents] = useState<HomeEventPreview[]>([])
-  const [elsewhere, setElsewhere] = useState<HomeEventPreview[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const eventsQuery = usePlaceEvents(active?.slug)
+  const notifyEventsChanged = useNotifyPlaceEventsChanged()
+  const events = eventsQuery.data?.events ?? []
+  const elsewhere = eventsQuery.data?.elsewhere ?? []
+  const canManage = eventsQuery.data?.can_manage ?? false
+  const loading = eventsQuery.isLoading
+  const refreshing = eventsQuery.isFetching && !eventsQuery.isLoading
+  const error =
+    eventsQuery.error instanceof ApiError
+      ? eventsQuery.error.detail
+      : eventsQuery.error
+        ? (eventsQuery.error as { message?: string }).message ?? 'Erreur'
+        : null
   const [modalEventId, setModalEventId] = useState<number | null>(null)
   const [fullPageId, setFullPageId] = useState<number | null>(openEventId ?? null)
   const [showCreate, setShowCreate] = useState(false)
-  const [canManage, setCanManage] = useState(false)
+  const onOpenEventRef = useRef(onOpenEvent)
+  onOpenEventRef.current = onOpenEvent
+  const prevSlugRef = useRef<string | null | undefined>(undefined)
 
   const openModal = (id: number) => {
     setModalEventId(id)
@@ -255,42 +267,16 @@ export function EventsPage({
     onOpenEvent?.(id)
   }
 
-  const load = useCallback(async () => {
-    if (!active?.slug) return
-    setLoading(true)
-    setError(null)
-    try {
-      const res = (await eventsApi.list(active.slug)) as {
-        events?: HomeEventPreview[]
-        elsewhere?: HomeEventPreview[]
-        can_manage?: boolean
-      }
-      setEvents(res.events ?? [])
-      setElsewhere(res.elsewhere ?? [])
-      setCanManage(!!res.can_manage)
-    } catch (e: unknown) {
-      setError(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
-      setEvents([])
-      setElsewhere([])
-    } finally {
-      setLoading(false)
-    }
+  // Changement de lieu (pas au mount) : fermer détail / wizard.
+  useEffect(() => {
+    const prev = prevSlugRef.current
+    prevSlugRef.current = active?.slug
+    if (prev === undefined || prev === active?.slug) return
+    setModalEventId(null)
+    setFullPageId(null)
+    setShowCreate(false)
+    onOpenEventRef.current?.(null)
   }, [active?.slug])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    if (!active?.slug) return
-    const onEventsChanged = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ communitySlug?: string }>).detail
-      if (detail?.communitySlug !== active.slug) return
-      void load()
-    }
-    window.addEventListener('mandala-events-changed', onEventsChanged)
-    return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
-  }, [active?.slug, load])
 
   useEffect(() => {
     if (openEventId) setModalEventId(openEventId)
@@ -325,7 +311,7 @@ export function EventsPage({
         communitySlug={active.slug}
         onBack={() => {
           setFullPageId(null)
-          void load()
+          void eventsQuery.refetch()
           onOpenEvent?.(null)
         }}
       />
@@ -347,10 +333,10 @@ export function EventsPage({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => void eventsQuery.refetch()}
             className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800"
           >
-            Rafraîchir
+            {refreshing ? 'Actualisation…' : 'Rafraîchir'}
           </button>
           {canManage && (
             <button
@@ -369,11 +355,21 @@ export function EventsPage({
           onClose={() => setShowCreate(false)}
           onCreated={(id) => {
             setShowCreate(false)
-            void load().then(() => openModal(id))
+            notifyEventsChanged({ communitySlug: active.slug, eventId: id })
+            void eventsQuery.refetch().then(() => openModal(id))
           }}
         />
       )}
-      {loading && <p className="text-slate-400 text-sm">Chargement…</p>}
+      {loading && (
+        <p className="text-slate-400 text-sm">
+          Chargement{active?.name ? ` — ${active.name}` : ''}…
+        </p>
+      )}
+      {refreshing && (
+        <p className="text-xs text-slate-500" aria-live="polite">
+          Actualisation…
+        </p>
+      )}
       {error && <p className="text-red-400 text-sm">{error}</p>}
       {!loading && !error && events.length === 0 && elsewhereUpcoming.length === 0 && (
         <p className="text-slate-500 text-sm italic">Aucun événement pour cette communauté.</p>

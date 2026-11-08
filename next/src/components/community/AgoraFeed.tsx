@@ -70,6 +70,16 @@ export function AgoraFeed() {
     }
   }, [active?.id])
 
+  // Switch de lieu : ne jamais laisser le mur d’un autre lieu visible.
+  useEffect(() => {
+    setPosts([])
+    setCanManage(false)
+    setError(null)
+    setComposerOpen(false)
+    setLightbox(null)
+    setLoading(Boolean(active?.id))
+  }, [active?.id])
+
   useEffect(() => {
     void load()
   }, [load])
@@ -338,7 +348,11 @@ export function AgoraFeed() {
         {error && <p className="text-sm text-red-400">{error}</p>}
       </div>
 
-      {loading && <p className="text-sm text-slate-500">Chargement du mur…</p>}
+      {loading && (
+        <p className="text-sm text-slate-500">
+          Chargement du mur{active?.name ? ` — ${active.name}` : ''}…
+        </p>
+      )}
       {!loading && posts.length === 0 && (
         <p className="text-base text-slate-500 italic text-center py-4">
           Aucune publication pour le moment. Soyez le premier à partager.
@@ -346,7 +360,8 @@ export function AgoraFeed() {
       )}
 
       <ul className="space-y-4">
-        {posts.map((p) => (
+        {!loading &&
+          posts.map((p) => (
           <li
             key={p.id}
             className={`rounded-xl border bg-slate-900/50 p-5 shadow-sm shadow-black/10 ${

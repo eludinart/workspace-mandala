@@ -1,11 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { MandalaNavigate } from '@/components/MandalaApp'
 import { useCommunity } from '@/contexts/CommunityContext'
-import { eventsApi } from '@/api/events'
+import { usePlaceEvents } from '@/hooks/usePlaceEvents'
 import {
-  type HomeEventPreview,
   descriptionExcerpt,
   formatEventDateRange,
   isEventOnDay,
@@ -37,61 +36,28 @@ function eventDateParts(startsAt: string | null): { day: string; month: string }
 
 export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
   const { active } = useCommunity()
-  const [events, setEvents] = useState<HomeEventPreview[]>([])
-  const [elsewhere, setElsewhere] = useState<HomeEventPreview[]>([])
-  const [canManage, setCanManage] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const eventsQuery = usePlaceEvents(active?.slug)
+  const events = eventsQuery.data?.events ?? []
+  const elsewhere = eventsQuery.data?.elsewhere ?? []
+  const canManage = eventsQuery.data?.can_manage ?? false
+  const loading = eventsQuery.isLoading
+  const refreshing = eventsQuery.isFetching && !eventsQuery.isLoading
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null)
   const [joinOpen, setJoinOpen] = useState(false)
   const accent = active?.accent_color ?? '#7c3aed'
 
-  const load = useCallback(async () => {
-    if (!active?.slug) {
-      setEvents([])
-      setElsewhere([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    try {
-      const evRes = (await eventsApi.list(active.slug)) as {
-        events?: HomeEventPreview[]
-        elsewhere?: HomeEventPreview[]
-        can_manage?: boolean
-      }
-      setEvents(evRes.events ?? [])
-      setElsewhere(evRes.elsewhere ?? [])
-      setCanManage(!!evRes.can_manage)
-    } catch {
-      setEvents([])
-      setElsewhere([])
-    } finally {
-      setLoading(false)
-    }
+  useEffect(() => {
+    setSelectedEventId(null)
   }, [active?.slug])
 
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    if (!active?.slug) return
-    const onEventsChanged = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ communitySlug?: string }>).detail
-      if (detail?.communitySlug !== active.slug) return
-      void load()
-    }
-    window.addEventListener('mandala-events-changed', onEventsChanged)
-    return () => window.removeEventListener('mandala-events-changed', onEventsChanged)
-  }, [active?.slug, load])
-
-  const featuredEvent = pickFeaturedEvent(events)
-  const otherUpcoming = pickOtherUpcoming(events, featuredEvent)
-  const elsewhereList = pickOtherUpcoming(elsewhere, null)
+  const featuredEvent = !loading ? pickFeaturedEvent(events) : null
+  const otherUpcoming = !loading ? pickOtherUpcoming(events, featuredEvent) : []
+  const elsewhereList = !loading ? pickOtherUpcoming(elsewhere, null) : []
   const featuredIsToday = featuredEvent ? isEventOnDay(featuredEvent) : false
   const featuredImage = featuredEvent ? resolveFeaturedProgramImage(featuredEvent) : null
   const featuredMediaKind = featuredProgramMediaKind(featuredImage)
   const featuredDateParts = featuredEvent ? eventDateParts(featuredEvent.starts_at) : null
+  // Avatar du lieu actif seulement ; jamais le featured d’un lieu précédent pendant le load.
   const heroImage = isAvatarImageUrl(active?.avatar)
     ? active!.avatar!
     : featuredImage || null
@@ -222,7 +188,16 @@ export function HomePage({ onNavigate }: { onNavigate: MandalaNavigate }) {
                 {featuredIsToday ? 'Événement du jour' : 'Prochain rendez-vous'}
               </h2>
             </div>
-            {loading && <p className="text-sm text-slate-500 text-center">Chargement…</p>}
+            {loading && (
+              <p className="text-sm text-slate-500 text-center">
+                Chargement des programmes{active?.name ? ` — ${active.name}` : ''}…
+              </p>
+            )}
+            {refreshing && (
+              <p className="text-xs text-slate-500 text-center" aria-live="polite">
+                Actualisation…
+              </p>
+            )}
             {!loading && featuredEvent && (
               <div className="m-home-program">
                 <button
