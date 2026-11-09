@@ -1,7 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { mergePreservedAppSearchParams } from '@/lib/native-fcm-bridge'
+import { captureNativeFcmTokenFromUrlSync } from '@/lib/push-client'
 import { CommunityProvider } from '@/contexts/CommunityContext'
 import { PlaceChromeTheme } from '@/components/theme/PlaceChromeTheme'
 import { Layout } from '@/components/layout/Layout'
@@ -134,6 +136,12 @@ function buildAppUrl(s: Pick<AppHistoryState, 'page' | 'channelId' | 'userId' | 
   if (s.page === 'events' && s.eventId != null) params.set('eventId', String(s.eventId))
   if (s.page === 'admin' && s.adminTab !== 'people') params.set('adminTab', s.adminTab)
   if (s.page === 'managed-places' && s.hub) params.set('hub', s.hub)
+  // Préserver fcm_token / dist : le bootstrap history ne doit pas les effacer
+  // avant que PushNotificationPriming les enregistre (provider=fcm).
+  if (typeof window !== 'undefined') {
+    const merged = mergePreservedAppSearchParams(params, window.location.search)
+    return `/app?${merged.toString()}`
+  }
   return `/app?${params.toString()}`
 }
 
@@ -296,6 +304,11 @@ export function MandalaApp() {
     }
     navigate(messagesReturnPage === 'messages' ? 'home' : messagesReturnPage)
   }, [messagesReturnPage, navigate])
+
+  // Avant les useEffect d’historique : sauver ?fcm_token= (sinon pushAppStack l’efface).
+  useLayoutEffect(() => {
+    captureNativeFcmTokenFromUrlSync()
+  }, [])
 
   useEffect(() => {
     setMounted(true)

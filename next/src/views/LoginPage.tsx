@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { InstallAppPrompt } from '@/components/InstallAppPrompt'
@@ -10,6 +10,7 @@ import {
   readPendingPlaceInvite,
   type PendingPlaceInvite,
 } from '@/lib/place-invite'
+import { captureNativeFcmTokenFromUrlSync } from '@/lib/push-client'
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset'
 
@@ -33,6 +34,12 @@ function replaceAuthModeUrl(next: 'login' | 'register', invite: PendingPlaceInvi
   if (next === 'register') params.set('mode', 'register')
   if (invite?.slug) params.set('join', invite.slug)
   if (invite?.code) params.set('invite', invite.code)
+  // Ne pas jeter le pont FCM natif TWA pendant le login.
+  const cur = new URLSearchParams(window.location.search)
+  for (const key of ['fcm_token', 'dist'] as const) {
+    const value = cur.get(key)?.trim()
+    if (value) params.set(key, value)
+  }
   const qs = params.toString()
   window.history.replaceState(null, '', qs ? `/app?${qs}` : '/app')
 }
@@ -80,6 +87,10 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [acceptCgu, setAcceptCgu] = useState(false)
+
+  useLayoutEffect(() => {
+    captureNativeFcmTokenFromUrlSync()
+  }, [])
 
   useEffect(() => {
     const invite = capturePlaceInviteFromUrl()

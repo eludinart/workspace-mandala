@@ -2,11 +2,14 @@
  * Client push : VAPID (iOS PWA) + token FCM natif (Play TWA) + FCM web (Chrome).
  */
 import { notificationsApi } from '@/api/notifications'
+import {
+  extractNativeFcmToken,
+  isPlausibleFcmToken,
+  NATIVE_FCM_PARAM,
+  NATIVE_FCM_STORAGE,
+} from '@/lib/native-fcm-bridge'
 import { isIosDevice, isStandaloneDisplay } from '@/lib/pwa-install'
 import { platformFromUserAgent } from '@/lib/push-platform'
-
-const NATIVE_FCM_PARAM = 'fcm_token'
-const NATIVE_FCM_STORAGE = 'mdl_native_fcm_token'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -124,9 +127,39 @@ function persistNativeFcmTokenLocally(token: string): void {
   }
 }
 
+function readStoredNativeFcmToken(): string {
+  try {
+    return localStorage.getItem(NATIVE_FCM_STORAGE)?.trim() || ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Capture synchrone du token TWA AVANT que MandalaApp ne réécrive l’historique.
+ * À appeler depuis un useLayoutEffect (avant les useEffect de navigation).
+ */
+export function captureNativeFcmTokenFromUrlSync(): string {
+  if (typeof window === 'undefined') return ''
+  let cookieHeader = ''
+  try {
+    cookieHeader = document.cookie || ''
+  } catch {
+    cookieHeader = ''
+  }
+  const token = extractNativeFcmToken({
+    search: window.location.search,
+    cookieHeader,
+    stored: readStoredNativeFcmToken(),
+  })
+  if (!token) return ''
+  persistNativeFcmTokenLocally(token)
+  return token
+}
+
 async function registerNativeFcmToken(token: string): Promise<boolean> {
   const clean = token.trim()
-  if (!clean || clean.length < 20) return false
+  if (!isPlausibleFcmToken(clean)) return false
   // Toujours garder le token localement : l’URL TWA peut arriver avant le login.
   persistNativeFcmTokenLocally(clean)
   try {
@@ -143,39 +176,17 @@ async function registerNativeFcmToken(token: string): Promise<boolean> {
   }
 }
 
-function readNativeFcmTokenFromCookie(): string {
-  if (typeof document === 'undefined') return ''
-  try {
-    const match = document.cookie.match(/(?:^|;\s*)mdl_fcm_token=([^;]+)/)
-    return match?.[1]?.trim() || ''
-  } catch {
-    return ''
-  }
-}
-
-/** Lit token natif TWA : query `?fcm_token=` OU cookie `mdl_fcm_token` (pont Android). */
+/** Lit token natif TWA : query `?fcm_token=` OU cookie `mdl_fcm_token` OU localStorage. */
 export async function syncNativeFcmTokenFromUrl(): Promise<boolean> {
   if (typeof window === 'undefined') return false
-  const url = new URL(window.location.href)
-  const fromQuery = url.searchParams.get(NATIVE_FCM_PARAM)?.trim() || ''
-  const fromCookie = readNativeFcmTokenFromCookie()
-  let token = fromQuery || fromCookie
-  if (!token) {
-    try {
-      token = localStorage.getItem(NATIVE_FCM_STORAGE)?.trim() || ''
-    } catch {
-      token = ''
-    }
-  }
+  const token = captureNativeFcmTokenFromUrlSync()
   if (!token) return false
 
-  if (fromQuery || fromCookie) {
-    persistNativeFcmTokenLocally(token)
-  }
-
+  const hadQuery = new URL(window.location.href).searchParams.has(NATIVE_FCM_PARAM)
   const ok = await registerNativeFcmToken(token)
   // Ne pas jeter le token URL si l’API a échoué (ex. pas encore connecté).
-  if (ok && fromQuery) {
+  if (ok && hadQuery) {
+    const url = new URL(window.location.href)
     url.searchParams.delete(NATIVE_FCM_PARAM)
     const next = `${url.pathname}${url.search}${url.hash}`
     window.history.replaceState({}, '', next)
@@ -261,9 +272,14 @@ export async function enablePushNotifications(): Promise<{
 
   const nativeOk = await syncNativeFcmTokenFromUrl()
   // Play TWA : le FCM natif réveille l’appareil même app fermée.
-  // On n’ajoute VAPID Android qu’en secours (souvent inutilisable app tuée).
   if (nativeOk) {
     return { ok: true, permission }
+  }
+
+  // Token natif déjà capturé (URL/cookie/local) mais API pas encore OK :
+  // ne pas basculer sur VAPID Android (faux « push OK » qui n’arrive qu’à l’ouverture).
+  if (nativePendingOnAndroid()) {
+    return { ok: false, reason: 'native_pending', permission }
   }
 
   if (await tryRegisterFcmWeb()) {
@@ -274,7 +290,7 @@ export async function enablePushNotifications(): Promise<{
   if (!publicKey) {
     return {
       ok: false,
-      reason: nativePendingOnAndroid() ? 'native_pending' : 'no_vapid_key',
+      reason: 'no_vapid_key',
       permission,
     }
   }
