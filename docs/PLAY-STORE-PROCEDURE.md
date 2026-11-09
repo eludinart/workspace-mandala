@@ -216,11 +216,20 @@ Exemple Mandala (nov 2026) :
 
 ## 8. Envoi pour examen & publication
 
+**Mandala : publication gérée ACTIVÉE.** Un `edits.commit` / upload API qui met la piste en `completed` **ne suffit pas** : la version reste « prête à publier » jusqu’au clic manuel **Publier**.
+
+Procédure complète (à aller jusqu’au bout) :
+
 1. Compléter dashboard (section 6).  
-2. AAB sur la piste cible (internal d’abord).  
-3. Vue d’ensemble de la publication → **Envoyer pour examen**.  
-4. Attendre revue Google.  
-5. **Production** : ne cliquer publier / déployer qu’avec accord produit.  
+2. AAB signé uploadé sur la piste (internal d’abord ; prod seulement avec accord).  
+3. Console → **Vue d’ensemble de la publication**  
+   - **Envoyer pour examen** si besoin  
+   - Attendre l’approbation Google  
+4. Quand « Modifications prêtes à être publiées » apparaît → **Publier N modification(s)** → confirmer **Publier des modifications**.  
+5. Vérifier que la section « prêtes à publier » est vide et que « Dernière publication » est à jour.  
+6. Smoke store : fiche Play affiche le bon `versionCode` (pas seulement l’API tracks).
+
+Sans l’étape 4, le téléphone peut rester sur l’ancienne version (ex. v1) alors que l’API dit déjà `production = completed`.
 
 Après examen internal + testeurs opt-in : installer, smoke TWA (pas de barre Chrome Custom Tabs indésirable, login, Play Billing si SKUs actifs).
 

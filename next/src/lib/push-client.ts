@@ -116,9 +116,19 @@ function subscriptionKeyMismatch(subscription: PushSubscription, publicKey: stri
   return existing !== expected
 }
 
+function persistNativeFcmTokenLocally(token: string): void {
+  try {
+    localStorage.setItem(NATIVE_FCM_STORAGE, token)
+  } catch {
+    /* ignore */
+  }
+}
+
 async function registerNativeFcmToken(token: string): Promise<boolean> {
   const clean = token.trim()
   if (!clean || clean.length < 20) return false
+  // Toujours garder le token localement : l’URL TWA peut arriver avant le login.
+  persistNativeFcmTokenLocally(clean)
   try {
     await notificationsApi.registerPushSubscription({
       endpoint: clean,
@@ -127,18 +137,13 @@ async function registerNativeFcmToken(token: string): Promise<boolean> {
       standalone: true,
       provider: 'fcm',
     })
-    try {
-      localStorage.setItem(NATIVE_FCM_STORAGE, clean)
-    } catch {
-      /* ignore */
-    }
     return true
   } catch {
     return false
   }
 }
 
-/** Lit `?fcm_token=` injecté par la TWA Play, enregistre, nettoie l’URL. */
+/** Lit `?fcm_token=` injecté par la TWA Play, enregistre, nettoie l’URL seulement si OK. */
 export async function syncNativeFcmTokenFromUrl(): Promise<boolean> {
   if (typeof window === 'undefined') return false
   const url = new URL(window.location.href)
@@ -153,8 +158,13 @@ export async function syncNativeFcmTokenFromUrl(): Promise<boolean> {
   }
   if (!token) return false
 
-  const ok = await registerNativeFcmToken(token)
   if (fromQuery) {
+    persistNativeFcmTokenLocally(token)
+  }
+
+  const ok = await registerNativeFcmToken(token)
+  // Ne pas jeter le token URL si l’API a échoué (ex. pas encore connecté).
+  if (ok && fromQuery) {
     url.searchParams.delete(NATIVE_FCM_PARAM)
     const next = `${url.pathname}${url.search}${url.hash}`
     window.history.replaceState({}, '', next)
@@ -239,7 +249,8 @@ export async function enablePushNotifications(): Promise<{
   }
 
   const nativeOk = await syncNativeFcmTokenFromUrl()
-  // Play TWA : token natif prioritaire — pas besoin de double abonnement VAPID.
+  // Play TWA : le FCM natif réveille l’appareil même app fermée.
+  // On n’ajoute VAPID Android qu’en secours (souvent inutilisable app tuée).
   if (nativeOk) {
     return { ok: true, permission }
   }
@@ -250,7 +261,11 @@ export async function enablePushNotifications(): Promise<{
 
   const publicKey = await fetchVapidPublicKey()
   if (!publicKey) {
-    return { ok: false, reason: 'no_vapid_key', permission }
+    return {
+      ok: false,
+      reason: nativePendingOnAndroid() ? 'native_pending' : 'no_vapid_key',
+      permission,
+    }
   }
 
   const registration = await registerMandalaServiceWorker()
@@ -294,6 +309,16 @@ export async function enablePushNotifications(): Promise<{
   }
 
   return { ok: true, permission }
+}
+
+/** Token natif déjà vu (URL/local) mais pas encore enregistré côté API. */
+function nativePendingOnAndroid(): boolean {
+  if (!isAndroidDevice()) return false
+  try {
+    return !!(localStorage.getItem(NATIVE_FCM_STORAGE) || '').trim()
+  } catch {
+    return false
+  }
 }
 
 /** Si la permission est déjà accordée, resynchronise l’abonnement (après login). */

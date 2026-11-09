@@ -25,25 +25,24 @@ Prix FR Play (taxes store incluses, vs Stripe HT affiché web) :
 | `pro_monthly` / `monthly` | **13,99 €** |
 | `pro_yearly` / `yearly` | **144,99 €** |
 
-Fiche publique store : **pas encore listée** (`play.google.com/store/apps/details?id=art.eludein.mandala` → 404).  
-Une release « completed » sur la piste production ≠ app visible tant que la revue / config contenu n’est pas validée.
+Fiche publique store : **publiée le 2026-11-09** via publication gérée  
+(`Publier 1 modification` → déploiement production complet).  
+Propagation Play : souvent &lt; 1 h.  
+**Publication gérée** : après approbation, cliquer **Publier** dans Vue d’ensemble de la publication (API `completed` ≠ live store).
 
-## Ce qui reste (manuel Console)
+## Fait le 2026-11-09
 
-1. **Configurer votre application** (questionnaires App content) — réponses : `docs/PLAY-STORE-DATA-SAFETY.md`
-   - Confidentialité → `https://mandala.eludein.art/confidentialite`
-   - Annonces → **Non**
-   - Cible → **13+**, pas Families
-   - UGC → **Oui** + signalement / modération
-   - Data safety → tableau du doc
-   - Finance → abonnements / Play Billing
-   - Santé / gouv → **Non**
-   - Catégorie → **Social** · support `contact@eludein.art`
-2. **Envoyer pour examen** (vue publication) dès que le bouton n’est plus grisé.
-3. **Testeurs** : API `edits.testers` encore `{}` sur internal/alpha/beta → rattacher la liste (`elude_interne` ou e-mails) + **Enregistrer**.
-4. Lien opt-in / test : `https://play.google.com/apps/testing/art.eludein.mandala` (login Google testeur).
-5. Smoke téléphone TWA : pas de barre Chrome, login, mur, signaler ; abo Play sandbox si CTA visibles.
-6. (Optionnel) Nouveau `versionCode` **seulement** si packaging Android change — le web Coolify se met à jour sans nouvel AAB.
+- [x] App content (onglet Traitées)
+- [x] Tests internes actifs + liste `elude_interne` (2) + lien opt-in
+- [x] Publication gérée → **déploiement production** (9 nov.)
+
+## Suite utile
+
+1. Smoke téléphone depuis le Play Store (pas de barre Chrome, login, mur, signaler).
+2. Lien opt-in interne : `https://play.google.com/apps/internaltest/4700375284149971265`
+3. Abo Play sandbox si CTA visibles.
+4. (Optionnel) Nouveau `versionCode` **seulement** si packaging Android change — le web Coolify se met à jour sans nouvel AAB.
+5. Bannière « statut de professionnel » (échéance 2027) — non bloquant.
 
 ## Compte (non bloquant immédiat)
 
