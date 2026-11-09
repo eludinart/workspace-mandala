@@ -15,6 +15,9 @@ export type PushSubscriptionRow = {
   p256dh: string
   auth: string
   user_agent: string | null
+  platform: string | null
+  standalone: boolean | null
+  last_seen_at: string | null
 }
 
 export async function ensurePushTables(): Promise<void> {
@@ -38,12 +41,26 @@ async function _createPushTables(): Promise<void> {
       p256dh VARCHAR(255) NOT NULL,
       auth VARCHAR(255) NOT NULL,
       user_agent VARCHAR(512) DEFAULT NULL,
+      platform VARCHAR(16) DEFAULT NULL,
+      standalone TINYINT(1) DEFAULT NULL,
+      last_seen_at DATETIME DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uk_endpoint (endpoint),
       INDEX idx_user (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `)
+  for (const ddl of [
+    `ALTER TABLE ${T()} ADD COLUMN platform VARCHAR(16) DEFAULT NULL`,
+    `ALTER TABLE ${T()} ADD COLUMN standalone TINYINT(1) DEFAULT NULL`,
+    `ALTER TABLE ${T()} ADD COLUMN last_seen_at DATETIME DEFAULT NULL`,
+  ]) {
+    try {
+      await pool.execute(ddl)
+    } catch {
+      /* colonne déjà présente */
+    }
+  }
 }
 
 export async function upsertPushSubscription(input: {
@@ -52,6 +69,8 @@ export async function upsertPushSubscription(input: {
   p256dh: string
   auth: string
   userAgent?: string | null
+  platform?: string | null
+  standalone?: boolean | null
 }): Promise<void> {
   await ensurePushTables()
   const pool = getPool()
@@ -59,17 +78,22 @@ export async function upsertPushSubscription(input: {
   const p256dh = String(input.p256dh).slice(0, 255)
   const auth = String(input.auth).slice(0, 255)
   const ua = input.userAgent ? String(input.userAgent).slice(0, 512) : null
+  const platform = input.platform ? String(input.platform).slice(0, 16) : null
+  const standalone = input.standalone == null ? null : input.standalone ? 1 : 0
 
   await pool.execute(
-    `INSERT INTO ${T()} (user_id, endpoint, p256dh, auth, user_agent)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO ${T()} (user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
      ON DUPLICATE KEY UPDATE
        user_id = VALUES(user_id),
        p256dh = VALUES(p256dh),
        auth = VALUES(auth),
        user_agent = VALUES(user_agent),
+       platform = COALESCE(VALUES(platform), platform),
+       standalone = COALESCE(VALUES(standalone), standalone),
+       last_seen_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP`,
-    [input.userId, endpoint, p256dh, auth, ua]
+    [input.userId, endpoint, p256dh, auth, ua, platform, standalone]
   )
 }
 
@@ -95,16 +119,54 @@ export async function listPushSubscriptionsForUser(userId: number): Promise<Push
   await ensurePushTables()
   const pool = getPool()
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, user_id, endpoint, p256dh, auth, user_agent FROM ${T()} WHERE user_id = ?`,
+    `SELECT id, user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at
+     FROM ${T()} WHERE user_id = ?`,
     [userId]
   )
-  return (rows ?? []).map((r) => ({
+  return (rows ?? []).map((r) => mapSubRow(r))
+}
+
+function mapSubRow(r: RowDataPacket): PushSubscriptionRow {
+  return {
     id: Number(r.id),
     user_id: Number(r.user_id),
     endpoint: String(r.endpoint),
     p256dh: String(r.p256dh),
     auth: String(r.auth),
     user_agent: r.user_agent != null ? String(r.user_agent) : null,
+    platform: r.platform != null ? String(r.platform) : null,
+    standalone: r.standalone == null ? null : Boolean(Number(r.standalone)),
+    last_seen_at: r.last_seen_at != null ? String(r.last_seen_at) : null,
+  }
+}
+
+/** Appareils enregistrés (sans clés crypto) pour l’admin. */
+export async function listPushDevicesForUser(userId: number): Promise<
+  Array<{
+    id: number
+    platform: string | null
+    standalone: boolean | null
+    user_agent: string | null
+    last_seen_at: string | null
+    created_at: string | null
+    updated_at: string | null
+  }>
+> {
+  await ensurePushTables()
+  const pool = getPool()
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT id, platform, standalone, user_agent, last_seen_at, created_at, updated_at
+     FROM ${T()} WHERE user_id = ? ORDER BY updated_at DESC`,
+    [userId]
+  )
+  return (rows ?? []).map((r) => ({
+    id: Number(r.id),
+    platform: r.platform != null ? String(r.platform) : null,
+    standalone: r.standalone == null ? null : Boolean(Number(r.standalone)),
+    user_agent: r.user_agent != null ? String(r.user_agent) : null,
+    last_seen_at: r.last_seen_at != null ? String(r.last_seen_at) : null,
+    created_at: r.created_at != null ? String(r.created_at) : null,
+    updated_at: r.updated_at != null ? String(r.updated_at) : null,
   }))
 }
 

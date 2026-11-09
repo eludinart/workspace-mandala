@@ -1,6 +1,7 @@
 /**
  * Envoi Web Push (VAPID) vers les abonnements stockés en base.
  * Si les clés VAPID manquent, no-op silencieux.
+ * Chaque tentative crée une ligne mdl_push_sends (+ sendId/sig dans le payload).
  */
 import webpush from 'web-push'
 import {
@@ -8,6 +9,9 @@ import {
   listPushSubscriptionsForUser,
   type PushSubscriptionRow,
 } from './db-push'
+import { insertPushSend, updatePushSendStatus } from './db-push-receipts'
+import { signPushAck } from './push-ack-token'
+import { alertPushTotalFailure } from './push-admin-alerts'
 
 let vapidConfigured = false
 
@@ -60,6 +64,9 @@ export type WebPushOptions = {
   urgency?: 'very-low' | 'low' | 'normal' | 'high'
   /** Même sujet = le dernier message remplace celui encore en file, et réveille quand même. */
   tag?: string
+  notificationId?: number | null
+  /** Alerte admin si tous les appareils échouent (annonce / test admin). */
+  criticalIfUndelivered?: boolean
 }
 
 function pushTopic(tag: string | undefined): string | undefined {
@@ -70,6 +77,7 @@ function pushTopic(tag: string | undefined): string | undefined {
 
 async function sendToSubscription(
   sub: PushSubscriptionRow,
+  userId: number,
   title: string,
   body: string,
   webPath: string,
@@ -77,6 +85,21 @@ async function sendToSubscription(
 ): Promise<'ok' | 'gone' | 'error'> {
   const urgency = options?.urgency ?? 'normal'
   const tag = options?.tag
+  let sendId = 0
+  try {
+    sendId = await insertPushSend({
+      notificationId: options?.notificationId ?? null,
+      userId,
+      subscriptionId: sub.id,
+      endpoint: sub.endpoint,
+      title,
+      status: 'accepted',
+    })
+  } catch (err) {
+    console.error('[web-push] insert send failed', (err as Error)?.message ?? err)
+  }
+
+  const sig = sendId > 0 ? signPushAck(sendId) : ''
   try {
     await webpush.sendNotification(
       {
@@ -87,6 +110,7 @@ async function sendToSubscription(
         title,
         body,
         url: webPath,
+        ...(sendId > 0 ? { sendId, sig } : {}),
         ...(tag ? { tag, renotify: true } : {}),
       }),
       {
@@ -99,8 +123,15 @@ async function sendToSubscription(
   } catch (err: unknown) {
     const statusCode = Number((err as { statusCode?: number })?.statusCode ?? 0)
     const detail = String((err as { body?: string })?.body || (err as Error)?.message || '').slice(0, 180)
-    // 404/410 : appareil désinscrit. 403 : clé refusée, cet abonnement ne marchera plus.
-    if (statusCode === 404 || statusCode === 410 || statusCode === 403) {
+    const gone = statusCode === 404 || statusCode === 410 || statusCode === 403
+    if (sendId > 0) {
+      await updatePushSendStatus(
+        sendId,
+        gone ? 'gone' : 'error',
+        `${statusCode || 'err'} ${detail}`.trim()
+      ).catch(() => {})
+    }
+    if (gone) {
       await deletePushSubscriptionById(sub.id).catch(() => {})
       console.error('[web-push] subscription removed', statusCode, detail)
       return 'gone'
@@ -117,30 +148,41 @@ export async function sendWebPushToUser(
   body: string,
   actionUrl?: string | null,
   options?: WebPushOptions
-): Promise<{ sent: number; gone: number; errors: number }> {
+): Promise<{ sent: number; gone: number; errors: number; devices: number }> {
   if (!ensureVapid()) {
-    return { sent: 0, gone: 0, errors: 0 }
+    return { sent: 0, gone: 0, errors: 0, devices: 0 }
   }
   let subs: PushSubscriptionRow[]
   try {
     subs = await listPushSubscriptionsForUser(userId)
   } catch (err: unknown) {
     console.error('[web-push] list failed', userId, (err as Error)?.message ?? err)
-    return { sent: 0, gone: 0, errors: 1 }
+    return { sent: 0, gone: 0, errors: 1, devices: 0 }
   }
-  if (!subs.length) return { sent: 0, gone: 0, errors: 0 }
+  if (!subs.length) return { sent: 0, gone: 0, errors: 0, devices: 0 }
 
   const webPath = actionUrlToWebPath(actionUrl)
   let sent = 0
   let gone = 0
   let errors = 0
   for (const sub of subs) {
-    const result = await sendToSubscription(sub, title, body, webPath, options)
+    const result = await sendToSubscription(sub, userId, title, body, webPath, options)
     if (result === 'ok') sent += 1
     else if (result === 'gone') gone += 1
     else errors += 1
   }
-  return { sent, gone, errors }
+
+  if (options?.criticalIfUndelivered && sent === 0 && subs.length > 0) {
+    void alertPushTotalFailure({
+      userId,
+      title,
+      devices: subs.length,
+      gone,
+      errors,
+    }).catch((err) => console.error('[web-push] critical alert', (err as Error)?.message ?? err))
+  }
+
+  return { sent, gone, errors, devices: subs.length }
 }
 
 const PUSH_FANOUT_CONCURRENCY = 4

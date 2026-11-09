@@ -6,6 +6,7 @@ export type AdminTabId =
   | 'people'
   | 'communications'
   | 'telemetry'
+  | 'push'
   | 'places'
   | 'billing'
   | 'doors'
@@ -174,6 +175,13 @@ export const ADMIN_NAV: AdminNavItem[] = [
     icon: '📊',
     adminTab: 'telemetry',
     description: 'Suivi des fonctionnalités utilisées',
+  },
+  {
+    id: 'admin-push',
+    label: 'Push',
+    icon: '📲',
+    adminTab: 'push',
+    description: 'Accusés delivered / opened et appareils',
   },
   {
     id: 'admin-places',

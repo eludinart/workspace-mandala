@@ -109,4 +109,63 @@ export const adminApi = {
       api.post('/api/admin/broadcasts/preview', { audience }),
     enqueue: (id: number) => api.post('/api/admin/broadcasts/enqueue', { id }),
   },
+  push: {
+    overview: (range: '24h' | '7d' = '24h') =>
+      api.get(`/api/admin/push/overview?range=${range}`) as Promise<{
+        range: string
+        accepted: number
+        gone: number
+        error: number
+        delivered: number
+        opened: number
+        delivery_rate: number | null
+        open_rate: number | null
+        pending_accepted: number
+        recent_failures: Array<{
+          id: number
+          user_id: number
+          title: string
+          status: string
+          error_detail: string | null
+          created_at: string | null
+        }>
+        users_never_delivered: Array<{
+          user_id: number
+          devices: number
+          last_accepted_at: string | null
+        }>
+      }>,
+    user: (userId: number) =>
+      api.get(`/api/admin/push/user/${userId}`) as Promise<{
+        user_id: number
+        devices: Array<{
+          id: number
+          platform: string | null
+          standalone: boolean | null
+          user_agent: string | null
+          last_seen_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }>
+        sends: Array<{
+          id: number
+          title: string
+          status: string
+          error_detail: string | null
+          created_at: string | null
+          delivered_at?: string | null
+          opened_at?: string | null
+        }>
+      }>,
+    testUser: (userId: number) =>
+      api.post('/api/admin/push/test_user', { userId }) as Promise<{
+        ok: boolean
+        devices?: number
+        sent?: number
+        gone?: number
+        errors?: number
+        error?: string
+      }>,
+    checkAlerts: () => api.post('/api/admin/push/check_alerts', {}) as Promise<Record<string, unknown>>,
+  },
 }

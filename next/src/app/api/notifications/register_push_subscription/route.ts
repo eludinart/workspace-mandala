@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth, ApiError } from '@/lib/api-auth'
 import { upsertPushSubscription } from '@/lib/db-push'
+import { platformFromUserAgent } from '@/lib/push-platform'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,6 +10,8 @@ type Body = {
   keys?: { p256dh?: string; auth?: string }
   p256dh?: string
   auth?: string
+  platform?: string
+  standalone?: boolean
 }
 
 export async function POST(req: NextRequest) {
@@ -28,12 +31,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const ua = req.headers.get('user-agent')
     await upsertPushSubscription({
       userId: uid,
       endpoint,
       p256dh,
       auth,
-      userAgent: req.headers.get('user-agent'),
+      userAgent: ua,
+      platform: body.platform || platformFromUserAgent(ua),
+      standalone: typeof body.standalone === 'boolean' ? body.standalone : null,
     })
 
     return NextResponse.json({ ok: true })

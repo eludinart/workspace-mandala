@@ -7,9 +7,9 @@ self.addEventListener('install', (event) => {
     (async () => {
       const cache = await caches.open(OFFLINE_CACHE)
       await cache.add(OFFLINE_URL)
-      await self.skipWaiting()
     })()
   )
+  self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
@@ -43,11 +43,57 @@ function notifyOpenClients(message) {
   })
 }
 
+function isStandaloneDisplay() {
+  try {
+    if (self.navigator && self.navigator.standalone) return true
+  } catch {
+    /* ignore */
+  }
+  try {
+    return self.matchMedia && self.matchMedia('(display-mode: standalone)').matches
+  } catch {
+    return false
+  }
+}
+
+async function ackPush(sendId, sig, eventName) {
+  if (!sendId || !sig) return
+  const payload = {
+    sendId: Number(sendId),
+    sig: String(sig),
+    event: eventName,
+    standalone: isStandaloneDisplay(),
+    userAgent: (self.navigator && self.navigator.userAgent) || '',
+  }
+  try {
+    await fetch('/api/notifications/push_ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'omit',
+      keepalive: true,
+    })
+  } catch {
+    try {
+      await fetch('/api/notifications/push_ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'omit',
+      })
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 self.addEventListener('push', (event) => {
   let data = {
     title: 'Mandala',
     body: 'Nouvelle notification',
     url: '/app?page=notifications',
+    sendId: 0,
+    sig: '',
   }
   try {
     if (event.data) {
@@ -67,21 +113,20 @@ self.addEventListener('push', (event) => {
   const url = data.url || '/app?page=notifications'
   const title = data.title || 'Mandala'
   const body = data.body || ''
+  const sendId = data.sendId
+  const sig = data.sig
   const options = {
     body,
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     silent: false,
-    // Sans vibration, Android peut classer l'alerte comme silencieuse et ne pas la montrer.
     vibrate: [120, 40, 120],
-    // Toujours une alerte OS visible — y compris si un onglet/app Mandala est au premier plan.
     requireInteraction: false,
-    data: { url },
+    data: { url, sendId, sig },
     ...(tag ? { tag, renotify: true } : {}),
   }
   event.waitUntil(
     (async () => {
-      // D’abord prévenir les fenêtres ouvertes (toast in-app + cloche), puis notif OS.
       await notifyOpenClients({
         type: 'MDL_PUSH_RECEIVED',
         title,
@@ -89,17 +134,22 @@ self.addEventListener('push', (event) => {
         url,
       })
       await self.registration.showNotification(title, options)
+      await ackPush(sendId, sig, 'delivered')
     })()
   )
 })
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const raw = (event.notification.data && event.notification.data.url) || '/app?page=notifications'
+  const nData = event.notification.data || {}
+  const raw = nData.url || '/app?page=notifications'
   const targetUrl = new URL(raw, self.location.origin).href
+  const sendId = nData.sendId
+  const sig = nData.sig
 
   event.waitUntil(
     (async () => {
+      await ackPush(sendId, sig, 'opened')
       const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       for (const client of all) {
         if (client.url.startsWith(self.location.origin) && 'focus' in client) {

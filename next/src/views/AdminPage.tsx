@@ -19,6 +19,7 @@ import { AdminPlaceGiftPanel } from '@/components/billing/AdminPlaceGiftPanel'
 import { AdminSubscriptionsPanel } from '@/components/billing/AdminSubscriptionsPanel'
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
+import { AdminPushTab } from '@/components/admin/AdminPushTab'
 import { ExplainCard } from '@/components/help/ExplainCard'
 
 import type { AdminTabId } from '@/lib/nav'
@@ -60,6 +61,7 @@ const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'people', label: 'Personnes' },
   { id: 'communications', label: 'Communications' },
   { id: 'telemetry', label: 'Télémétrie' },
+  { id: 'push', label: 'Push' },
   { id: 'places', label: 'Lieux & communautés' },
   { id: 'billing', label: 'Abonnements' },
   { id: 'doors', label: 'Portes' },
@@ -596,6 +598,8 @@ export function AdminPage({
           )}
         </div>
       )}
+
+      {tab === 'push' && <AdminPushTab />}
 
       {tab === 'telemetry' && (
         <section className="space-y-3">

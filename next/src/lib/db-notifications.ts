@@ -324,7 +324,12 @@ export async function createNotification(
   if (isWebPushConfigured() && deliveredUserIds.length > 0) {
     const webPath = actionUrlToWebPath(actionUrl)
     const pushBody = body ?? title
-    const stats = await sendWebPushToUsers(deliveredUserIds, title, pushBody, webPath)
+    const critical = type === 'announcement' || type === 'broadcast'
+    const stats = await sendWebPushToUsers(deliveredUserIds, title, pushBody, webPath, {
+      notificationId,
+      criticalIfUndelivered: critical,
+      urgency: priority === 'high' || critical ? 'high' : 'normal',
+    })
     pushSent = stats.sent
     pushErrors = stats.errors
     console.info(

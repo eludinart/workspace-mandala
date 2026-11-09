@@ -29,7 +29,20 @@ La table `mdl_push_subscriptions` est créée automatiquement au premier enregis
 
 - API : `GET /api/notifications/vapid_public_key` → `{ configured: true, publicKey: "..." }`
 - API : `POST /api/notifications/test_push` (cookie session) → `{ ok: true, sent: N }`
+- Admin → **Push** : taux `accepted → delivered → opened`, échecs, users sans ack
+- Fiche membre admin : appareils + timeline + test push ciblé
+- Accusé appareil : le SW appelle `POST /api/notifications/push_ack` (`delivered` / `opened`) avec HMAC
+- Cron : `GET/POST /api/cron/push-delivery-alerts` (Bearer `MANDALA_CRON_SECRET`) — seuil + purge 30j
 - Centre d’alertes in-app : badge / liste (polling) indépendant du push OS
+
+### Certitude
+
+| Statut | Signifie |
+|--------|----------|
+| `accepted` | Push service a accepté l’envoi |
+| `delivered` | Service worker a reçu et affiché la notif |
+| `opened` | Tap sur la notification |
+| pas de `delivered` | Téléphone non réveillé / DND / SW jamais lancé — le serveur ne peut pas prouver davantage |
 
 ## Échecs fréquents
 

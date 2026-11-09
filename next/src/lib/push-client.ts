@@ -3,6 +3,7 @@
  */
 import { notificationsApi } from '@/api/notifications'
 import { isIosDevice, isStandaloneDisplay } from '@/lib/pwa-install'
+import { platformFromUserAgent } from '@/lib/push-platform'
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -157,9 +158,12 @@ export async function enablePushNotifications(): Promise<{
   }
 
   try {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
     await notificationsApi.registerPushSubscription({
       endpoint,
       keys: { p256dh, auth },
+      platform: platformFromUserAgent(ua),
+      standalone: isStandaloneDisplay(),
     })
   } catch {
     return { ok: false, reason: 'register_failed', permission }

@@ -23,6 +23,8 @@ export const notificationsApi = {
   registerPushSubscription: (payload: {
     endpoint: string
     keys: { p256dh: string; auth: string }
+    platform?: string
+    standalone?: boolean
   }) => api.post('/api/notifications/register_push_subscription', payload),
   unregisterPushSubscription: (payload: { endpoint: string }) =>
     api.post('/api/notifications/unregister_push_subscription', payload),
