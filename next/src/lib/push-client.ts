@@ -172,9 +172,20 @@ function firebaseWebConfigured(): boolean {
   )
 }
 
-/** FCM Web (Chrome / desktop) — iOS reste sur VAPID. */
+function isAndroidDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /Android/i.test(navigator.userAgent || '')
+}
+
+/**
+ * FCM Web (Chrome desktop).
+ * Sur Android / Play TWA : ne pas utiliser — la délégation de notifs TWA
+ * affiche correctement VAPID via sw.js, pas les payloads FCM web.
+ */
 async function tryRegisterFcmWeb(): Promise<boolean> {
-  if (isIosDevice() || !firebaseWebConfigured() || !isPushClientSupported()) return false
+  if (isIosDevice() || isAndroidDevice() || !firebaseWebConfigured() || !isPushClientSupported()) {
+    return false
+  }
   try {
     const { initializeApp, getApps } = await import('firebase/app')
     const { getMessaging, getToken, isSupported } = await import('firebase/messaging')

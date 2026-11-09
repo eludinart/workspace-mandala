@@ -28,33 +28,24 @@ public class LauncherActivity
         SharedPreferences prefs = getSharedPreferences(
                 MandalaFirebaseMessagingService.PREFS, MODE_PRIVATE);
         String token = prefs.getString(MandalaFirebaseMessagingService.KEY_TOKEN, null);
-        boolean sent = prefs.getBoolean(MandalaFirebaseMessagingService.KEY_TOKEN_SENT, false);
         if (token == null || token.isEmpty()) {
             return uri;
         }
-        // Réinjecte périodiquement (ou si jamais envoyé) pour resync web après login.
-        if (!sent || shouldRefreshTokenBridge(prefs)) {
-            Uri.Builder b = uri.buildUpon();
-            // remplace si déjà présent
-            b.clearQuery();
-            for (String name : uri.getQueryParameterNames()) {
-                if ("fcm_token".equals(name)) continue;
-                for (String value : uri.getQueryParameters(name)) {
-                    b.appendQueryParameter(name, value);
-                }
+        // Toujours réinjecter : le 1er lancement est souvent avant login,
+        // sinon le web tombe sur fcm_web / VAPID sans token natif.
+        Uri.Builder b = uri.buildUpon();
+        b.clearQuery();
+        for (String name : uri.getQueryParameterNames()) {
+            if ("fcm_token".equals(name)) continue;
+            for (String value : uri.getQueryParameters(name)) {
+                b.appendQueryParameter(name, value);
             }
-            b.appendQueryParameter("fcm_token", token);
-            prefs.edit()
-                    .putBoolean(MandalaFirebaseMessagingService.KEY_TOKEN_SENT, true)
-                    .putLong("fcm_token_bridged_at", System.currentTimeMillis())
-                    .apply();
-            return b.build();
         }
-        return uri;
-    }
-
-    private boolean shouldRefreshTokenBridge(SharedPreferences prefs) {
-        long last = prefs.getLong("fcm_token_bridged_at", 0L);
-        return System.currentTimeMillis() - last > 7L * 24L * 60L * 60L * 1000L;
+        b.appendQueryParameter("fcm_token", token);
+        prefs.edit()
+                .putBoolean(MandalaFirebaseMessagingService.KEY_TOKEN_SENT, true)
+                .putLong("fcm_token_bridged_at", System.currentTimeMillis())
+                .apply();
+        return b.build();
     }
 }
