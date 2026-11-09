@@ -47,7 +47,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      devices,
       notification_id: notificationId,
       ...pushResult,
     })
