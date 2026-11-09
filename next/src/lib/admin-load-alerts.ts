@@ -4,6 +4,7 @@
 import { getPushOverview } from '@/lib/db-push-receipts'
 import { getDbPoolInfo } from '@/lib/db'
 import { getLoadSnapshot, type LoadSnapshot } from '@/lib/request-metrics'
+import { cacheGet, cacheSet } from '@/lib/server-cache'
 
 export type AdminAlertLevel = 'info' | 'warning' | 'critical'
 
@@ -19,19 +20,38 @@ export type AdminAlert = {
 const PUSH_DELIVERY_WARN = Number(process.env.PUSH_DELIVERY_ALERT_THRESHOLD ?? 0.6)
 const PUSH_MIN_ACCEPTED = Number(process.env.PUSH_DELIVERY_ALERT_MIN ?? 5)
 
+/** Cache overview push pour ne pas marteler MariaDB au poll Charge (15–30 s). */
+const PUSH_OVERVIEW_CACHE_KEY = 'admin:load:push-overview:24h'
+const PUSH_OVERVIEW_TTL_MS = 45_000
+
+/** Seuil pool : quelques enqueue = normal sous rafale ; critical seulement si soutenu. */
+const POOL_ENQUEUE_INFO_MIN = 8
+const POOL_ENQUEUE_WARN_MIN = 15
+const POOL_ENQUEUE_CRITICAL_MIN = 30
+
+type PushOverview = Awaited<ReturnType<typeof getPushOverview>>
+
+async function getPushOverviewCached(): Promise<PushOverview> {
+  const cached = cacheGet<PushOverview>(PUSH_OVERVIEW_CACHE_KEY)
+  if (cached) return cached
+  const fresh = await getPushOverview('24h')
+  cacheSet(PUSH_OVERVIEW_CACHE_KEY, fresh, PUSH_OVERVIEW_TTL_MS)
+  return fresh
+}
+
 export async function buildAdminLoadDashboard(): Promise<{
   load: LoadSnapshot
   pool: ReturnType<typeof getDbPoolInfo>
   alerts: AdminAlert[]
-  push: Awaited<ReturnType<typeof getPushOverview>> | null
+  push: PushOverview | null
 }> {
   const load = getLoadSnapshot()
   const pool = getDbPoolInfo()
   const alerts: AdminAlert[] = []
 
-  let push: Awaited<ReturnType<typeof getPushOverview>> | null = null
+  let push: PushOverview | null = null
   try {
-    push = await getPushOverview('24h')
+    push = await getPushOverviewCached()
   } catch {
     alerts.push({
       id: 'push-overview-failed',
@@ -44,7 +64,11 @@ export async function buildAdminLoadDashboard(): Promise<{
   }
 
   if (push) {
-    if (push.accepted >= PUSH_MIN_ACCEPTED && push.delivery_rate != null && push.delivery_rate < PUSH_DELIVERY_WARN) {
+    if (
+      push.accepted >= PUSH_MIN_ACCEPTED &&
+      push.delivery_rate != null &&
+      push.delivery_rate < PUSH_DELIVERY_WARN
+    ) {
       alerts.push({
         id: 'push-low-delivery',
         level: 'critical',
@@ -86,13 +110,23 @@ export async function buildAdminLoadDashboard(): Promise<{
     }
   }
 
-  if (load.poolEnqueueRecent > 0) {
+  const enqueue = load.poolEnqueueRecent
+  if (enqueue >= POOL_ENQUEUE_INFO_MIN) {
+    const level: AdminAlertLevel =
+      enqueue >= POOL_ENQUEUE_CRITICAL_MIN
+        ? 'critical'
+        : enqueue >= POOL_ENQUEUE_WARN_MIN
+          ? 'warning'
+          : 'info'
     alerts.push({
       id: 'pool-enqueue',
-      level: load.poolEnqueueRecent >= 5 ? 'critical' : 'warning',
+      level,
       source: 'pool',
-      title: 'Pool MariaDB saturé (file d’attente)',
-      detail: `${load.poolEnqueueRecent} enqueue sur ~${load.windowSec}s (total process ${load.poolEnqueueTotal}). Limit=${pool.connectionLimit}, maxIdle=${pool.maxIdle}.`,
+      title:
+        level === 'critical'
+          ? 'Pool MariaDB saturé (file d’attente)'
+          : 'Pool MariaDB sous pression',
+      detail: `${enqueue} enqueue sur ~${load.windowSec}s (total process ${load.poolEnqueueTotal}). Limit=${pool.connectionLimit}, maxIdle=${pool.maxIdle}. Seuils info≥${POOL_ENQUEUE_INFO_MIN} / warn≥${POOL_ENQUEUE_WARN_MIN} / critical≥${POOL_ENQUEUE_CRITICAL_MIN}.`,
     })
   }
 

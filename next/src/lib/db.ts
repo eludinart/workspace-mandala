@@ -13,12 +13,12 @@ const DB_USER = process.env.MARIADB_USER ?? 'mariadb'
 const DB_PASSWORD = process.env.MARIADB_PASSWORD ?? process.env.MARIADB_PASS ?? ''
 const DB_PREFIX = process.env.DB_PREFIX ?? 'wp_'
 
-// Multi-user: keep enough concurrent DB slots. MariaDB Mandala max_connections≈151;
-// Coolify historically set MARIADB_POOL_LIMIT=2 which caused « Queue limit reached ».
+// Multi-user sur VPS ~8 Go partagé. Historiquement LIMIT=2 → « Queue limit reached ».
+// 15 connexions = marge pour rafales admin/chat sans saturer MariaDB Fleur/Korymb.
 const POOL_CONNECTION_LIMIT = (() => {
   const raw = process.env.MARIADB_POOL_LIMIT ?? ''
   const n = parseInt(raw, 10)
-  return Number.isFinite(n) && n > 0 ? n : 10
+  return Number.isFinite(n) && n > 0 ? n : 15
 })()
 
 const POOL_QUEUE_LIMIT = (() => {
@@ -30,16 +30,16 @@ const POOL_QUEUE_LIMIT = (() => {
 const POOL_IDLE_TIMEOUT_MS = (() => {
   const raw = process.env.MARIADB_POOL_IDLE_TIMEOUT_MS ?? ''
   const n = parseInt(raw, 10)
-  // VPS ~8 Go partagé : libérer vite les sockets idle (défaut 15 s).
-  return Number.isFinite(n) && n >= 0 ? n : 15_000
+  // Un peu plus long pour éviter churn open/close sous rafale (défaut 20 s).
+  return Number.isFinite(n) && n >= 0 ? n : 20_000
 })()
 
 const POOL_MAX_IDLE = (() => {
   const raw = process.env.MARIADB_POOL_MAX_IDLE ?? ''
   const n = parseInt(raw, 10)
   if (Number.isFinite(n) && n > 0) return Math.min(n, POOL_CONNECTION_LIMIT)
-  // Burst jusqu’à connectionLimit, mais ne garder que la moitié idle.
-  return Math.max(2, Math.ceil(POOL_CONNECTION_LIMIT / 2))
+  // Garder ~2/3 idle prêts (moins d’enqueue au premier pic).
+  return Math.max(4, Math.ceil((POOL_CONNECTION_LIMIT * 2) / 3))
 })()
 
 declare global {

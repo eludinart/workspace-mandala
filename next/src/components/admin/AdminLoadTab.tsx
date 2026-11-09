@@ -19,22 +19,24 @@ export function AdminLoadTab() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts?: { soft?: boolean }) => {
+    const soft = opts?.soft ?? false
+    if (!soft) setLoading(true)
     setMsg(null)
     try {
       setData(await adminApi.load())
     } catch (e) {
       setMsg(e instanceof ApiError ? e.detail : 'Impossible de charger la charge serveur')
-      setData(null)
+      if (!soft) setData(null)
     } finally {
-      setLoading(false)
+      if (!soft) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     void load()
-    const t = setInterval(() => void load(), 15_000)
+    // 30 s : l’overview push est aussi caché ~45 s côté serveur.
+    const t = setInterval(() => void load({ soft: true }), 30_000)
     return () => clearInterval(t)
   }, [load])
 

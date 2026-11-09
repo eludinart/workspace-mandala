@@ -41,7 +41,8 @@ Liste des chantiers pas encore dans l’application. Cochez à la main, ou deman
 
 ## Fait
 
-- [x] **2026-11-09 — Admin Charge & alertes + menu tech.** Onglet `load` (RPS/latence/top endpoints + alertes push/pool/HTTP) ; Push existant déplacé sous **Ressources techniques** ; pool `maxIdle`/idle 15 s ; `/api/admin/load` + health `load` ; instrumentation Node. Tests `request-metrics.test.ts`.
+- [x] **2026-11-09 — Admin Charge réglages anti-faux positifs.** Seuils pool info≥8 / warn≥15 / critical≥30 ; pool défaut 15/maxIdle10 ; cache overview push 45 s ; poll UI Charge 30 s soft.
+- [x] **2026-11-09 — Admin Charge & alertes + menu tech.** Onglet `load` (RPS/latence/top endpoints + alertes push/pool/HTTP) ; Push existant déplacé sous **Ressources techniques** ; `/api/admin/load` + health `load` ; instrumentation Node. Tests `request-metrics.test.ts`.
 - [x] **2026-11-09 — Polling adaptatif (tenue de charge).** Pause totale onglet caché + tick immédiat au retour ; notifs 45 s ; fil chat 15 s / canaux 60 s / présence 120 s inchangés (réactivité UX). `adaptive-poll` + `useVisibilityPoll` ; warn logs `pool enqueue` MariaDB. Tests `adaptive-poll.test.ts`.
 - [x] **2026-11-06 — Engagement mur.** Réactions + commentaires + partage (deep links `/lieux/…`, mur public respecté) ; porte `mur_engagement` ; schéma `023_mandala_content_engagement.sql`.
 - [x] **2026-11-05 — Freemium lieu plafond 40.** Gates `joinCommunity` / `addMemberToCommunityByManager`, bandeau soft 32, landing + offres app, entitlements testés. Spec `2026-11-05-freemium-lieu-plafond-membres-design.md`.

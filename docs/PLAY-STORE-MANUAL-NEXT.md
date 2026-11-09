@@ -1,81 +1,52 @@
-# Play Store — reste manuel (après automation 2026-11-04)
+# Play Store — reste manuel (état au 2026-11-09)
 
-> **Procédure réutilisable (toutes apps Élude) :** `docs/PLAY-STORE-PROCEDURE.md`
+> **Procédure réutilisable :** `docs/PLAY-STORE-PROCEDURE.md`  
+> Diagnostic API (compte de service) — **Elude In Art** / `art.eludein.mandala`  
+> Developer `5266634445508197490` · App `4975649948655401313`
 
-Diagnostic Console (2026-11-04 ~14h30) — **Elude In Art** / `art.eludein.mandala`  
-Developer `5266634445508197490` · App `4975649948655401313`
-
-## Pourquoi le lien d’opt-in n’apparaît pas
-
-Ce n’est **pas** la release interne ni la liste `elude_interne`.
+## Déjà opérationnel (ne pas refaire)
 
 | Couche | État |
 |--------|------|
-| Piste interne (API) | Release **1 (1)** `status: completed` ✅ |
-| Testeurs (API `edits.testers`) | **`{}` vide** — liste Console pas réellement attachée / pas sauvée |
-| Tableau de bord app | **Brouillon / unreviewed** · **1 tâche sur 11** |
-| Vue d’ensemble publication | « Modifications pas encore envoyées » · bouton **Envoyer pour examen** **grisé** |
-| Message opt-in | « Le lien sera affiché ici quand vous publierez votre application » → normal tant que le dashboard n’est pas complété |
+| Prod web | `/api/health`, `/app`, `/cgu` `/cgv` `/confidentialite`, `assetlinks.json`, manifest, offline → **200** |
+| AAB v1 | Uploadé · pistes **internal**, **alpha**, **production** (`status: completed`) |
+| Fiche store FR | Titre + short + full + contact `contact@eludein.art` |
+| Assets | Icône **1** · feature **1** · captures téléphone **6** |
+| Abonnements Play | **4 ACTIVE** : `place_monthly`, `place_yearly`, `pro_monthly`, `pro_yearly` |
+| Profil paiements | OK (sinon les SKUs n’existeraient pas) |
+| Bubblewrap / keystore / SA API | Présents sous `android-twa/` + `nogit/` |
 
-**Cause :** Google refuse d’exposer le lien d’opt-in tant que la config obligatoire « Configurer votre application » n’est pas finie (privacy, Data safety, classification, etc.).
+Prix FR Play (taxes store incluses, vs Stripe HT affiché web) :
 
-Contournement à tester après privacy + 1–2 déclarations :  
-`https://play.google.com/apps/testing/art.eludein.mandala`
+| SKU | Prix Play FR |
+|-----|--------------|
+| `place_monthly` / `monthly` | **34,99 €** |
+| `place_yearly` / `yearly` | **349,99 €** |
+| `pro_monthly` / `monthly` | **13,99 €** |
+| `pro_yearly` / `yearly` | **144,99 €** |
 
-## Dashboard — 1/11 tâches
+Fiche publique store : **pas encore listée** (`play.google.com/store/apps/details?id=art.eludein.mandala` → 404).  
+Une release « completed » sur la piste production ≠ app visible tant que la revue / config contenu n’est pas validée.
 
-### Décrire le contenu (tous ouverts)
+## Ce qui reste (manuel Console)
 
-1. Définir les règles de confidentialité → `https://mandala.eludein.art/confidentialite`
-2. Informations de connexion (compte testeur revue)
-3. Annonces → **Non** (`docs/PLAY-STORE-DATA-SAFETY.md`)
-4. Classification du contenu (IARC)
-5. Cible → **13+**, pas Families
-6. Sécurité des données → `docs/PLAY-STORE-DATA-SAFETY.md`
-7. Applis gouvernementales → Non
-8. Fonctionnalités financières → abonnements / paiements in-app (Play Billing)
-9. Santé → Non
+1. **Configurer votre application** (questionnaires App content) — réponses : `docs/PLAY-STORE-DATA-SAFETY.md`
+   - Confidentialité → `https://mandala.eludein.art/confidentialite`
+   - Annonces → **Non**
+   - Cible → **13+**, pas Families
+   - UGC → **Oui** + signalement / modération
+   - Data safety → tableau du doc
+   - Finance → abonnements / Play Billing
+   - Santé / gouv → **Non**
+   - Catégorie → **Social** · support `contact@eludein.art`
+2. **Envoyer pour examen** (vue publication) dès que le bouton n’est plus grisé.
+3. **Testeurs** : API `edits.testers` encore `{}` sur internal/alpha/beta → rattacher la liste (`elude_interne` ou e-mails) + **Enregistrer**.
+4. Lien opt-in / test : `https://play.google.com/apps/testing/art.eludein.mandala` (login Google testeur).
+5. Smoke téléphone TWA : pas de barre Chrome, login, mur, signaler ; abo Play sandbox si CTA visibles.
+6. (Optionnel) Nouveau `versionCode` **seulement** si packaging Android change — le web Coolify se met à jour sans nouvel AAB.
 
-### Organisation
+## Compte (non bloquant immédiat)
 
-10. Catégorie + coordonnées → Social / `contact@eludein.art` / `https://mandala.eludein.art`
-11. Fiche Play Store → ✅ déjà OK
+Bannière « Déclarez votre statut de professionnel » (échéance 2027) — à traiter, pas la cause du 404 store.
 
-Puis : **Envoyer l’appli pour examen** (vue publication) → le lien opt-in devrait apparaître.
-
-## Bloquant monétisation : profil paiements Google
-
-Création des abonnements API →  
-`Cannot create a subscription without first registering a payments profile`.
-
-1. [Play Console](https://play.google.com/console) → **Paramètres** → **Profil de paiements**  
-2. Créer / lier un profil (légal + IBAN / micro-virement)  
-3. Attendre validation  
-
-Puis créer les 4 abos (mêmes prix Stripe) :
-
-| Product ID | Prix |
-|---|---|
-| `place_monthly` | 29 € / mois |
-| `place_yearly` | 290 € / an |
-| `pro_monthly` | 12 € / mois |
-| `pro_yearly` | 120 € / an |
-
-Les `PLAY_SKU_*` Coolify pointent déjà sur ces IDs.
-
-## Test interne (après questionnaires)
-
-1. Test → **Test interne** → **Testeurs** → cocher `elude_interne` → **Enregistrer**  
-2. Vérifier que le lien d’opt-in s’affiche (ou URL testing ci-dessus)  
-3. Installer Mandala → smoke (pas de barre Chrome, login)
-
-## Questionnaires (réponses prêtes)
-
-- Data safety / pubs / UGC / 13+ → `docs/PLAY-STORE-DATA-SAFETY.md` + `docs/PLAY-STORE-AVOID-REJECTION.md`
-- Listing → `docs/PLAY-STORE-LISTING.md`
-
-## Compte (hors opt-in, deadline 2027)
-
-Bannière : **Déclarez votre statut de professionnel** (fév. 2027) — à faire, mais **pas** la cause du lien manquant aujourd’hui.
-
-Quand SKUs actifs : dis « SKUs OK » pour smoke billing Play (vérif serveur déjà branchée).
+Quand les questionnaires sont validés / le lien opt-in marche : dis « opt-in OK » pour enchaîner le smoke device.
