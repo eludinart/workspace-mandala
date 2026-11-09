@@ -1,5 +1,6 @@
 /**
- * Abonnements Web Push (VAPID) — table mdl_push_subscriptions.
+ * Abonnements push — table mdl_push_subscriptions.
+ * provider: web_push (VAPID/iOS) | fcm (Android natif) | fcm_web (Firebase JS).
  */
 import type { RowDataPacket } from 'mysql2'
 import { getPool, isDbConfigured, table } from './db'
@@ -7,6 +8,8 @@ import { getPool, isDbConfigured, table } from './db'
 const T = () => table('push_subscriptions')
 
 let _ensurePromise: Promise<void> | null = null
+
+export type PushProvider = 'web_push' | 'fcm' | 'fcm_web'
 
 export type PushSubscriptionRow = {
   id: number
@@ -18,6 +21,7 @@ export type PushSubscriptionRow = {
   platform: string | null
   standalone: boolean | null
   last_seen_at: string | null
+  provider: PushProvider
 }
 
 export async function ensurePushTables(): Promise<void> {
@@ -54,6 +58,7 @@ async function _createPushTables(): Promise<void> {
     `ALTER TABLE ${T()} ADD COLUMN platform VARCHAR(16) DEFAULT NULL`,
     `ALTER TABLE ${T()} ADD COLUMN standalone TINYINT(1) DEFAULT NULL`,
     `ALTER TABLE ${T()} ADD COLUMN last_seen_at DATETIME DEFAULT NULL`,
+    `ALTER TABLE ${T()} ADD COLUMN provider VARCHAR(16) NOT NULL DEFAULT 'web_push'`,
   ]) {
     try {
       await pool.execute(ddl)
@@ -61,6 +66,12 @@ async function _createPushTables(): Promise<void> {
       /* colonne déjà présente */
     }
   }
+}
+
+function normalizeProvider(raw: string | null | undefined): PushProvider {
+  const p = String(raw ?? 'web_push').toLowerCase()
+  if (p === 'fcm' || p === 'fcm_web' || p === 'web_push') return p
+  return 'web_push'
 }
 
 export async function upsertPushSubscription(input: {
@@ -71,6 +82,7 @@ export async function upsertPushSubscription(input: {
   userAgent?: string | null
   platform?: string | null
   standalone?: boolean | null
+  provider?: PushProvider | string | null
 }): Promise<void> {
   await ensurePushTables()
   const pool = getPool()
@@ -80,10 +92,11 @@ export async function upsertPushSubscription(input: {
   const ua = input.userAgent ? String(input.userAgent).slice(0, 512) : null
   const platform = input.platform ? String(input.platform).slice(0, 16) : null
   const standalone = input.standalone == null ? null : input.standalone ? 1 : 0
+  const provider = normalizeProvider(input.provider)
 
   await pool.execute(
-    `INSERT INTO ${T()} (user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `INSERT INTO ${T()} (user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at, provider)
+     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
      ON DUPLICATE KEY UPDATE
        user_id = VALUES(user_id),
        p256dh = VALUES(p256dh),
@@ -91,9 +104,10 @@ export async function upsertPushSubscription(input: {
        user_agent = VALUES(user_agent),
        platform = COALESCE(VALUES(platform), platform),
        standalone = COALESCE(VALUES(standalone), standalone),
+       provider = VALUES(provider),
        last_seen_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP`,
-    [input.userId, endpoint, p256dh, auth, ua, platform, standalone]
+    [input.userId, endpoint, p256dh, auth, ua, platform, standalone, provider]
   )
 }
 
@@ -119,7 +133,7 @@ export async function listPushSubscriptionsForUser(userId: number): Promise<Push
   await ensurePushTables()
   const pool = getPool()
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at
+    `SELECT id, user_id, endpoint, p256dh, auth, user_agent, platform, standalone, last_seen_at, provider
      FROM ${T()} WHERE user_id = ?`,
     [userId]
   )
@@ -137,6 +151,7 @@ function mapSubRow(r: RowDataPacket): PushSubscriptionRow {
     platform: r.platform != null ? String(r.platform) : null,
     standalone: r.standalone == null ? null : Boolean(Number(r.standalone)),
     last_seen_at: r.last_seen_at != null ? String(r.last_seen_at) : null,
+    provider: normalizeProvider(r.provider != null ? String(r.provider) : 'web_push'),
   }
 }
 
@@ -150,12 +165,13 @@ export async function listPushDevicesForUser(userId: number): Promise<
     last_seen_at: string | null
     created_at: string | null
     updated_at: string | null
+    provider: PushProvider
   }>
 > {
   await ensurePushTables()
   const pool = getPool()
   const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id, platform, standalone, user_agent, last_seen_at, created_at, updated_at
+    `SELECT id, platform, standalone, user_agent, last_seen_at, created_at, updated_at, provider
      FROM ${T()} WHERE user_id = ? ORDER BY updated_at DESC`,
     [userId]
   )
@@ -167,6 +183,7 @@ export async function listPushDevicesForUser(userId: number): Promise<
     last_seen_at: r.last_seen_at != null ? String(r.last_seen_at) : null,
     created_at: r.created_at != null ? String(r.created_at) : null,
     updated_at: r.updated_at != null ? String(r.updated_at) : null,
+    provider: normalizeProvider(r.provider != null ? String(r.provider) : 'web_push'),
   }))
 }
 

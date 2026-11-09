@@ -1,29 +1,35 @@
 # Checklist — notifications push smartphone
 
-Prérequis : déploiement **HTTPS** (`https://mandala.eludein.art`) avec les variables VAPID renseignées dans Coolify :
+Prérequis : déploiement **HTTPS** (`https://mandala.eludein.art`) avec :
 
-- `VAPID_SUBJECT` (ex. `mailto:admin@mandala.eludein.art`)
-- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (générés via `npx web-push generate-vapid-keys`)
-- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = **même valeur** que `VAPID_PUBLIC_KEY`
+**Web Push iOS (VAPID)**
+- `VAPID_SUBJECT` / `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY`
 
-La table `mdl_push_subscriptions` est créée automatiquement au premier enregistrement.
+**FCM (projet Firebase `mandala-ca1bb`)**
+- `FCM_PROJECT_ID=mandala-ca1bb`
+- `FCM_SERVICE_ACCOUNT_B64` ou `FCM_SERVICE_ACCOUNT_JSON` (SA Admin)
+- `NEXT_PUBLIC_FIREBASE_*` + `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (voir `nogit/firebase-mandala.env`)
 
-## Android (Chrome)
+Rails : `fcm` (TWA Play natif) · `fcm_web` (Chrome) · `web_push` (iOS PWA).  
+Table `mdl_push_subscriptions.provider` créée / migrée au premier enregistrement.
+
+## Android Play (TWA — FCM natif)
+
+1. Installer Mandala depuis le Play Store (AAB ≥ versionCode 2).
+2. Ouvrir l’app, se connecter, accepter les notifications.
+3. Test push (Compte ou admin ciblé) → notif OS via canal `mandala_alerts` même app fermée.
+
+## Android / desktop (Chrome — FCM web ou VAPID)
 
 1. Ouvrir Mandala en HTTPS, se connecter.
 2. Accepter le modal « Activer les notifications », ou **Compte → Préférences alertes → Activer**.
-3. Laisser l’app **ouverte** (premier plan) **ou** la mettre en arrière-plan (pas forcer l’arrêt).
-4. Depuis un autre compte : envoyer un message, **ou** Compte → **Envoyer un test push**.
-5. Attendu :
-   - app ouverte → toast in-app (et souvent aussi notif OS) ;
-   - app en arrière-plan → notification OS ; un tap ouvre `/app` (messages / notifications).
+3. Test push comme ci-dessus.
 
-## iPhone (Safari 16.4+)
+## iPhone (Safari 16.4+ — Web Push / APNs)
 
-1. Partager → **Sur l’écran d’accueil** (PWA obligatoire pour Web Push iOS).
-2. Ouvrir Mandala depuis l’icône d’accueil (pas l’onglet Safari seul).
-3. Activer les notifications (modal ou Compte).
-4. Même test qu’Android (message ou test push) — app ouverte (toast) ou en arrière-plan (notif OS).
+1. Partager → **Sur l’écran d’accueil** (PWA obligatoire).
+2. Rouvrir depuis l’icône, activer les notifications.
+3. Test push — reste sur le rail `web_push` (pas d’app iOS native).
 
 ## Contrôles utiles
 

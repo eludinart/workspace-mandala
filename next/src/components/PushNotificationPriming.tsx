@@ -8,6 +8,7 @@ import {
   getPushDeviceStatus,
   IOS_PUSH_HOME_SCREEN_HINT,
   needsIosHomeScreenForPush,
+  syncNativeFcmTokenFromUrl,
   syncPushSubscriptionIfGranted,
   type PushDeviceStatus,
 } from '@/lib/push-client'
@@ -81,6 +82,7 @@ export function PushNotificationPriming() {
       return
     }
     // Ne pas attendre le sync API ici (évite « Queue limit reached » au montage / Strict Mode).
+    void syncNativeFcmTokenFromUrl()
     const next = await getPushDeviceStatus()
     setStatus(next)
 

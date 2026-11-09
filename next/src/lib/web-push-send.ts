@@ -1,6 +1,5 @@
 /**
- * Envoi Web Push (VAPID) vers les abonnements stockés en base.
- * Si les clés VAPID manquent, no-op silencieux.
+ * Envoi push unifié : Web Push (VAPID / iOS) + FCM (natif Android / fcm_web).
  * Chaque tentative crée une ligne mdl_push_sends (+ sendId/sig dans le payload).
  */
 import webpush from 'web-push'
@@ -12,6 +11,7 @@ import {
 import { insertPushSend, updatePushSendStatus } from './db-push-receipts'
 import { signPushAck } from './push-ack-token'
 import { alertPushTotalFailure } from './push-admin-alerts'
+import { isFcmConfigured, sendFcmToSubscription } from './fcm'
 
 let vapidConfigured = false
 
@@ -39,6 +39,16 @@ export function isWebPushConfigured(): boolean {
     (process.env.VAPID_PUBLIC_KEY?.trim() || process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.trim()) &&
     process.env.VAPID_PRIVATE_KEY?.trim()
   )
+}
+
+/** Au moins un canal d’envoi dispo (VAPID et/ou FCM). */
+export function isPushSendConfigured(): boolean {
+  return isWebPushConfigured() || isFcmConfigured()
+}
+
+function isFcmProvider(sub: PushSubscriptionRow): boolean {
+  const p = (sub.provider || '').toLowerCase()
+  return p === 'fcm' || p === 'fcm_web'
 }
 
 /** Convertit une action_url Mandala en chemin web ouvrant l’app. */
@@ -100,6 +110,34 @@ async function sendToSubscription(
   }
 
   const sig = sendId > 0 ? signPushAck(sendId) : ''
+
+  if (isFcmProvider(sub)) {
+    if (!isFcmConfigured()) {
+      if (sendId > 0) {
+        await updatePushSendStatus(sendId, 'error', 'fcm_not_configured').catch(() => {})
+      }
+      return 'error'
+    }
+    const result = await sendFcmToSubscription(sub, title, body, webPath, {
+      tag,
+      sendId: sendId > 0 ? sendId : undefined,
+      sig: sig || undefined,
+    })
+    if (result !== 'ok' && sendId > 0) {
+      await updatePushSendStatus(sendId, result === 'gone' ? 'gone' : 'error', `fcm_${result}`).catch(
+        () => {}
+      )
+    }
+    return result
+  }
+
+  if (!ensureVapid()) {
+    if (sendId > 0) {
+      await updatePushSendStatus(sendId, 'error', 'vapid_not_configured').catch(() => {})
+    }
+    return 'error'
+  }
+
   try {
     await webpush.sendNotification(
       {
@@ -149,7 +187,7 @@ export async function sendWebPushToUser(
   actionUrl?: string | null,
   options?: WebPushOptions
 ): Promise<{ sent: number; gone: number; errors: number; devices: number }> {
-  if (!ensureVapid()) {
+  if (!isPushSendConfigured()) {
     return { sent: 0, gone: 0, errors: 0, devices: 0 }
   }
   let subs: PushSubscriptionRow[]
@@ -201,7 +239,7 @@ export async function sendWebPushToUsers(
 ): Promise<{ sent: number; gone: number; errors: number; users: number }> {
   const unique = [...new Set(userIds.filter((id) => Number.isFinite(id) && id > 0))]
   const acc = { sent: 0, gone: 0, errors: 0, users: unique.length }
-  if (!ensureVapid() || unique.length === 0) return acc
+  if (!isPushSendConfigured() || unique.length === 0) return acc
 
   let cursor = 0
   async function worker() {

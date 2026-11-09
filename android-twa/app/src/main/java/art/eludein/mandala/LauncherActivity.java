@@ -1,40 +1,20 @@
 /*
- * Copyright 2020 Google Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Copyright 2020 Google Inc. + Mandala FCM bridge.
  */
 package art.eludein.mandala;
 
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 
-
-
 public class LauncherActivity
         extends com.google.androidbrowserhelper.trusted.LauncherActivity {
-    
-
-    
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Setting an orientation crashes the app due to the transparent background on Android 8.0
-        // Oreo and below. We only set the orientation on Oreo and above. This only affects the
-        // splash screen and Chrome will still respect the orientation.
-        // See https://github.com/GoogleChromeLabs/bubblewrap/issues/496 for details.
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.O) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         } else {
@@ -44,11 +24,37 @@ public class LauncherActivity
 
     @Override
     protected Uri getLaunchingUrl() {
-        // Get the original launch Url.
         Uri uri = super.getLaunchingUrl();
-
-        
-
+        SharedPreferences prefs = getSharedPreferences(
+                MandalaFirebaseMessagingService.PREFS, MODE_PRIVATE);
+        String token = prefs.getString(MandalaFirebaseMessagingService.KEY_TOKEN, null);
+        boolean sent = prefs.getBoolean(MandalaFirebaseMessagingService.KEY_TOKEN_SENT, false);
+        if (token == null || token.isEmpty()) {
+            return uri;
+        }
+        // Réinjecte périodiquement (ou si jamais envoyé) pour resync web après login.
+        if (!sent || shouldRefreshTokenBridge(prefs)) {
+            Uri.Builder b = uri.buildUpon();
+            // remplace si déjà présent
+            b.clearQuery();
+            for (String name : uri.getQueryParameterNames()) {
+                if ("fcm_token".equals(name)) continue;
+                for (String value : uri.getQueryParameters(name)) {
+                    b.appendQueryParameter(name, value);
+                }
+            }
+            b.appendQueryParameter("fcm_token", token);
+            prefs.edit()
+                    .putBoolean(MandalaFirebaseMessagingService.KEY_TOKEN_SENT, true)
+                    .putLong("fcm_token_bridged_at", System.currentTimeMillis())
+                    .apply();
+            return b.build();
+        }
         return uri;
+    }
+
+    private boolean shouldRefreshTokenBridge(SharedPreferences prefs) {
+        long last = prefs.getLong("fcm_token_bridged_at", 0L);
+        return System.currentTimeMillis() - last > 7L * 24L * 60L * 60L * 1000L;
     }
 }

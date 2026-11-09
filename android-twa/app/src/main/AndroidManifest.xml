@@ -24,7 +24,9 @@
 
     
         <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    
+        <uses-permission android:name="android.permission.INTERNET"/>
+        <uses-permission android:name="android.permission.WAKE_LOCK"/>
+        <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE"/>
 
     
 
@@ -190,6 +192,22 @@
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </service>
+
+        <service
+            android:name=".MandalaFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="mandala_alerts" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification_icon" />
+
 
         
             <activity android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity" />

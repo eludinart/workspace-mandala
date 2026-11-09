@@ -12,6 +12,7 @@ type Body = {
   auth?: string
   platform?: string
   standalone?: boolean
+  provider?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -22,8 +23,10 @@ export async function POST(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as Body
     const endpoint = String(body.endpoint ?? '').trim()
-    const p256dh = String(body.keys?.p256dh ?? body.p256dh ?? '').trim()
-    const auth = String(body.keys?.auth ?? body.auth ?? '').trim()
+    const providerRaw = String(body.provider ?? 'web_push').toLowerCase()
+    const isFcm = providerRaw === 'fcm' || providerRaw === 'fcm_web'
+    const p256dh = String(body.keys?.p256dh ?? body.p256dh ?? (isFcm ? 'fcm' : '')).trim()
+    const auth = String(body.keys?.auth ?? body.auth ?? (isFcm ? 'native' : '')).trim()
     if (!endpoint || !p256dh || !auth) {
       return NextResponse.json(
         { error: 'endpoint, keys.p256dh et keys.auth requis' },
@@ -40,6 +43,7 @@ export async function POST(req: NextRequest) {
       userAgent: ua,
       platform: body.platform || platformFromUserAgent(ua),
       standalone: typeof body.standalone === 'boolean' ? body.standalone : null,
+      provider: isFcm ? providerRaw : 'web_push',
     })
 
     return NextResponse.json({ ok: true })
