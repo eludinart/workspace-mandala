@@ -11,6 +11,8 @@ export const SKILL_REGISTER_LABELS: Record<SkillRegister, string> = {
 }
 
 export const MAX_SKILL_TAGS = 20
+/** Longueur max d’un libellé de savoir-faire (ex. « animation de cercles de parole »). */
+export const MAX_SKILL_TAG_LABEL = 80
 export const MAX_SKILL_TEXT = 2000
 export const MAX_SKILL_NOTE = 500
 

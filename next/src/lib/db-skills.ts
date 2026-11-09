@@ -11,6 +11,7 @@ import {
   isSkillRegister,
   isSkillScope,
   MAX_SKILL_NOTE,
+  MAX_SKILL_TAG_LABEL,
   MAX_SKILL_TAGS,
   MAX_SKILL_TEXT,
   skillLabelKey,
@@ -188,12 +189,20 @@ async function ensureSkillTables(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS ${tTags} (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
-      label VARCHAR(40) NOT NULL,
-      label_key VARCHAR(40) NOT NULL,
+      label VARCHAR(${MAX_SKILL_TAG_LABEL}) NOT NULL,
+      label_key VARCHAR(${MAX_SKILL_TAG_LABEL}) NOT NULL,
       register VARCHAR(16) NOT NULL DEFAULT 'share',
       UNIQUE KEY uniq_user_label (user_id, label_key),
       KEY idx_label_key (label_key)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
+  )
+  await exec(
+    pool,
+    `ALTER TABLE ${tTags} MODIFY label VARCHAR(${MAX_SKILL_TAG_LABEL}) NOT NULL`
+  )
+  await exec(
+    pool,
+    `ALTER TABLE ${tTags} MODIFY label_key VARCHAR(${MAX_SKILL_TAG_LABEL}) NOT NULL`
   )
   await exec(
     pool,
@@ -453,7 +462,10 @@ export async function saveMySkillProfile(userId: number, input: SkillProfileInpu
   const seen = new Set<string>()
   for (const raw of input.tags) {
     if (!isSkillRegister(raw.register)) continue
-    const label = String(raw.label ?? '').trim().replace(/\s+/g, ' ').slice(0, 40)
+    const label = String(raw.label ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, MAX_SKILL_TAG_LABEL)
     const key = skillLabelKey(label)
     if (!key || seen.has(key)) continue
     seen.add(key)

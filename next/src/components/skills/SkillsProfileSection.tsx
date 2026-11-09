@@ -16,6 +16,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError, api } from '@/lib/api-client'
 import { emitMandalaMapChanged } from '@/lib/map-changed'
 import {
+  MAX_SKILL_TAG_LABEL,
   MAX_SKILL_TAGS,
   MAX_SKILL_TEXT,
   SKILL_REGISTER_LABELS,
@@ -115,7 +116,7 @@ export function SkillsProfileSection() {
       return { tags, draft: '', error: null }
     }
     return {
-      tags: [...tags, { label: label.slice(0, 40), register: 'share' }],
+      tags: [...tags, { label: label.slice(0, MAX_SKILL_TAG_LABEL), register: 'share' }],
       draft: '',
       error: null,
     }
@@ -411,8 +412,8 @@ export function SkillsProfileSection() {
             </span>
           ))}
         </div>
-        <div className="flex flex-wrap gap-2 items-end">
-          <label className="flex-1 min-w-[140px] text-xs text-slate-500">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="block w-full min-w-0 flex-1 text-sm text-slate-400">
             Ajouter un savoir-faire
             <input
               value={draftLabel}
@@ -424,16 +425,19 @@ export function SkillsProfileSection() {
                 }
               }}
               enterKeyHint="done"
-              maxLength={40}
-              placeholder="ex. logistique, rédaction…"
-              className="mt-1 w-full rounded-lg bg-slate-950 border border-slate-700 px-2 py-2 text-sm text-slate-100"
+              maxLength={MAX_SKILL_TAG_LABEL}
+              placeholder="ex. animation de cercles de parole…"
+              className="mt-1.5 w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-3 text-base text-slate-100"
             />
+            <span className="mt-1 block text-xs text-slate-500">
+              {draftLabel.length}/{MAX_SKILL_TAG_LABEL}
+            </span>
           </label>
           <button
             type="button"
             onClick={addTag}
             disabled={!draftLabel.trim() || profile.tags.length >= MAX_SKILL_TAGS}
-            className="shrink-0 rounded-lg border border-violet-700/70 bg-violet-950/50 px-3 py-2 text-sm text-violet-100 hover:bg-violet-900/50 disabled:opacity-40"
+            className="w-full shrink-0 rounded-lg border border-violet-700/70 bg-violet-950/50 px-4 py-3 text-sm font-medium text-violet-100 hover:bg-violet-900/50 disabled:opacity-40 sm:w-auto"
           >
             Ajouter
           </button>
