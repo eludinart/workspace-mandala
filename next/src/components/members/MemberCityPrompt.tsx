@@ -5,6 +5,7 @@ import { api } from '@/lib/api-client'
 import { skillsApi } from '@/api/skills'
 import { CityFromPostalField } from '@/components/geo/CityFromPostalField'
 import { useFeatureDoors } from '@/hooks/useFeatureDoors'
+import { emitMandalaMapChanged } from '@/lib/map-changed'
 
 type Profile = { city: string; show_on_map: boolean; prompt_done: boolean }
 
@@ -82,9 +83,7 @@ export function MemberCityPrompt() {
             }
           : null
       )
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('mandala-member-city-changed'))
-      }
+      emitMandalaMapChanged()
     } finally {
       setBusy(false)
     }

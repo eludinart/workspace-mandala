@@ -3,6 +3,7 @@ import { ApiError, requireAuth } from '@/lib/api-auth'
 import { canAccessFeatureDoor } from '@/lib/db-feature-doors'
 import {
   getMemberCityProfile,
+  listCommunityMemberMapMarkers,
   listCommunityMemberMapPins,
   saveMemberCityProfile,
 } from '@/lib/db-member-city'
@@ -16,15 +17,20 @@ export async function GET(req: NextRequest) {
     const uid = parseInt(userId, 10)
     const slug = req.nextUrl.searchParams.get('community_slug')?.trim() ?? ''
     const profile = await getMemberCityProfile(uid)
+    let markers: Awaited<ReturnType<typeof listCommunityMemberMapMarkers>> = []
     let pins: Awaited<ReturnType<typeof listCommunityMemberMapPins>> = []
     const doorOk = await canAccessFeatureDoor(uid, 'carte_membres')
     if (doorOk && slug) {
       const community = await getCommunityBySlug(slug)
-      if (community) pins = await listCommunityMemberMapPins(community.id)
+      if (community) {
+        markers = await listCommunityMemberMapMarkers(community.id)
+        pins = await listCommunityMemberMapPins(community.id)
+      }
     }
     return NextResponse.json({
       profile,
       door_open: doorOk,
+      markers: doorOk ? markers : [],
       pins: doorOk ? pins : [],
     })
   } catch (err: unknown) {

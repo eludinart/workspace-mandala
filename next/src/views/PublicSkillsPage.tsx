@@ -11,6 +11,7 @@ import { SkillsCarousel } from '@/components/landing/SkillsCarousel'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
 import { useAuth } from '@/contexts/AuthContext'
+import { onMandalaMapChanged } from '@/lib/map-changed'
 
 const AnnuaireCitiesMap = dynamic(
   () =>
@@ -50,6 +51,8 @@ export function PublicSkillsPage() {
     const handle = window.setTimeout(() => void loadMap(), 150)
     return () => window.clearTimeout(handle)
   }, [loadMap])
+
+  useEffect(() => onMandalaMapChanged(() => void loadMap()), [loadMap])
 
   return (
     <PublicSiteChrome user={user} authLoading={authLoading}>

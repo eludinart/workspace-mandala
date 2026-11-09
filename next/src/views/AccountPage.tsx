@@ -20,7 +20,7 @@ import {
 import { PracticePlacesEditor } from '@/components/geo/PracticePlacesEditor'
 import type { PracticePlace } from '@/lib/practice-locations'
 import { ExplainCard } from '@/components/help/ExplainCard'
-import { ApiError } from '@/lib/api-client'
+import { ApiError, api } from '@/lib/api-client'
 import {
   paymentSurfaceAllowsStripe,
   resolvePaymentSurface,
@@ -38,6 +38,8 @@ import {
   isPushClientSupported,
   needsIosHomeScreenForPush,
 } from '@/lib/push-client'
+import { emitMandalaMapChanged } from '@/lib/map-changed'
+import { useFeatureDoors } from '@/hooks/useFeatureDoors'
 
 const EMOJI_PRESETS = ['🌸', '🕉️', '🌿', '✨', '🌻', '🦋', '🔥', '💜']
 
@@ -67,6 +69,8 @@ function resolveAccountSection(raw: string | null | undefined): AccountSectionId
 export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { user, refreshUser, logout } = useAuth()
   const { communities, refresh: refreshCommunities, setActiveSlug } = useCommunity()
+  const { can: canDoor, loading: doorsLoading } = useFeatureDoors()
+  const [showOnMembersMap, setShowOnMembersMap] = useState(false)
   const u = user as {
     email?: string
     name?: string
@@ -166,6 +170,14 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         setPracticePlaces(skills.profile.practice_locations ?? [])
       } catch {
         /* fiche compétences optionnelle */
+      }
+      try {
+        const cityRes = (await api.get('/api/members/city')) as {
+          profile?: { show_on_map?: boolean }
+        }
+        setShowOnMembersMap(Boolean(cityRes.profile?.show_on_map))
+      } catch {
+        setShowOnMembersMap(false)
       }
     } catch {
       setFirstName(u?.first_name ?? '')
@@ -273,6 +285,18 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             practicePlaces.some((p) => p.mode === 'address'),
           practice_locations: practicePlaces,
         })
+        try {
+          const cityPayload: { city?: string; show_on_map: boolean } = {
+            show_on_map: showOnMembersMap,
+          }
+          if (location.residence_city.trim()) {
+            cityPayload.city = location.residence_city.trim()
+          }
+          await api.put('/api/members/city', cityPayload)
+        } catch {
+          /* opt-in carte optionnel */
+        }
+        emitMandalaMapChanged()
       } catch {
         /* profil identité déjà sauvé */
       }
@@ -517,6 +541,18 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             onChange={setPracticePlaces}
             disabled={saving}
           />
+          {!doorsLoading && canDoor('carte_membres') && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showOnMembersMap}
+                onChange={(e) => setShowOnMembersMap(e.target.checked)}
+                className="rounded"
+                disabled={saving}
+              />
+              <span>Apparaître sur la carte des membres</span>
+            </label>
+          )}
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"

@@ -13,7 +13,8 @@ import { skillsApi, type SkillProfile, type SkillTag } from '@/api/skills'
 import { PersonLocationFields } from '@/components/geo/PersonLocationFields'
 import { PracticePlacesEditor } from '@/components/geo/PracticePlacesEditor'
 import { useCommunity } from '@/contexts/CommunityContext'
-import { ApiError } from '@/lib/api-client'
+import { ApiError, api } from '@/lib/api-client'
+import { emitMandalaMapChanged } from '@/lib/map-changed'
 import {
   MAX_SKILL_TAGS,
   MAX_SKILL_TEXT,
@@ -155,10 +156,20 @@ export function SkillsProfileSection() {
         place_ids: profile.place_ids,
         tags: tagsToSave,
       })
+      if (profile.residence_city.trim()) {
+        try {
+          await api.put('/api/members/city', {
+            city: profile.residence_city.trim(),
+          })
+        } catch {
+          /* carte membres optionnelle */
+        }
+      }
       setProfile(res.profile)
       setDraftLabel('')
       savedRef.current = JSON.stringify(res.profile)
       setMsg('Fiche enregistrée')
+      emitMandalaMapChanged()
     } catch (e: unknown) {
       setErr(e instanceof ApiError ? e.detail : 'Enregistrement impossible')
     } finally {

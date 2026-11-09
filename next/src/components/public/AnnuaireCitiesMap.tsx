@@ -86,6 +86,12 @@ function clusterIconHtml(count: number, selected: boolean): string {
   return `<div class="m-map-marker m-map-marker--cluster${sel}" title="${escapeHtml(`${count} personnes`)}">${escapeHtml(label)}</div>`
 }
 
+/** Souris fine : tooltips au survol. Tactile : pas de bulle sur les pins (ça masque la carte). */
+function canUseHoverTooltips(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(hover: hover) and (pointer: fine)').matches
+}
+
 function syncMarkers(
   L: LeafletNS,
   map: import('leaflet').Map,
@@ -95,7 +101,8 @@ function syncMarkers(
   selectedId: string | null | undefined,
   onSelectSingle: ((m: AnnuaireMapMarker) => void) | undefined,
   onSelectCluster: ((pin: Extract<AnnuaireLaidPin, { type: 'cluster' }>) => void) | undefined,
-  refitBounds: boolean
+  refitBounds: boolean,
+  withTooltips: boolean
 ) {
   layer.clearLayers()
   markersById.clear()
@@ -114,15 +121,17 @@ function syncMarkers(
         icon,
         zIndexOffset: 150,
       })
-      marker.bindTooltip(
-        `<div class="m-map-tooltip"><strong>${escapeHtml(pin.label)}</strong><br/><span style="opacity:0.85">${pin.items.length} personnes · cliquer pour la liste</span></div>`,
-        {
-          direction: 'top',
-          offset: [0, -14],
-          opacity: 0.95,
-          className: 'm-map-leaflet-tooltip',
-        }
-      )
+      if (withTooltips) {
+        marker.bindTooltip(
+          `<div class="m-map-tooltip"><strong>${escapeHtml(pin.label)}</strong><br/><span style="opacity:0.85">${pin.items.length} personnes · cliquer pour la liste</span></div>`,
+          {
+            direction: 'top',
+            offset: [0, -14],
+            opacity: 0.95,
+            className: 'm-map-leaflet-tooltip',
+          }
+        )
+      }
       marker.on('click', () => onSelectCluster?.(pin))
       marker.addTo(layer)
       markersById.set(pin.id, marker)
@@ -144,12 +153,14 @@ function syncMarkers(
       icon,
       zIndexOffset: m.kind === 'mandala_place' ? 200 : 100,
     })
-    marker.bindTooltip(markerTooltipHtml(m), {
-      direction: 'top',
-      offset: [0, -14],
-      opacity: 0.95,
-      className: 'm-map-leaflet-tooltip',
-    })
+    if (withTooltips) {
+      marker.bindTooltip(markerTooltipHtml(m), {
+        direction: 'top',
+        offset: [0, -14],
+        opacity: 0.95,
+        className: 'm-map-leaflet-tooltip',
+      })
+    }
     marker.on('click', () => onSelectSingle?.(m))
     marker.addTo(layer)
     markersById.set(pin.id, marker)
@@ -185,7 +196,9 @@ export function AnnuaireCitiesMap({
   const selectedIdRef = useRef(selectedId)
   selectedIdRef.current = selectedId
   const markersKeyRef = useRef('')
+  const withTooltipsRef = useRef(false)
   const [mapReady, setMapReady] = useState(false)
+  const [peek, setPeek] = useState<AnnuaireMapMarker | null>(null)
   const [clusterOpen, setClusterOpen] = useState<Extract<
     AnnuaireLaidPin,
     { type: 'cluster' }
@@ -204,6 +217,7 @@ export function AnnuaireCitiesMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return
     let cancelled = false
+    withTooltipsRef.current = canUseHoverTooltips()
 
     void import('leaflet').then((L) => {
       if (cancelled || !containerRef.current || mapRef.current) return
@@ -219,6 +233,11 @@ export function AnnuaireCitiesMap({
         maxZoom: 18,
       }).addTo(map)
 
+      map.on('click', () => {
+        setClusterOpen(null)
+        setPeek(null)
+      })
+
       const layer = L.layerGroup().addTo(map)
       leafletRef.current = L
       mapRef.current = map
@@ -232,9 +251,17 @@ export function AnnuaireCitiesMap({
         markersByIdRef.current,
         laidRef.current,
         selectedIdRef.current,
-        (m) => onSelectRef.current?.(m),
-        (c) => setClusterOpen(c),
-        true
+        (m) => {
+          setClusterOpen(null)
+          setPeek(m)
+          onSelectRef.current?.(m)
+        },
+        (c) => {
+          setPeek(null)
+          setClusterOpen(c)
+        },
+        true,
+        withTooltipsRef.current
       )
       setMapReady(true)
       requestAnimationFrame(() => {
@@ -271,12 +298,23 @@ export function AnnuaireCitiesMap({
       selectedId,
       (m) => {
         setClusterOpen(null)
+        setPeek(m)
         onSelectRef.current?.(m)
       },
-      (c) => setClusterOpen(c),
-      refit
+      (c) => {
+        setPeek(null)
+        setClusterOpen(c)
+      },
+      refit,
+      withTooltipsRef.current
     )
   }, [mapReady, laid, selectedId])
+
+  useEffect(() => {
+    if (!selectedId) return
+    const match = mappable.find((m) => m.id === selectedId)
+    if (match) setPeek(match)
+  }, [selectedId, mappable])
 
   useEffect(() => {
     if (!mapReady || sizeToken === undefined) return
@@ -289,48 +327,97 @@ export function AnnuaireCitiesMap({
 
   return (
     <div
-      className={`m-public-map relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 ${frameClassName}`}
+      className={`m-public-map overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 ${frameClassName}`}
     >
       <div ref={containerRef} className={`w-full ${heightClassName}`} />
+      {peek && !clusterOpen && (
+        <div className="border-t border-slate-800 bg-slate-950 px-3 py-2.5">
+          <div className="flex items-start gap-2.5">
+            {peek.kind === 'mandala_place' ? (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-950/60 text-lg">
+                {peek.community_emoji || '🏛️'}
+              </span>
+            ) : isAvatarImageUrl(peek.avatar) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={String(peek.avatar)}
+                alt=""
+                className="h-9 w-9 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-800 text-base">
+                {peek.avatar_emoji?.trim() ||
+                  (peek.display_name || '?').slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-100">
+                {peek.kind === 'mandala_place'
+                  ? peek.label
+                  : peek.display_name || 'Personne'}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {peek.kind === 'mandala_place'
+                  ? 'Lieu Mandala'
+                  : `${peek.kind === 'residence' ? 'Habite' : 'Exerce'} · ${peek.label}`}
+                {peek.pro_verified ? ' · Mandala Pro' : ''}
+              </p>
+              {peek.place_names && peek.place_names.length > 0 && (
+                <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                  Rattaché · {peek.place_names.join(' · ')}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPeek(null)}
+              className="shrink-0 text-xs text-slate-400 hover:text-slate-200"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
       {clusterOpen && (
-        <div className="absolute inset-x-3 bottom-12 z-[500] max-h-[45%] overflow-auto rounded-xl border border-slate-700 bg-slate-950/95 p-3 shadow-xl backdrop-blur-sm">
+        <div className="max-h-36 sm:max-h-44 overflow-auto border-t border-slate-800 bg-slate-950 px-3 py-2.5">
           <div className="mb-2 flex items-start justify-between gap-2">
-            <div>
+            <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-[0.16em] text-sky-300/80">
                 {clusterOpen.label}
               </p>
               <p className="text-sm font-semibold text-slate-100">
-                {clusterOpen.items.length} personnes
+                {clusterOpen.items.length} personnes — choisissez-en une
               </p>
             </div>
             <button
               type="button"
               onClick={() => setClusterOpen(null)}
-              className="text-xs text-slate-400 hover:text-slate-200"
+              className="shrink-0 text-xs text-slate-400 hover:text-slate-200"
             >
               Fermer
             </button>
           </div>
-          <ul className="space-y-1.5">
+          <ul className="space-y-1">
             {clusterOpen.items.map((item) => (
               <li key={item.id}>
                 <button
                   type="button"
                   onClick={() => {
                     setClusterOpen(null)
+                    setPeek(item)
                     onSelectMarker?.(item)
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/80 px-2.5 py-2 text-left hover:border-violet-500/50"
+                  className="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/80 px-2 py-1.5 text-left hover:border-violet-500/50"
                 >
                   {isAvatarImageUrl(item.avatar) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={String(item.avatar)}
                       alt=""
-                      className="h-8 w-8 rounded-full object-cover"
+                      className="h-7 w-7 rounded-full object-cover"
                     />
                   ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-base">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-sm">
                       {item.avatar_emoji?.trim() ||
                         (item.display_name || '?').slice(0, 1).toUpperCase()}
                     </span>

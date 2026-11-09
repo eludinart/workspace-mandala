@@ -25,6 +25,7 @@ import { ExplainCard } from '@/components/help/ExplainCard'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import type { MandalaPage } from '@/components/MandalaApp'
 import { registerPullRefreshHandler } from '@/lib/pull-refresh'
+import { onMandalaMapChanged } from '@/lib/map-changed'
 
 const AnnuaireCitiesMap = dynamic(
   () =>
@@ -227,6 +228,14 @@ export function SkillsDirectory({
     const handle = window.setTimeout(() => void loadMap(), 180)
     return () => window.clearTimeout(handle)
   }, [loadMap])
+
+  useEffect(() => {
+    if (!showMap) return
+    return onMandalaMapChanged(() => {
+      void load()
+      void loadMap()
+    })
+  }, [showMap, load, loadMap])
 
   const onPull = useCallback(async () => {
     await load()

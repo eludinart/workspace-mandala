@@ -5,8 +5,11 @@
 import { getPool, isDbConfigured, table } from '@/lib/db'
 import type { SkillCard } from '@/lib/db-skills'
 import { listSkillDirectory } from '@/lib/db-skills'
+import {
+  cityKey,
+  locationsForMapSource,
+} from '@/lib/annuaire-map-locations'
 import { resolveCitiesCoords } from '@/lib/geo-city-cache'
-import { normalizeCityLabel, type PracticePlace } from '@/lib/practice-locations'
 import type { RowDataPacket } from 'mysql2'
 
 export type AnnuaireAudience = 'all' | 'pro' | 'members'
@@ -53,92 +56,6 @@ async function loadListedPlaceNames(ids: number[]): Promise<Map<number, string>>
   return map
 }
 
-function cityKey(label: string): string {
-  return normalizeCityLabel(label).toLocaleLowerCase('fr')
-}
-
-function practicePlacesFromCard(card: SkillCard): PracticePlace[] {
-  if (card.practice_places?.length) return card.practice_places
-  return (card.practice_locations ?? [])
-    .map((city) => normalizeCityLabel(city))
-    .filter(Boolean)
-    .map((city) => ({
-      city,
-      mode: 'city' as const,
-      address: '',
-      postal_code: '',
-      latitude: null,
-      longitude: null,
-    }))
-}
-
-/**
- * Pins : chaque lieu d’exercice ; résidence uniquement si publique et ville différente.
- */
-function locationsForCard(card: SkillCard): Array<{
-  key: string
-  kind: 'practice' | 'residence'
-  label: string
-  latitude?: number
-  longitude?: number
-}> {
-  const out: Array<{
-    key: string
-    kind: 'practice' | 'residence'
-    label: string
-    latitude?: number
-    longitude?: number
-  }> = []
-  const seen = new Set<string>()
-
-  for (const place of practicePlacesFromCard(card)) {
-    const label = normalizeCityLabel(place.city)
-    if (!label) continue
-    const k = cityKey(label)
-    if (seen.has(k)) continue
-    seen.add(k)
-    const hasExact =
-      place.mode === 'address' &&
-      place.latitude != null &&
-      place.longitude != null &&
-      Number.isFinite(place.latitude) &&
-      Number.isFinite(place.longitude)
-    out.push({
-      key: `practice:${k}`,
-      kind: 'practice',
-      label,
-      ...(hasExact
-        ? { latitude: Number(place.latitude), longitude: Number(place.longitude) }
-        : {}),
-    })
-  }
-
-  const residence =
-    card.residence_public !== false ? normalizeCityLabel(card.residence_city) : ''
-  if (residence) {
-    const k = cityKey(residence)
-    if (!seen.has(k)) {
-      seen.add(k)
-      const hasExact =
-        card.location_mode === 'address' &&
-        card.latitude != null &&
-        card.longitude != null &&
-        Number.isFinite(card.latitude) &&
-        Number.isFinite(card.longitude)
-      out.push({
-        key: `residence:${k}`,
-        kind: 'residence',
-        label: residence,
-        ...(hasExact
-          ? { latitude: Number(card.latitude), longitude: Number(card.longitude) }
-          : {}),
-      })
-    }
-  }
-
-  return out
-}
-
 export async function listAnnuaireMapMarkers(opts?: {
   audience?: AnnuaireAudience
   communitySlug?: string | null
@@ -178,10 +95,10 @@ export async function listAnnuaireMapMarkers(opts?: {
 
   const cityLabels = new Set<string>()
   const communityIds = new Set<number>()
-  const planned = new Map<number, ReturnType<typeof locationsForCard>>()
+  const planned = new Map<number, ReturnType<typeof locationsForMapSource>>()
 
   for (const card of cards) {
-    const locs = locationsForCard(card)
+    const locs = locationsForMapSource(card)
     planned.set(card.user_id, locs)
     for (const loc of locs) {
       if (loc.latitude == null || loc.longitude == null) cityLabels.add(loc.label)
