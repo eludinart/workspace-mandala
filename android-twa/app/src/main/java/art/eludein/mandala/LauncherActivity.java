@@ -3,12 +3,17 @@
  */
 package art.eludein.mandala;
 
+import android.Manifest;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -27,6 +32,17 @@ public class LauncherActivity
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         } else {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        }
+        // Android 13+ : sans cette permission, FCM / délégation restent silencieux.
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        this,
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        1001
+                );
+            }
         }
     }
 
@@ -53,6 +69,7 @@ public class LauncherActivity
         if (token == null || token.isEmpty()) {
             return uri;
         }
+        Application.bridgeTokenToWeb(token);
         // Toujours réinjecter pour resync web (login, SW, etc.).
         Uri.Builder b = uri.buildUpon();
         b.clearQuery();

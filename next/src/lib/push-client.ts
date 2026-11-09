@@ -143,12 +143,23 @@ async function registerNativeFcmToken(token: string): Promise<boolean> {
   }
 }
 
-/** Lit `?fcm_token=` injecté par la TWA Play, enregistre, nettoie l’URL seulement si OK. */
+function readNativeFcmTokenFromCookie(): string {
+  if (typeof document === 'undefined') return ''
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)mdl_fcm_token=([^;]+)/)
+    return match?.[1]?.trim() || ''
+  } catch {
+    return ''
+  }
+}
+
+/** Lit token natif TWA : query `?fcm_token=` OU cookie `mdl_fcm_token` (pont Android). */
 export async function syncNativeFcmTokenFromUrl(): Promise<boolean> {
   if (typeof window === 'undefined') return false
   const url = new URL(window.location.href)
   const fromQuery = url.searchParams.get(NATIVE_FCM_PARAM)?.trim() || ''
-  let token = fromQuery
+  const fromCookie = readNativeFcmTokenFromCookie()
+  let token = fromQuery || fromCookie
   if (!token) {
     try {
       token = localStorage.getItem(NATIVE_FCM_STORAGE)?.trim() || ''
@@ -158,7 +169,7 @@ export async function syncNativeFcmTokenFromUrl(): Promise<boolean> {
   }
   if (!token) return false
 
-  if (fromQuery) {
+  if (fromQuery || fromCookie) {
     persistNativeFcmTokenLocally(token)
   }
 
