@@ -395,6 +395,43 @@ export function CalendarPage() {
     setDayDetail(null)
   }
 
+  const closeDaySheet = useCallback(() => {
+    const keepSelection =
+      selectedDays.length > 1 || (multiSelect && selectedDays.length >= 1)
+    if (keepSelection) {
+      setSelectedDay(null)
+      setDayDetail(null)
+      setActionMsg(null)
+      return
+    }
+    setSelectedDays([])
+    setSelectedDay(null)
+    setDayDetail(null)
+  }, [selectedDays.length, multiSelect])
+
+  const [isMobileSheet, setIsMobileSheet] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    const sync = () => setIsMobileSheet(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedDay || !isMobileSheet) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeDaySheet()
+    }
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [selectedDay, isMobileSheet, closeDaySheet])
+
   const panelProps = selectedDay
     ? {
         selectedDay,
@@ -686,12 +723,6 @@ export function CalendarPage() {
                 ? 'Un jour ou plusieurs : ouvrir et fermer se font dans le bloc de détail.'
                 : 'Touchez un jour pour le détail.'}
             </p>
-
-            {panelProps && (
-              <div className="lg:hidden">
-                <CalendarDayPanel {...panelProps} variant="sidebar" />
-              </div>
-            )}
           </div>
 
           {panelProps && (
@@ -702,6 +733,31 @@ export function CalendarPage() {
         </div>
       )}
 
+      {panelProps && isMobileSheet && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/70 flex items-end justify-center p-3"
+          onClick={closeDaySheet}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Détail du jour"
+        >
+          <div
+            className="w-full max-w-lg min-h-0 max-h-full flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CalendarDayPanel
+              {...panelProps}
+              variant="sheet"
+              onClose={closeDaySheet}
+              closeLabel={
+                selectedDays.length > 1 || (multiSelect && selectedDays.length >= 1)
+                  ? 'Retour au calendrier'
+                  : 'Fermer'
+              }
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

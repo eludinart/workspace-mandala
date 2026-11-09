@@ -70,8 +70,11 @@ body {
     radial-gradient(circle at 72% 8%, rgb(var(--accent-400) / 0.1), transparent 26%);
 }
 
+/* Ne pas utiliser min(100%, …) : si le parent a height:auto, 100% est indéfini
+   et tout le max-height peut être ignoré → feuille hors viewport sans scroll. */
 .m-sheet-max {
-  max-height: min(100%, calc(var(--vvh, 100svh) - 1.5rem));
+  max-height: calc(var(--vvh, 100svh) - 1.5rem);
+  min-height: 0;
 }
 
 body > div {

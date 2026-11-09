@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { enumerateEventDays } from '@/lib/event-dates'
 import {
   type MonthEvent,
@@ -41,6 +41,7 @@ export function CalendarDayPanel({
   viewerId,
   presenceBusy,
   onClose,
+  closeLabel,
   selectedDays,
   selectionBusy,
   onToggleSelfPresence,
@@ -63,6 +64,7 @@ export function CalendarDayPanel({
   viewerId: number | null
   presenceBusy: boolean
   onClose?: () => void
+  closeLabel?: string
   selectedDays: string[]
   selectionBusy: boolean
   onToggleSelfPresence: (present: boolean) => void
@@ -93,10 +95,16 @@ export function CalendarDayPanel({
   const [openDaysToo, setOpenDaysToo] = useState(true)
   const many = selectedDays.length > 1
   const span = selectionSpan(selectedDays)
+  const closeBtnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     setMaxDraft(String(maxParticipants))
   }, [selectedDay, maxParticipants])
+
+  useEffect(() => {
+    if (!onClose) return
+    closeBtnRef.current?.focus()
+  }, [onClose, selectedDay])
 
   const tone = dayTone(
     dayDetail
@@ -113,7 +121,7 @@ export function CalendarDayPanel({
       ? `rounded-2xl border-2 overflow-hidden flex flex-col h-full min-h-[320px] ${
           many ? 'border-violet-500/60 bg-slate-900' : toneShell(tone)
         }`
-      : `m-sheet-max m-above-os-chrome w-full max-w-lg rounded-2xl border-2 overflow-hidden flex flex-col shadow-2xl bg-slate-900 ${
+      : `m-sheet-max m-above-os-chrome w-full max-w-lg min-h-0 rounded-2xl border-2 overflow-hidden flex flex-col shadow-2xl bg-slate-900 ${
           many ? 'border-violet-500/60' : toneShell(tone)
         }`
 
@@ -161,11 +169,12 @@ export function CalendarDayPanel({
         </div>
         {onClose && (
           <button
+            ref={closeBtnRef}
             type="button"
             onClick={onClose}
             className="shrink-0 px-3 py-1.5 text-sm rounded-lg border border-slate-700 hover:bg-slate-800"
           >
-            Fermer
+            {closeLabel ?? 'Fermer'}
           </button>
         )}
       </div>

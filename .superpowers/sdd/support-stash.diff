@@ -1,0 +1,853 @@
+diff --git a/next/src/api/support.ts b/next/src/api/support.ts
+index 9d8d636..80db07e 100644
+--- a/next/src/api/support.ts
++++ b/next/src/api/support.ts
+@@ -15,6 +15,7 @@ export type SupportReportItem = {
+   user_agent: string | null
+   status: SupportStatus
+   created_at: string | null
++  images: string[]
+ }
+ 
+ export const supportApi = {
+@@ -23,6 +24,7 @@ export const supportApi = {
+     message: string
+     page: string
+     community_slug?: string | null
++    images?: string[]
+   }) => api.post('/api/support', body) as Promise<{ ok: boolean; id: number }>,
+ 
+   list: () => api.get('/api/support') as Promise<{ items: SupportReportItem[] }>,
+@@ -31,4 +33,7 @@ export const supportApi = {
+     api.patch(`/api/support/${id}`, { status }) as Promise<{ ok: boolean }>,
+ 
+   remove: (id: number) => api.delete(`/api/support/${id}`) as Promise<{ ok: boolean }>,
++
++  removeMany: (ids: number[]) =>
++    api.delete('/api/support', { ids }) as Promise<{ ok: boolean; deleted: number }>,
+ }
+diff --git a/next/src/app/api/support/route.ts b/next/src/app/api/support/route.ts
+index f3cdde3..83dc42e 100644
+--- a/next/src/app/api/support/route.ts
++++ b/next/src/app/api/support/route.ts
+@@ -1,9 +1,15 @@
+ import { NextRequest, NextResponse } from 'next/server'
+ import { ApiError, requireAdmin, requireAuth } from '@/lib/api-auth'
+ import { authMe } from '@/lib/db-auth'
+-import { insertSupportReport, listSupportReports, type SupportKind } from '@/lib/db-support'
++import {
++  deleteDoneSupportReportsBatch,
++  insertSupportReport,
++  listSupportReports,
++  type SupportKind,
++} from '@/lib/db-support'
+ import { PAGE_LABELS } from '@/lib/nav'
+ import { sendTransactionalEmail } from '@/lib/mandala-mail'
++import { assertSupportImageDataUrls } from '@/lib/support-images'
+ import type { MandalaPage } from '@/components/MandalaApp'
+ 
+ export const dynamic = 'force-dynamic'
+@@ -42,6 +48,18 @@ export async function POST(req: NextRequest) {
+       return NextResponse.json({ error: 'Message trop long (4000 caractères maximum).' }, { status: 400 })
+     }
+ 
++    let images: string[]
++    try {
++      images = assertSupportImageDataUrls(body.images)
++    } catch (err: unknown) {
++      const status =
++        err && typeof err === 'object' && 'status' in err
++          ? Number((err as { status: number }).status)
++          : 400
++      const msg = err instanceof Error ? err.message : 'Images invalides'
++      return NextResponse.json({ error: msg }, { status: status || 400 })
++    }
++
+     const page = cleanPage(body.page)
+     const communitySlug = cleanSlug(body.community_slug)
+     const userAgent = req.headers.get('user-agent')?.slice(0, 512) ?? null
+@@ -52,6 +70,7 @@ export async function POST(req: NextRequest) {
+       kind,
+       message,
+       userAgent,
++      images,
+     })
+ 
+     const supportTo = process.env.SUPPORT_EMAIL?.trim()
+@@ -70,6 +89,7 @@ export async function POST(req: NextRequest) {
+           `De : ${who}`,
+           `Page : ${pageLabel} (${page})`,
+           communitySlug ? `Lieu : ${communitySlug}` : '',
++          images.length ? `Images jointes : ${images.length}` : '',
+           '',
+           message,
+         ]
+@@ -101,3 +121,38 @@ export async function GET(req: NextRequest) {
+     return NextResponse.json({ error: message }, { status: 500 })
+   }
+ }
++
++/** Suppression en lot des retours traités uniquement (tout ou rien). */
++export async function DELETE(req: NextRequest) {
++  try {
++    await requireAdmin(req)
++    const body = await req.json().catch(() => ({}))
++    const rawIds = Array.isArray(body.ids) ? body.ids : []
++    const ids = rawIds
++      .map((value: unknown) => parseInt(String(value), 10))
++      .filter((id: number) => Number.isFinite(id) && id > 0)
++    if (!ids.length) {
++      return NextResponse.json({ error: 'Aucun identifiant fourni' }, { status: 400 })
++    }
++    const result = await deleteDoneSupportReportsBatch(ids)
++    if (result === 'empty') {
++      return NextResponse.json({ error: 'Aucun identifiant fourni' }, { status: 400 })
++    }
++    if (result === 'not_found') {
++      return NextResponse.json({ error: 'Un ou plusieurs retours sont introuvables' }, { status: 404 })
++    }
++    if (result === 'not_done') {
++      return NextResponse.json(
++        { error: 'Seuls les retours traités peuvent être supprimés.' },
++        { status: 409 }
++      )
++    }
++    return NextResponse.json({ ok: true, deleted: ids.length })
++  } catch (err: unknown) {
++    if (err instanceof ApiError) {
++      return NextResponse.json({ error: err.message }, { status: err.status })
++    }
++    const message = err instanceof Error ? err.message : 'Erreur'
++    return NextResponse.json({ error: message }, { status: 500 })
++  }
++}
+diff --git a/next/src/components/admin/AdminSupportTab.tsx b/next/src/components/admin/AdminSupportTab.tsx
+index 6dd7842..4f38e57 100644
+--- a/next/src/components/admin/AdminSupportTab.tsx
++++ b/next/src/components/admin/AdminSupportTab.tsx
+@@ -21,6 +21,9 @@ export function AdminSupportTab() {
+   const [loading, setLoading] = useState(true)
+   const [error, setError] = useState<string | null>(null)
+   const [busyId, setBusyId] = useState<number | null>(null)
++  const [selectedDoneIds, setSelectedDoneIds] = useState<number[]>([])
++  const [batchBusy, setBatchBusy] = useState(false)
++  const [lightbox, setLightbox] = useState<string | null>(null)
+ 
+   const load = useCallback(async () => {
+     setLoading(true)
+@@ -28,6 +31,7 @@ export function AdminSupportTab() {
+     try {
+       const data = await supportApi.list()
+       setItems(data.items ?? [])
++      setSelectedDoneIds([])
+     } catch (err: unknown) {
+       setItems([])
+       setError(err instanceof ApiError ? err.detail : 'Impossible de charger les retours')
+@@ -40,12 +44,24 @@ export function AdminSupportTab() {
+     void load()
+   }, [load])
+ 
++  useEffect(() => {
++    if (!lightbox) return
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key === 'Escape') setLightbox(null)
++    }
++    window.addEventListener('keydown', onKey)
++    return () => window.removeEventListener('keydown', onKey)
++  }, [lightbox])
++
+   const setStatus = async (id: number, status: SupportStatus) => {
+     setBusyId(id)
+     setError(null)
+     try {
+       await supportApi.setStatus(id, status)
+       setItems((prev) => prev.map((item) => (item.id === id ? { ...item, status } : item)))
++      if (status !== 'done') {
++        setSelectedDoneIds((prev) => prev.filter((selected) => selected !== id))
++      }
+     } catch (err: unknown) {
+       setError(err instanceof ApiError ? err.detail : 'Mise à jour impossible')
+     } finally {
+@@ -60,6 +76,7 @@ export function AdminSupportTab() {
+     try {
+       await supportApi.remove(id)
+       setItems((prev) => prev.filter((item) => item.id !== id))
++      setSelectedDoneIds((prev) => prev.filter((selected) => selected !== id))
+     } catch (err: unknown) {
+       setError(err instanceof ApiError ? err.detail : 'Suppression impossible')
+     } finally {
+@@ -67,8 +84,41 @@ export function AdminSupportTab() {
+     }
+   }
+ 
++  const removeSelected = async () => {
++    if (!selectedDoneIds.length) return
++    const n = selectedDoneIds.length
++    if (
++      !window.confirm(
++        `Supprimer ${n} retour${n > 1 ? 's' : ''} traité${n > 1 ? 's' : ''} ? Cette action est définitive.`
++      )
++    ) {
++      return
++    }
++    setBatchBusy(true)
++    setError(null)
++    try {
++      await supportApi.removeMany(selectedDoneIds)
++      const removed = new Set(selectedDoneIds)
++      setItems((prev) => prev.filter((item) => !removed.has(item.id)))
++      setSelectedDoneIds([])
++    } catch (err: unknown) {
++      setError(err instanceof ApiError ? err.detail : 'Suppression groupée impossible')
++      await load()
++    } finally {
++      setBatchBusy(false)
++    }
++  }
++
+   const openItems = items.filter((item) => item.status !== 'done')
+   const doneItems = items.filter((item) => item.status === 'done')
++  const allDoneSelected =
++    doneItems.length > 0 && doneItems.every((item) => selectedDoneIds.includes(item.id))
++
++  const toggleDone = (id: number) => {
++    setSelectedDoneIds((prev) =>
++      prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id]
++    )
++  }
+ 
+   return (
+     <section className="space-y-3">
+@@ -91,7 +141,7 @@ export function AdminSupportTab() {
+       )}
+       <ul className="space-y-3">
+         {openItems.map((item) => (
+-          <ReportCard key={item.id} item={item}>
++          <ReportCard key={item.id} item={item} onOpenImage={setLightbox}>
+             {item.status !== 'read' && (
+               <button
+                 type="button"
+@@ -141,12 +191,43 @@ export function AdminSupportTab() {
+               </span>
+             </span>
+           </summary>
++          <div className="flex flex-wrap items-center gap-2 px-3 pb-2">
++            <button
++              type="button"
++              disabled={batchBusy}
++              onClick={() =>
++                setSelectedDoneIds(allDoneSelected ? [] : doneItems.map((item) => item.id))
++              }
++              className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
++            >
++              {allDoneSelected ? 'Tout désélectionner' : 'Tout sélectionner'}
++            </button>
++            {selectedDoneIds.length > 0 && (
++              <button
++                type="button"
++                disabled={batchBusy}
++                onClick={() => void removeSelected()}
++                className="text-xs px-2 py-1 rounded-lg border border-red-900 text-red-300 disabled:opacity-60"
++              >
++                {batchBusy
++                  ? 'Suppression…'
++                  : `Supprimer la sélection (${selectedDoneIds.length})`}
++              </button>
++            )}
++          </div>
+           <ul className="space-y-3 px-3 pb-3">
+             {doneItems.map((item) => (
+-              <ReportCard key={item.id} item={item} muted>
++              <ReportCard
++                key={item.id}
++                item={item}
++                muted
++                selected={selectedDoneIds.includes(item.id)}
++                onToggleSelect={() => toggleDone(item.id)}
++                onOpenImage={setLightbox}
++              >
+                 <button
+                   type="button"
+-                  disabled={busyId === item.id}
++                  disabled={busyId === item.id || batchBusy}
+                   onClick={() => void setStatus(item.id, 'new')}
+                   className="text-xs px-2 py-1 rounded-lg border border-slate-700 disabled:opacity-60"
+                 >
+@@ -154,7 +235,7 @@ export function AdminSupportTab() {
+                 </button>
+                 <button
+                   type="button"
+-                  disabled={busyId === item.id}
++                  disabled={busyId === item.id || batchBusy}
+                   onClick={() => void remove(item.id)}
+                   className="text-xs px-2 py-1 rounded-lg border border-red-900 text-red-300 disabled:opacity-60"
+                 >
+@@ -165,6 +246,23 @@ export function AdminSupportTab() {
+           </ul>
+         </details>
+       )}
++
++      {lightbox && (
++        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
++          <button
++            type="button"
++            className="absolute inset-0 bg-slate-950/85"
++            aria-label="Fermer l’image"
++            onClick={() => setLightbox(null)}
++          />
++          {/* eslint-disable-next-line @next/next/no-img-element */}
++          <img
++            src={lightbox}
++            alt="Capture jointe"
++            className="relative z-[81] max-h-[90vh] max-w-[min(96vw,56rem)] rounded-xl border border-slate-700 object-contain"
++          />
++        </div>
++      )}
+     </section>
+   )
+ }
+@@ -172,15 +270,33 @@ export function AdminSupportTab() {
+ function ReportCard({
+   item,
+   muted = false,
++  selected = false,
++  onToggleSelect,
++  onOpenImage,
+   children,
+ }: {
+   item: SupportReportItem
+   muted?: boolean
++  selected?: boolean
++  onToggleSelect?: () => void
++  onOpenImage: (src: string) => void
+   children: ReactNode
+ }) {
++  const images = item.images ?? []
+   return (
+     <li className={`rounded-xl border border-slate-800 p-3 space-y-2 ${muted ? 'bg-slate-950/20' : 'bg-slate-950/40'}`}>
+       <div className="flex flex-wrap items-center gap-2 text-xs">
++        {onToggleSelect && (
++          <label className="inline-flex items-center gap-1.5 text-slate-400 cursor-pointer">
++            <input
++              type="checkbox"
++              checked={selected}
++              onChange={onToggleSelect}
++              className="rounded border-slate-600"
++            />
++            <span className="sr-only">Sélectionner le retour #{item.id}</span>
++          </label>
++        )}
+         <span
+           className={`px-2 py-0.5 rounded-full ${
+             item.kind === 'bug' ? 'bg-red-950 text-red-300' : 'bg-violet-950 text-violet-200'
+@@ -195,6 +311,26 @@ function ReportCard({
+         </span>
+       </div>
+       <p className={`text-sm whitespace-pre-wrap ${muted ? 'text-slate-400' : 'text-slate-200'}`}>{item.message}</p>
++      {images.length > 0 && (
++        <ul className="flex flex-wrap gap-2">
++          {images.map((src, index) => (
++            <li key={`${item.id}-${index}`}>
++              <button
++                type="button"
++                onClick={() => onOpenImage(src)}
++                className="block rounded-lg border border-slate-700 overflow-hidden hover:border-violet-500"
++              >
++                {/* eslint-disable-next-line @next/next/no-img-element */}
++                <img
++                  src={src}
++                  alt={`Capture ${index + 1}`}
++                  className="h-16 w-16 object-cover"
++                />
++              </button>
++            </li>
++          ))}
++        </ul>
++      )}
+       <p className="text-xs text-slate-500">
+         {item.author_name}
+         {item.author_email ? ` · ${item.author_email}` : ''} · {pageLabel(item.page)}
+diff --git a/next/src/components/help/HelpButton.tsx b/next/src/components/help/HelpButton.tsx
+index 40647fe..ecb7487 100644
+--- a/next/src/components/help/HelpButton.tsx
++++ b/next/src/components/help/HelpButton.tsx
+@@ -5,8 +5,10 @@ import type { MandalaPage } from '@/components/MandalaApp'
+ import { supportApi, type SupportKind } from '@/api/support'
+ import { useCommunity } from '@/contexts/CommunityContext'
+ import { ApiError } from '@/lib/api-client'
++import { compressSupportImage, imageFileFromDataTransfer } from '@/lib/compress-feed-image'
+ import { helpForPage } from '@/lib/help-topics'
+ import { PAGE_LABELS } from '@/lib/nav'
++import { SUPPORT_MAX_IMAGES } from '@/lib/support-images'
+ 
+ const POS_KEY = 'mdl_help_button_pos'
+ const DRAG_THRESHOLD_PX = 8
+@@ -55,6 +57,9 @@ export function HelpButton({ page }: { page: MandalaPage }) {
+   const [sending, setSending] = useState(false)
+   const [error, setError] = useState<string | null>(null)
+   const [sent, setSent] = useState(false)
++  const [images, setImages] = useState<string[]>([])
++  const [imageBusy, setImageBusy] = useState(false)
++  const imageInputRef = useRef<HTMLInputElement>(null)
+   const [pos, setPos] = useState<FabPos | null>(null)
+   const [dragging, setDragging] = useState(false)
+   const dragRef = useRef<{
+@@ -199,12 +204,40 @@ export function HelpButton({ page }: { page: MandalaPage }) {
+     setOpen(true)
+   }
+ 
++  const pickImage = async (file: File | null) => {
++    if (!file) return
++    if (images.length >= SUPPORT_MAX_IMAGES) {
++      setError(`Maximum ${SUPPORT_MAX_IMAGES} images.`)
++      return
++    }
++    setImageBusy(true)
++    setError(null)
++    try {
++      const res = await compressSupportImage(file)
++      if (res.error || !res.dataUrl) {
++        setError(res.error || 'Impossible de préparer l’image')
++        return
++      }
++      setImages((prev) =>
++        prev.length >= SUPPORT_MAX_IMAGES ? prev : [...prev, res.dataUrl]
++      )
++    } catch {
++      setError('Impossible de préparer l’image')
++    } finally {
++      setImageBusy(false)
++    }
++  }
++
+   const submit = async () => {
+     const text = message.trim()
+     if (text.length < 8) {
+       setError('Décrivez le sujet en quelques mots.')
+       return
+     }
++    if (imageBusy) {
++      setError('Attendez la fin de la préparation des images.')
++      return
++    }
+     setSending(true)
+     setError(null)
+     try {
+@@ -213,9 +246,11 @@ export function HelpButton({ page }: { page: MandalaPage }) {
+         message: text,
+         page,
+         community_slug: active?.slug ?? null,
++        images: images.length ? images : undefined,
+       })
+       setSent(true)
+       setMessage('')
++      setImages([])
+     } catch (err: unknown) {
+       setError(err instanceof ApiError ? err.detail : 'Envoi impossible pour le moment.')
+     } finally {
+@@ -367,15 +402,89 @@ export function HelpButton({ page }: { page: MandalaPage }) {
+                 <textarea
+                   value={message}
+                   onChange={(event) => setMessage(event.target.value)}
++                  onPaste={(event) => {
++                    const file = imageFileFromDataTransfer(event.clipboardData)
++                    if (!file) return
++                    event.preventDefault()
++                    void pickImage(file)
++                  }}
+                   rows={5}
+                   maxLength={4000}
+                   placeholder={
+                     kind === 'bug'
+-                      ? 'Que s’est-il passé, et qu’attendiez-vous ?'
+-                      : 'Votre question sur l’utilisation…'
++                      ? 'Que s’est-il passé, et qu’attendiez-vous ? (Ctrl+V pour coller une capture)'
++                      : 'Votre question… (Ctrl+V pour coller une image)'
+                   }
+                   className="w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+                 />
++                <div
++                  className="space-y-2 rounded-lg border border-dashed border-slate-700 p-2"
++                  onDragOver={(event) => {
++                    event.preventDefault()
++                    event.dataTransfer.dropEffect = 'copy'
++                  }}
++                  onDrop={(event) => {
++                    event.preventDefault()
++                    const file = imageFileFromDataTransfer(event.dataTransfer)
++                    void pickImage(file)
++                  }}
++                >
++                  <div className="flex flex-wrap items-center gap-2">
++                    <input
++                      ref={imageInputRef}
++                      type="file"
++                      accept="image/jpeg,image/png,image/webp,image/gif,image/*"
++                      className="hidden"
++                      onChange={(event) => {
++                        const file = event.target.files?.[0] ?? null
++                        event.target.value = ''
++                        void pickImage(file)
++                      }}
++                    />
++                    <button
++                      type="button"
++                      disabled={
++                        sending || imageBusy || images.length >= SUPPORT_MAX_IMAGES
++                      }
++                      onClick={() => imageInputRef.current?.click()}
++                      className="px-3 py-1.5 rounded-lg border border-slate-700 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
++                    >
++                      {imageBusy
++                        ? 'Préparation…'
++                        : images.length >= SUPPORT_MAX_IMAGES
++                          ? `${SUPPORT_MAX_IMAGES} images max`
++                          : 'Joindre une image'}
++                    </button>
++                    <span className="text-xs text-slate-500">
++                      Optionnel · {images.length}/{SUPPORT_MAX_IMAGES}
++                    </span>
++                  </div>
++                  {images.length > 0 && (
++                    <ul className="flex flex-wrap gap-2">
++                      {images.map((src, index) => (
++                        <li key={`${index}-${src.slice(0, 32)}`} className="relative">
++                          {/* eslint-disable-next-line @next/next/no-img-element */}
++                          <img
++                            src={src}
++                            alt={`Capture ${index + 1}`}
++                            className="h-16 w-16 rounded-lg object-cover border border-slate-700"
++                          />
++                          <button
++                            type="button"
++                            disabled={sending || imageBusy}
++                            onClick={() =>
++                              setImages((prev) => prev.filter((_, i) => i !== index))
++                            }
++                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-200 border border-slate-600"
++                            aria-label={`Retirer l’image ${index + 1}`}
++                          >
++                            ✕
++                          </button>
++                        </li>
++                      ))}
++                    </ul>
++                  )}
++                </div>
+                 {error && <p className="text-sm text-red-400">{error}</p>}
+                 {sent && (
+                   <p className="text-sm text-emerald-400">
+@@ -384,7 +493,7 @@ export function HelpButton({ page }: { page: MandalaPage }) {
+                 )}
+                 <button
+                   type="submit"
+-                  disabled={sending}
++                  disabled={sending || imageBusy}
+                   className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm hover:bg-violet-500 disabled:opacity-60"
+                 >
+                   {sending ? 'Envoi…' : 'Envoyer'}
+diff --git a/next/src/lib/api-client.ts b/next/src/lib/api-client.ts
+index 7fad0bd..a68aa40 100644
+--- a/next/src/lib/api-client.ts
++++ b/next/src/lib/api-client.ts
+@@ -320,7 +320,11 @@ export const api = {
+     request(path, { method: 'PUT', body: JSON.stringify(body) }),
+   patch: (path: string, body: unknown) =>
+     request(path, { method: 'PATCH', body: JSON.stringify(body) }),
+-  delete: (path: string) => request(path, { method: 'DELETE' }),
++  delete: (path: string, body?: unknown) =>
++    request(path, {
++      method: 'DELETE',
++      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
++    }),
+ }
+ 
+ export function cardImageUrl(imageFile: string | null | undefined): string | null {
+diff --git a/next/src/lib/compress-feed-image.ts b/next/src/lib/compress-feed-image.ts
+index 35919c2..0684967 100644
+--- a/next/src/lib/compress-feed-image.ts
++++ b/next/src/lib/compress-feed-image.ts
+@@ -108,6 +108,63 @@ export async function compressFeedImage(
+   }
+ }
+ 
++/**
++ * Compresse une capture pour un retour support : conserve le ratio (pas de crop),
++ * plafonne la plus grande dimension, JPEG léger.
++ */
++export async function compressSupportImage(
++  file: File,
++  opts?: { maxBytes?: number; maxEdge?: number }
++): Promise<{ dataUrl: string; error?: string }> {
++  if (!looksLikeImage(file)) {
++    return { dataUrl: '', error: 'Fichier image requis (JPEG, PNG, WebP ou GIF)' }
++  }
++
++  const maxBytes = opts?.maxBytes ?? 300_000
++  const maxEdge = opts?.maxEdge ?? 1600
++
++  let bitmap: ImageBitmap
++  try {
++    bitmap = await loadBitmap(file)
++  } catch {
++    return {
++      dataUrl: '',
++      error: 'Impossible de lire cette image — essayez JPEG ou PNG',
++    }
++  }
++
++  const srcW = bitmap.width
++  const srcH = bitmap.height
++  const scale = Math.min(1, maxEdge / Math.max(srcW, srcH))
++  const dstW = Math.max(1, Math.round(srcW * scale))
++  const dstH = Math.max(1, Math.round(srcH * scale))
++
++  const canvas = document.createElement('canvas')
++  canvas.width = dstW
++  canvas.height = dstH
++  const ctx = canvas.getContext('2d')
++  if (!ctx) {
++    bitmap.close()
++    return { dataUrl: '', error: 'Canvas non disponible' }
++  }
++  ctx.drawImage(bitmap, 0, 0, dstW, dstH)
++  bitmap.close()
++
++  for (const quality of [0.86, 0.74, 0.62, 0.5, 0.38]) {
++    const dataUrl = canvas.toDataURL('image/jpeg', quality)
++    const b64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
++    const approxBytes = Math.ceil((b64.length * 3) / 4)
++    if (approxBytes <= maxBytes) {
++      return { dataUrl }
++    }
++  }
++
++  return {
++    dataUrl: '',
++    error: 'Image trop lourde même après compression — choisissez une capture plus légère',
++  }
++}
++
+ /** Extrait le premier fichier image d’un événement presse-papiers ou drop. */
+ export function imageFileFromDataTransfer(data: DataTransfer | null | undefined): File | null {
+   if (!data) return null
+diff --git a/next/src/lib/db-support.ts b/next/src/lib/db-support.ts
+index 76b65a5..39a07b2 100644
+--- a/next/src/lib/db-support.ts
++++ b/next/src/lib/db-support.ts
+@@ -1,4 +1,5 @@
+ import { exec, getPool, isDbConfigured, table } from './db'
++import { SUPPORT_MAX_IMAGES } from './support-images'
+ 
+ export type SupportKind = 'question' | 'bug'
+ export type SupportStatus = 'new' | 'read' | 'done'
+@@ -10,6 +11,7 @@ export type SupportReportInput = {
+   kind: SupportKind
+   message: string
+   userAgent: string | null
++  images?: string[]
+ }
+ 
+ export type SupportReportItem = {
+@@ -24,9 +26,11 @@ export type SupportReportItem = {
+   user_agent: string | null
+   status: SupportStatus
+   created_at: string | null
++  images: string[]
+ }
+ 
+ let _tableEnsured = false
++let _imagesTableEnsured = false
+ 
+ export async function ensureSupportTable(): Promise<void> {
+   if (_tableEnsured || !isDbConfigured()) return
+@@ -51,6 +55,23 @@ export async function ensureSupportTable(): Promise<void> {
+   _tableEnsured = true
+ }
+ 
++export async function ensureSupportImagesTable(): Promise<void> {
++  if (_imagesTableEnsured || !isDbConfigured()) return
++  const pool = getPool()
++  await exec(
++    pool,
++    `CREATE TABLE IF NOT EXISTS ${table('support_report_images')} (
++      id INT AUTO_INCREMENT PRIMARY KEY,
++      report_id INT NOT NULL,
++      sort_order TINYINT NOT NULL DEFAULT 0,
++      image_data MEDIUMTEXT NOT NULL,
++      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
++      INDEX idx_report_sort (report_id, sort_order)
++    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
++  )
++  _imagesTableEnsured = true
++}
++
+ function asIso(value: unknown): string | null {
+   if (!value) return null
+   if (value instanceof Date) return value.toISOString()
+@@ -58,6 +79,58 @@ function asIso(value: unknown): string | null {
+   return Number.isNaN(d.getTime()) ? String(value) : d.toISOString()
+ }
+ 
++async function insertImagesForReport(reportId: number, images: string[]): Promise<void> {
++  if (!images.length) return
++  await ensureSupportImagesTable()
++  const pool = getPool()
++  const capped = images.slice(0, SUPPORT_MAX_IMAGES)
++  for (let i = 0; i < capped.length; i++) {
++    await exec(
++      pool,
++      `INSERT INTO ${table('support_report_images')} (report_id, sort_order, image_data)
++       VALUES (?, ?, ?)`,
++      [reportId, i, capped[i]]
++    )
++  }
++}
++
++async function loadImagesByReportIds(ids: number[]): Promise<Map<number, string[]>> {
++  const map = new Map<number, string[]>()
++  if (!ids.length) return map
++  await ensureSupportImagesTable()
++  const pool = getPool()
++  const placeholders = ids.map(() => '?').join(',')
++  const [rows] = await exec(
++    pool,
++    `SELECT report_id, image_data
++     FROM ${table('support_report_images')}
++     WHERE report_id IN (${placeholders})
++     ORDER BY report_id ASC, sort_order ASC, id ASC`,
++    ids
++  )
++  for (const row of (rows as Record<string, unknown>[]) ?? []) {
++    const reportId = Number(row.report_id)
++    const data = String(row.image_data || '')
++    if (!reportId || !data) continue
++    const list = map.get(reportId) ?? []
++    if (list.length < SUPPORT_MAX_IMAGES) list.push(data)
++    map.set(reportId, list)
++  }
++  return map
++}
++
++async function deleteImagesForReports(ids: number[]): Promise<void> {
++  if (!ids.length) return
++  await ensureSupportImagesTable()
++  const pool = getPool()
++  const placeholders = ids.map(() => '?').join(',')
++  await exec(
++    pool,
++    `DELETE FROM ${table('support_report_images')} WHERE report_id IN (${placeholders})`,
++    ids
++  )
++}
++
+ export async function insertSupportReport(input: SupportReportInput): Promise<number> {
+   if (!isDbConfigured()) throw new Error('Base de données indisponible')
+   await ensureSupportTable()
+@@ -76,7 +149,11 @@ export async function insertSupportReport(input: SupportReportInput): Promise<nu
+       input.userAgent,
+     ]
+   )
+-  return Number((result as { insertId?: number }).insertId ?? 0)
++  const id = Number((result as { insertId?: number }).insertId ?? 0)
++  if (id && input.images?.length) {
++    await insertImagesForReport(id, input.images)
++  }
++  return id
+ }
+ 
+ export async function listSupportReports(limit = 100): Promise<SupportReportItem[]> {
+@@ -94,19 +171,25 @@ export async function listSupportReports(limit = 100): Promise<SupportReportItem
+      LIMIT ?`,
+     [capped]
+   )
+-  return ((rows as Record<string, unknown>[]) ?? []).map((row) => ({
++  const items = ((rows as Record<string, unknown>[]) ?? []).map((row) => ({
+     id: Number(row.id),
+     user_id: Number(row.user_id),
+     author_name: String(row.display_name || '').trim() || 'Membre',
+     author_email: String(row.user_email || ''),
+     community_slug: row.community_slug ? String(row.community_slug) : null,
+     page: String(row.page || ''),
+-    kind: row.kind === 'question' ? 'question' : 'bug',
++    kind: (row.kind === 'question' ? 'question' : 'bug') as SupportKind,
+     message: String(row.message || ''),
+     user_agent: row.user_agent ? String(row.user_agent) : null,
+-    status: row.status === 'done' || row.status === 'read' ? row.status : 'new',
++    status: (row.status === 'done' || row.status === 'read' ? row.status : 'new') as SupportStatus,
+     created_at: asIso(row.created_at),
++    images: [] as string[],
+   }))
++  const imageMap = await loadImagesByReportIds(items.map((item) => item.id))
++  for (const item of items) {
++    item.images = imageMap.get(item.id) ?? []
++  }
++  return items
+ }
+ 
+ export async function updateSupportReportStatus(
+@@ -139,6 +222,7 @@ export async function deleteDoneSupportReport(
+   const row = ((rows as Record<string, unknown>[]) ?? [])[0]
+   if (!row) return 'not_found'
+   if (row.status !== 'done') return 'not_done'
++  await deleteImagesForReports([id])
+   const [result] = await exec(
+     pool,
+     `DELETE FROM ${table('support_reports')} WHERE id = ? AND status = 'done'`,
+@@ -146,3 +230,56 @@ export async function deleteDoneSupportReport(
+   )
+   return ((result as { affectedRows?: number }).affectedRows ?? 0) > 0 ? 'deleted' : 'not_found'
+ }
++
++/**
++ * Supprime plusieurs retours traités. Tout ou rien : si un ID manque ou n’est pas `done`,
++ * aucune suppression.
++ */
++export async function deleteDoneSupportReportsBatch(
++  ids: number[]
++): Promise<'deleted' | 'not_found' | 'not_done' | 'empty'> {
++  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))]
++  if (!unique.length) return 'empty'
++  if (!isDbConfigured()) return 'not_found'
++  await ensureSupportTable()
++  await ensureSupportImagesTable()
++  const pool = getPool()
++  const conn = await pool.getConnection()
++  try {
++    await conn.beginTransaction()
++    const placeholders = unique.map(() => '?').join(',')
++    const [rows] = await conn.execute(
++      `SELECT id, status FROM ${table('support_reports')} WHERE id IN (${placeholders})`,
++      unique
++    )
++    const found = (rows as Record<string, unknown>[]) ?? []
++    if (found.length !== unique.length) {
++      await conn.rollback()
++      return 'not_found'
++    }
++    if (found.some((row) => row.status !== 'done')) {
++      await conn.rollback()
++      return 'not_done'
++    }
++    await conn.execute(
++      `DELETE FROM ${table('support_report_images')} WHERE report_id IN (${placeholders})`,
++      unique
++    )
++    const [result] = await conn.execute(
++      `DELETE FROM ${table('support_reports')} WHERE id IN (${placeholders}) AND status = 'done'`,
++      unique
++    )
++    const affected = (result as { affectedRows?: number }).affectedRows ?? 0
++    if (affected !== unique.length) {
++      await conn.rollback()
++      return 'not_found'
++    }
++    await conn.commit()
++    return 'deleted'
++  } catch (err) {
++    await conn.rollback()
++    throw err
++  } finally {
++    conn.release()
++  }
++}
