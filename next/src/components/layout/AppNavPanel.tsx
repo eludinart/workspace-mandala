@@ -6,7 +6,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import {
-  ADMIN_NAV,
+  ADMIN_NAV_MAIN,
+  ADMIN_NAV_TECH,
   MAIN_NAV,
   ORGANISATION_NAV,
   ORGANISATION_PLACE_PAGES,
@@ -259,7 +260,21 @@ export function AppNavPanel({
           <>
             <SectionTitle>Administration application</SectionTitle>
             <nav className="flex flex-col gap-0.5 px-2">
-              {ADMIN_NAV.map((item) => (
+              {ADMIN_NAV_MAIN.map((item) => (
+                <NavButton
+                  key={item.id}
+                  active={page === 'admin' && item.adminTab === adminTab}
+                  icon={item.icon}
+                  label={item.label}
+                  description={item.description}
+                  variant="admin"
+                  onClick={() => go('admin', { adminTab: item.adminTab })}
+                />
+              ))}
+            </nav>
+            <SectionTitle>Ressources techniques</SectionTitle>
+            <nav className="flex flex-col gap-0.5 px-2">
+              {ADMIN_NAV_TECH.map((item) => (
                 <NavButton
                   key={item.id}
                   active={page === 'admin' && item.adminTab === adminTab}

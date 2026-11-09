@@ -59,7 +59,53 @@ export type AdminManagedUser = {
   }>
 }
 
+export type AdminLoadDashboard = {
+  ok: boolean
+  generated_at: string
+  load: {
+    windowSec: number
+    rps: number
+    avgMs: number
+    p95Ms: number
+    requests: number
+    errors: number
+    errorRate: number
+    topSlow: Array<{ path: string; count: number; errors: number; avgMs: number; p95Ms: number }>
+    topErrors: Array<{ path: string; count: number; errors: number; avgMs: number; p95Ms: number }>
+    series: Array<{ at: number; rps: number; avgMs: number; errors: number }>
+    poolEnqueueTotal: number
+    poolEnqueueRecent: number
+    startedAt: number
+  }
+  pool: {
+    connectionLimit: number
+    maxIdle: number
+    queueLimit: number
+    idleTimeoutMs: number
+  }
+  alerts: Array<{
+    id: string
+    level: 'info' | 'warning' | 'critical'
+    source: 'push' | 'pool' | 'http' | 'system'
+    title: string
+    detail: string
+    href?: string
+  }>
+  push: {
+    range: string
+    accepted: number
+    gone: number
+    error: number
+    delivered: number
+    opened: number
+    delivery_rate: number | null
+    open_rate: number | null
+    pending_accepted: number
+  } | null
+}
+
 export const adminApi = {
+  load: () => api.get('/api/admin/load') as Promise<AdminLoadDashboard>,
   users: {
     get: (userId: number, communitySlug?: string) => {
       const qs = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''

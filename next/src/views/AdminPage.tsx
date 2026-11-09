@@ -20,6 +20,7 @@ import { AdminSubscriptionsPanel } from '@/components/billing/AdminSubscriptions
 import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
 import { AdminPushTab } from '@/components/admin/AdminPushTab'
+import { AdminLoadTab } from '@/components/admin/AdminLoadTab'
 import { ExplainCard } from '@/components/help/ExplainCard'
 
 import type { AdminTabId } from '@/lib/nav'
@@ -60,18 +61,19 @@ function isoDaysAgo(days: number) {
 const TABS: { id: AdminTabId; label: string }[] = [
   { id: 'people', label: 'Personnes' },
   { id: 'communications', label: 'Communications' },
-  { id: 'telemetry', label: 'Télémétrie' },
-  { id: 'push', label: 'Push' },
   { id: 'places', label: 'Lieux & communautés' },
   { id: 'billing', label: 'Abonnements' },
   { id: 'doors', label: 'Portes' },
   { id: 'evaluations', label: 'Évaluations' },
   { id: 'moderation', label: 'Modération' },
   { id: 'support', label: 'Retours' },
+  { id: 'load', label: 'Charge & alertes' },
+  { id: 'push', label: 'Push' },
+  { id: 'telemetry', label: 'Télémétrie' },
 ]
 
 function normalizeAdminTab(tab?: AdminTabId | 'technical'): AdminTabId {
-  if (tab === 'technical') return 'telemetry'
+  if (tab === 'technical') return 'load'
   return tab ?? 'people'
 }
 
@@ -598,6 +600,8 @@ export function AdminPage({
           )}
         </div>
       )}
+
+      {tab === 'load' && <AdminLoadTab />}
 
       {tab === 'push' && <AdminPushTab />}
 

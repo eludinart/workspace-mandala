@@ -4,6 +4,7 @@
  * Uniquement MariaDB (MARIADB_*).
  */
 import mysql from 'mysql2/promise'
+import { recordPoolEnqueue } from '@/lib/request-metrics'
 
 const DB_HOST = process.env.MARIADB_HOST ?? 'localhost'
 const DB_PORT = parseInt(process.env.MARIADB_PORT ?? '3306', 10)
@@ -29,8 +30,16 @@ const POOL_QUEUE_LIMIT = (() => {
 const POOL_IDLE_TIMEOUT_MS = (() => {
   const raw = process.env.MARIADB_POOL_IDLE_TIMEOUT_MS ?? ''
   const n = parseInt(raw, 10)
-  // mysql2 default is 60000; keep it explicit so we can tune in prod.
-  return Number.isFinite(n) && n >= 0 ? n : 60_000
+  // VPS ~8 Go partagé : libérer vite les sockets idle (défaut 15 s).
+  return Number.isFinite(n) && n >= 0 ? n : 15_000
+})()
+
+const POOL_MAX_IDLE = (() => {
+  const raw = process.env.MARIADB_POOL_MAX_IDLE ?? ''
+  const n = parseInt(raw, 10)
+  if (Number.isFinite(n) && n > 0) return Math.min(n, POOL_CONNECTION_LIMIT)
+  // Burst jusqu’à connectionLimit, mais ne garder que la moitié idle.
+  return Math.max(2, Math.ceil(POOL_CONNECTION_LIMIT / 2))
 })()
 
 declare global {
@@ -62,15 +71,37 @@ export function getPool(): mysql.Pool {
       waitForConnections: true,
       connectionLimit: POOL_CONNECTION_LIMIT,
       // Avoid keeping many idle sockets open when MariaDB has a low max_connections.
-      maxIdle: POOL_CONNECTION_LIMIT,
+      maxIdle: POOL_MAX_IDLE,
       idleTimeout: POOL_IDLE_TIMEOUT_MS,
       queueLimit: POOL_QUEUE_LIMIT,
       enableKeepAlive: true,
       keepAliveInitialDelay: 0,
     })
+    // Signal charge : file d’attente du pool (avant « Queue limit reached »).
+    pool.on('enqueue', () => {
+      recordPoolEnqueue()
+      console.warn(
+        `[mariadb] pool enqueue — limit=${POOL_CONNECTION_LIMIT} maxIdle=${POOL_MAX_IDLE} queueLimit=${POOL_QUEUE_LIMIT}`,
+      )
+    })
     globalThis.__mdl_mariadb_pool = pool
   }
   return pool
+}
+
+/** Réglages pool exposés admin (sans secrets). */
+export function getDbPoolInfo(): {
+  connectionLimit: number
+  maxIdle: number
+  queueLimit: number
+  idleTimeoutMs: number
+} {
+  return {
+    connectionLimit: POOL_CONNECTION_LIMIT,
+    maxIdle: POOL_MAX_IDLE,
+    queueLimit: POOL_QUEUE_LIMIT,
+    idleTimeoutMs: POOL_IDLE_TIMEOUT_MS,
+  }
 }
 
 export function table(name: string): string {

@@ -5,6 +5,7 @@ export { ORGANISATION_PLACE_PAGES } from '@/lib/place-manage'
 export type AdminTabId =
   | 'people'
   | 'communications'
+  | 'load'
   | 'telemetry'
   | 'push'
   | 'places'
@@ -13,6 +14,9 @@ export type AdminTabId =
   | 'support'
   | 'evaluations'
   | 'moderation'
+
+/** Groupe menu admin — « tech » = ressources techniques (charge, push, télémétrie). */
+export type AdminNavSection = 'main' | 'tech'
 
 export type MainNavItem = {
   id: MandalaPage
@@ -33,6 +37,7 @@ export type AdminNavItem = {
   icon: string
   adminTab: AdminTabId
   description?: string
+  section?: AdminNavSection
 }
 
 export type SiteManagerNavItem = {
@@ -160,6 +165,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Personnes & rôles',
     icon: '👥',
     adminTab: 'people',
+    section: 'main',
     description: 'Utilisateurs, gestionnaires, administrateurs',
   },
   {
@@ -167,27 +173,15 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Infos & campagnes',
     icon: '📣',
     adminTab: 'communications',
+    section: 'main',
     description: 'Notifications et diffusions',
-  },
-  {
-    id: 'admin-telemetry',
-    label: 'Télémétrie & usage',
-    icon: '📊',
-    adminTab: 'telemetry',
-    description: 'Suivi des fonctionnalités utilisées',
-  },
-  {
-    id: 'admin-push',
-    label: 'Push',
-    icon: '📲',
-    adminTab: 'push',
-    description: 'Accusés delivered / opened et appareils',
   },
   {
     id: 'admin-places',
     label: 'Lieux & communautés',
     icon: '🏛️',
     adminTab: 'places',
+    section: 'main',
     description: 'Tous les sites enregistrés',
   },
   {
@@ -195,6 +189,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Abonnements',
     icon: '💳',
     adminTab: 'billing',
+    section: 'main',
     description: 'Cadeaux Lieu, partenaires, smoke Stripe',
   },
   {
@@ -202,6 +197,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Portes des fonctions',
     icon: '🚪',
     adminTab: 'doors',
+    section: 'main',
     description: 'Qui voit Relier, carte membres, aide…',
   },
   {
@@ -209,6 +205,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Modération UGC',
     icon: '🛡️',
     adminTab: 'moderation',
+    section: 'main',
     description: 'Signalements de contenus et membres',
   },
   {
@@ -216,6 +213,7 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Retours',
     icon: '🛟',
     adminTab: 'support',
+    section: 'main',
     description: 'Questions et bugs signalés',
   },
   {
@@ -223,9 +221,37 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'Évaluations',
     icon: '✦',
     adminTab: 'evaluations',
+    section: 'main',
     description: 'Signalements de retours et alertes de cadre',
   },
+  {
+    id: 'admin-load',
+    label: 'Charge & alertes',
+    icon: '⚡',
+    adminTab: 'load',
+    section: 'tech',
+    description: 'RPS, latence, pool, alertes push et HTTP',
+  },
+  {
+    id: 'admin-push',
+    label: 'Push (accusés)',
+    icon: '📲',
+    adminTab: 'push',
+    section: 'tech',
+    description: 'Accusés delivered / opened et appareils',
+  },
+  {
+    id: 'admin-telemetry',
+    label: 'Télémétrie & usage',
+    icon: '📊',
+    adminTab: 'telemetry',
+    section: 'tech',
+    description: 'Suivi des fonctionnalités utilisées',
+  },
 ]
+
+export const ADMIN_NAV_MAIN = ADMIN_NAV.filter((i) => (i.section ?? 'main') === 'main')
+export const ADMIN_NAV_TECH = ADMIN_NAV.filter((i) => i.section === 'tech')
 
 export const PAGE_LABELS: Record<MandalaPage, string> = {
   home: 'Accueil',

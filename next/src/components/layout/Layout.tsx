@@ -19,7 +19,8 @@ import { PushNotificationPriming } from '@/components/PushNotificationPriming'
 import { HelpButton } from '@/components/help/HelpButton'
 import { PullToRefresh } from '@/components/PullToRefresh'
 import type { CheckoutReturnState } from '@/lib/checkout-return'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useVisibilityPoll } from '@/hooks/useVisibilityPoll'
 
 export function Layout({
   page,
@@ -48,16 +49,19 @@ export function Layout({
     if (PLACE_BOUND_PAGES.includes(page)) onNavigate('home')
   }, [communities.length, communitiesLoading, onNavigate, page])
 
-  useEffect(() => {
-    if (!user) return
+  const presenceTick = useCallback(() => {
     void socialApi.presenceHeartbeat().catch(() => {})
     void fetchClairiereUnread()
-    const t = setInterval(() => {
-      void socialApi.presenceHeartbeat().catch(() => {})
-      void fetchClairiereUnread()
-    }, 120000)
-    return () => clearInterval(t)
-  }, [user, fetchClairiereUnread])
+  }, [fetchClairiereUnread])
+
+  useVisibilityPoll(
+    'presence',
+    presenceTick,
+    !!user,
+    user && (user as { id?: string | number }).id != null
+      ? String((user as { id: string | number }).id)
+      : null,
+  )
 
   useEffect(() => {
     setMobileNavOpen(false)

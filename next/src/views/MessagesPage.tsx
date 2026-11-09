@@ -16,6 +16,7 @@ import { isCommunityManagerRole } from '@/lib/community-role-labels'
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { PullToRefresh } from '@/components/PullToRefresh'
 import { useRegisterPullRefresh } from '@/hooks/useRegisterPullRefresh'
+import { useVisibilityPoll } from '@/hooks/useVisibilityPoll'
 
 type Channel = {
   channelId: number
@@ -144,11 +145,7 @@ export function MessagesPage({
   }, [loadChannels])
   useRegisterPullRefresh('messages', onPull)
 
-  useEffect(() => {
-    void loadChannels()
-    const t = setInterval(() => void loadChannels(), 60000)
-    return () => clearInterval(t)
-  }, [loadChannels])
+  useVisibilityPoll('channels', () => void loadChannels(), true, active?.slug ?? null)
 
   useEffect(() => {
     if (openCommunitySlug && active?.slug !== openCommunitySlug) {

@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { notificationsApi } from '@/api/notifications'
+import { useVisibilityPoll } from '@/hooks/useVisibilityPoll'
 
 export type NotificationItem = {
   id: string
@@ -36,8 +37,6 @@ type NotificationContextValue = {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
 
-const POLL_INTERVAL_MS = 30_000
-
 function sortUnreadFirst(items: NotificationItem[]): NotificationItem[] {
   return [...items].sort((a, b) => {
     const aRead = a.read_at ? 1 : 0
@@ -59,7 +58,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [unreadCount, setUnreadCount] = useState(0)
   const [items, setItems] = useState<NotificationItem[]>([])
   const [loading, setLoading] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const listLoadedRef = useRef(false)
 
   const userId =
@@ -146,26 +144,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [fetchUnread, fetchList])
 
   useEffect(() => {
-    if (!userId) {
-      setUnreadCount(0)
-      setItems([])
-      listLoadedRef.current = false
-      return
-    }
-    void fetchUnread()
-    pollRef.current = setInterval(() => void fetchUnread(), POLL_INTERVAL_MS)
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [userId, fetchUnread])
+    if (userId) return
+    setUnreadCount(0)
+    setItems([])
+    listLoadedRef.current = false
+  }, [userId])
 
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void fetchUnread()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [fetchUnread])
+  useVisibilityPoll('notifications', () => void fetchUnread(), !!userId, userId)
 
   // Push reçu (app ouverte) ou clic sur notification OS → mettre à jour la cloche
   useEffect(() => {

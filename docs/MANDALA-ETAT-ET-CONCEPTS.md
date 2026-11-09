@@ -309,7 +309,7 @@ Copier-coller en préfixant : *« Contexte : voir document Mandala ci-joint. »*
 - **Ton** : clair, humain, ancré lieux — pas le jargon jardin Fleur
 - **Utilisateurs types** : membre, gestionnaire de lieu, admin app
 - **Vocabulaire** : `docs/VOCABULAIRE.md`
-- **Contrainte technique** : petit VPS — pool MariaDB dimensionné multi-users (`MARIADB_POOL_LIMIT=10`, `MARIADB_POOL_QUEUE_LIMIT=50` ; MariaDB `max_connections`≈151)
+- **Contrainte technique** : petit VPS (~8 Go RAM partagée) — pool MariaDB multi-users (`MARIADB_POOL_LIMIT=10`, `MARIADB_POOL_QUEUE_LIMIT=50` ; `max_connections`≈151) ; polling adaptatif (`lib/adaptive-poll.ts` : pause onglet caché + tick au retour ; notifs 45 s ; chat/canaux/présence inchangés)
 - **Ne jamais inventer** de secrets (`JWT_SECRET`, mots de passe DB) dans les réponses — utiliser des placeholders
 
 ---

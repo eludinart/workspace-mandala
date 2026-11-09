@@ -29,6 +29,7 @@ import { ApiError } from '@/lib/api-client'
 import { moderationApi } from '@/api/moderation'
 import { ReportContentDialog } from '@/components/moderation/ReportContentDialog'
 import { PullToRefresh } from '@/components/PullToRefresh'
+import { useVisibilityPoll } from '@/hooks/useVisibilityPoll'
 
 export function DialogueStream({
   channelId,
@@ -139,6 +140,9 @@ export function DialogueStream({
   const unreadBoundaryRef = useRef<HTMLDivElement>(null)
   const readCursorCaptured = useRef(false)
   const initialScrollDone = useRef(false)
+  const chatPollInFlight = useRef(false)
+  const channelIdRef = useRef(channelId)
+  channelIdRef.current = channelId
 
   const messages = messagesByChannel[String(channelId)] || []
   const visibleMessages = [...messages, ...pendingMessages]
@@ -189,18 +193,16 @@ export function DialogueStream({
     setReadCursorReady(false)
     readCursorCaptured.current = false
     initialScrollDone.current = false
+    chatPollInFlight.current = false
   }, [channelId])
 
-  useEffect(() => {
-    if (!channelId) return
-    let alive = true
-    let inFlight = false
-    const refresh = async () => {
-      if (inFlight) return
-      inFlight = true
+  const chatPollTick = useCallback(() => {
+    if (!channelId || chatPollInFlight.current) return
+    chatPollInFlight.current = true
+    void (async () => {
       try {
         const loaded = await loadChannelMessages(channelId)
-        if (!alive) return
+        if (channelIdRef.current !== channelId) return
         if (!readCursorCaptured.current) {
           readCursorCaptured.current = true
           setUnreadFromId(loaded.unreadFromMessageId)
@@ -209,21 +211,12 @@ export function DialogueStream({
         }
         markChannelRead?.(channelId)
       } finally {
-        inFlight = false
+        chatPollInFlight.current = false
       }
-    }
-    void refresh()
-    const timer = setInterval(() => void refresh(), 15000)
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void refresh()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      alive = false
-      clearInterval(timer)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
+    })()
   }, [channelId, loadChannelMessages, markChannelRead])
+
+  useVisibilityPoll('chat_thread', chatPollTick, !!channelId, channelId)
 
   useEffect(() => {
     const el = getListScrollEl()

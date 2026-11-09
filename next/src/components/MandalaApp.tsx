@@ -326,6 +326,7 @@ export function MandalaApp() {
     const adminTabs: AdminTabId[] = [
       'people',
       'communications',
+      'load',
       'telemetry',
       'push',
       'places',
