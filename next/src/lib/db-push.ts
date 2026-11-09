@@ -109,6 +109,19 @@ export async function upsertPushSubscription(input: {
        updated_at = CURRENT_TIMESTAMP`,
     [input.userId, endpoint, p256dh, auth, ua, platform, standalone, provider]
   )
+
+  // FCM natif = seul rail fiable app fermée longtemps. Retirer les web_push Android
+  // du même user pour éviter les faux « accepted » qui n’arrivent qu’à l’ouverture.
+  if (provider === 'fcm') {
+    await pool.execute(
+      `DELETE FROM ${T()}
+       WHERE user_id = ?
+         AND provider IN ('web_push', 'fcm_web')
+         AND (platform = 'android' OR standalone = 1)
+         AND endpoint <> ?`,
+      [input.userId, endpoint]
+    )
+  }
 }
 
 export async function deletePushSubscriptionByEndpoint(endpoint: string): Promise<void> {

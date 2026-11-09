@@ -192,7 +192,8 @@ export async function sendFcmToSubscription(
   const link = webPath.startsWith('http') ? webPath : `${origin}${webPath.startsWith('/') ? webPath : `/${webPath}`}`
   const icon = `${origin}/icon-192.png`
   const provider = (sub.provider || 'fcm').toLowerCase()
-  const isNative = provider === 'fcm' || sub.platform === 'android'
+  // Uniquement le token natif Play — pas les endpoints web_push Android.
+  const isNative = provider === 'fcm'
 
   const message: Record<string, unknown> = {
     token: sub.endpoint,
@@ -206,14 +207,18 @@ export async function sendFcmToSubscription(
     },
   }
 
-  if (isNative && provider !== 'fcm_web') {
+  if (isNative) {
+    // HIGH + notification système : affichage même si l’app est tuée depuis longtemps.
     message.android = {
       priority: 'HIGH',
+      ttl: '86400s',
       notification: {
         channel_id: FCM_CHANNEL_ID,
         sound: 'default',
+        default_sound: true,
+        default_vibrate_timings: true,
         notification_count: 1,
-        click_action: 'OPEN_MANDALA',
+        visibility: 'PUBLIC',
       },
     }
   } else {
