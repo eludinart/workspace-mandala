@@ -55,7 +55,7 @@ Projet Firebase **Mandala only** :
 - Conserver `VAPID_*` existants pour iOS Web Push
 - `android-twa/app/google-services.json` (package `art.eludein.mandala`, projet `mandala-ca1bb`)
 
-Note : une app Android Mandala avait été créée par erreur sous `fleurdamourweb` — à supprimer côté Console Fleur.
+Note : app Android Mandala créée par erreur sous `fleurdamourweb` — **supprimée** (Console Fleur). Projet FCM = `mandala-ca1bb` uniquement.
 
 ## Play Store
 

@@ -1,6 +1,6 @@
 /**
  * FCM HTTP v1 — envoi vers tokens natifs / web Firebase.
- * Projet partagé Fleur : fleurdamourweb (SA via FCM_SERVICE_ACCOUNT_*).
+ * Projet Mandala dédié : mandala-ca1bb (SA via FCM_SERVICE_ACCOUNT_*).
  */
 import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
