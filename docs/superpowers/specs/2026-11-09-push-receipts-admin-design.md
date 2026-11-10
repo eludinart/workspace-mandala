@@ -38,8 +38,8 @@ Reçus maison : `mdl_push_sends` + `mdl_push_receipts`, ack SW via HMAC (`sendId
 
 - Fiche membre : appareils + timeline sends/receipts + test ciblé
 - Onglet Push : taux 24h/7j, échecs, users sans delivered
-- Seuil : taux delivered/accepted sur 6h < 60 % (min N) → notif + e-mail admins
-- Individuel : annonce/broadcast/test admin sans aucun `accepted` → alerte critique
+- Seuil : taux delivered/accepted sur 6h < 60 % (min N) → notif + e-mail admins (cooldown 48h)
+- Individuel : annonce/broadcast/test admin sans aucun `accepted` → alerte critique (cooldown 48h/user)
 
 ### Hors scope v1
 

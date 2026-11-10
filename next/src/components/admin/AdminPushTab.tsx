@@ -38,11 +38,18 @@ export function AdminPushTab() {
     setMsg(null)
     try {
       const res = await adminApi.push.checkAlerts()
-      setMsg(
-        res.alerted
-          ? `Alerte envoyée (taux ${pct(Number(res.rate) || null)}, seuil ${pct(Number(res.threshold) || null)}).`
-          : `Check OK — taux ${pct(Number(res.rate) || null)} (${res.delivered}/${res.accepted}).`
-      )
+      const rateLabel = pct(Number(res.rate) || null)
+      if (res.alerted && res.skipped_cooldown) {
+        setMsg(
+          `Seuil bas (${rateLabel}) — alerte déjà envoyée (cooldown ${Number(res.cooldown_hours) || 48}h).`
+        )
+      } else if (res.alerted) {
+        setMsg(
+          `Alerte envoyée (taux ${rateLabel}, seuil ${pct(Number(res.threshold) || null)}).`
+        )
+      } else {
+        setMsg(`Check OK — taux ${rateLabel} (${res.delivered}/${res.accepted}).`)
+      }
       await load()
     } catch (e) {
       setMsg(e instanceof ApiError ? e.detail : 'Échec du check alertes')

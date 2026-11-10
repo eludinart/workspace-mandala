@@ -39,6 +39,7 @@ Table `mdl_push_subscriptions.provider` créée / migrée au premier enregistrem
 - Fiche membre admin : appareils + timeline + test push ciblé
 - Accusé appareil : le SW appelle `POST /api/notifications/push_ack` (`delivered` / `opened`) avec HMAC
 - Cron : `GET/POST /api/cron/push-delivery-alerts` (Bearer `MANDALA_CRON_SECRET`) — seuil + purge 30j
+- **Anti-spam** : même alerte seuil (notif + mail) au plus 1× / `PUSH_DELIVERY_ALERT_COOLDOWN_HOURS` (défaut **48h**). Critique individuel : `PUSH_CRITICAL_ALERT_COOLDOWN_HOURS` (défaut **48h**/user).
 - **Prod planifié** (VPS root crontab) : `5 * * * *` → `/opt/data/scripts/mandala-push-delivery-alerts.sh` (log `/var/log/mandala-push-alerts.log`). Secret Coolify `MANDALA_CRON_SECRET` + miroir `/opt/data/secrets/mandala-cron.env` (hors git).
 - Centre d’alertes in-app : badge / liste (polling) indépendant du push OS
 
