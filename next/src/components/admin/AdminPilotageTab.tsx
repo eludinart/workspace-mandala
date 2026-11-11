@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom'
 import { adminApi, type AdminPilotageDashboard } from '@/api/admin'
 import { ApiError } from '@/lib/api-client'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
+import { PilotageLoadChart } from '@/components/admin/PilotageLoadChart'
+import { PilotageSeriesChart } from '@/components/admin/PilotageSeriesChart'
 import type { PilotageDrillKind, PilotageSeriesMetric } from '@/lib/db-admin-pilotage-drill'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 
@@ -168,14 +170,9 @@ export function AdminPilotageTab({
     [days, drillCursor, seriesMetric]
   )
 
-  const maxBar = Math.max(
-    1,
-    ...(data?.series.flatMap((s) => [s.registrations, s.joins, s.dau]) ?? [1])
-  )
   const seriesAllZero =
     !!data && data.series.every((s) => s.registrations === 0 && s.joins === 0 && s.dau === 0)
   const healthLoad = data?.health.load
-  const maxHealthBar = Math.max(1, ...(healthLoad?.series.map((s) => s.rps) ?? [1]))
 
   return (
     <div className="space-y-8 relative">
@@ -333,7 +330,7 @@ export function AdminPilotageTab({
           <section className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Séries journalières
+                Vie du réseau
               </h3>
               <button
                 type="button"
@@ -352,91 +349,20 @@ export function AdminPilotageTab({
               </button>
             </div>
             <p className="text-xs text-slate-400">
-              Inscriptions, rejoindre un lieu, et personnes connectées (jour Paris). Cliquez un
-              chiffre pour la liste.
+              Inscriptions, rejoins et actifs (jour Paris). Cliquez un point pour la liste du jour.
             </p>
-            <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-600" /> Inscriptions
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-600" /> Rejoins
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" /> Actifs
-              </span>
-            </div>
             {seriesAllZero && (
               <p className="text-sm text-slate-500 rounded-lg border border-slate-800 px-3 py-2">
                 Aucune activité mesurée sur ces jours — les compteurs monteront avec les
                 inscriptions, joins et sessions.
               </p>
             )}
-            <div className="space-y-2">
-              {data.series.map((s) => (
-                <div
-                  key={s.day}
-                  className="rounded-lg border border-slate-800/80 px-2 py-1.5 space-y-1"
-                >
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="text-slate-400 tabular-nums w-12 shrink-0">
-                      {s.day.slice(5)}
-                    </span>
-                    <button
-                      type="button"
-                      className="tabular-nums text-emerald-300/90 hover:underline"
-                      onClick={() =>
-                        void openDrill({
-                          kind: 'series_day',
-                          day: s.day,
-                          metric: 'registrations',
-                        })
-                      }
-                    >
-                      I {s.registrations}
-                    </button>
-                    <button
-                      type="button"
-                      className="tabular-nums text-sky-300/90 hover:underline"
-                      onClick={() =>
-                        void openDrill({ kind: 'series_day', day: s.day, metric: 'joins' })
-                      }
-                    >
-                      J {s.joins}
-                    </button>
-                    <button
-                      type="button"
-                      className="tabular-nums text-violet-300/90 hover:underline"
-                      onClick={() =>
-                        void openDrill({ kind: 'series_day', day: s.day, metric: 'dau' })
-                      }
-                    >
-                      D {s.dau}
-                    </button>
-                  </div>
-                  <div className="flex h-2 gap-0.5 pl-12">
-                    {s.registrations > 0 && (
-                      <div
-                        className="h-full rounded-sm bg-emerald-600/80"
-                        style={{ width: `${(s.registrations / maxBar) * 100}%`, minWidth: 2 }}
-                      />
-                    )}
-                    {s.joins > 0 && (
-                      <div
-                        className="h-full rounded-sm bg-sky-600/80"
-                        style={{ width: `${(s.joins / maxBar) * 100}%`, minWidth: 2 }}
-                      />
-                    )}
-                    {s.dau > 0 && (
-                      <div
-                        className="h-full rounded-sm bg-violet-600/70"
-                        style={{ width: `${(s.dau / maxBar) * 100}%`, minWidth: 2 }}
-                      />
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <PilotageSeriesChart
+              series={data.series}
+              onSelectDay={(day, metric) =>
+                void openDrill({ kind: 'series_day', day, metric })
+              }
+            />
           </section>
 
           <section className="space-y-3">
@@ -656,21 +582,10 @@ export function AdminPilotageTab({
               )}
             </div>
             {healthLoad && healthLoad.series.length > 0 && (
-              <button
-                type="button"
-                className="flex h-10 w-full items-end gap-px"
-                onClick={() => onOpenLoad?.()}
-                title="Ouvrir Charge"
-              >
-                {healthLoad.series.map((s) => (
-                  <div
-                    key={s.at}
-                    title={`${s.rps} rps · ${s.avgMs} ms · ${s.errors} err`}
-                    className="flex-1 rounded-t-sm bg-slate-600/80"
-                    style={{ height: `${Math.max(8, (s.rps / maxHealthBar) * 100)}%` }}
-                  />
-                ))}
-              </button>
+              <div className="space-y-2">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Charge (RPS)</p>
+                <PilotageLoadChart series={healthLoad.series} onOpenLoad={onOpenLoad} />
+              </div>
             )}
           </section>
         </>
