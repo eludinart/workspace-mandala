@@ -1590,6 +1590,49 @@ html.light .m-landing-footer {
   }
 }
 
+/* Annuaire — rail tags savoir-faire (1 ligne, scroll) */
+.m-skill-tag-rail {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.m-skill-tag-chip {
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(var(--slate-700));
+  color: rgb(var(--slate-300));
+  background: transparent;
+  white-space: nowrap;
+}
+
+.m-skill-tag-chip:hover {
+  color: #fff;
+}
+
+.m-skill-tag-chip--active {
+  border-color: rgb(var(--accent-500));
+  background: rgb(var(--accent-600) / 0.3);
+  color: rgb(237 233 254);
+}
+
+html.light .m-skill-tag-chip {
+  border-color: rgb(180 150 140 / 0.35);
+  color: rgb(80 60 55);
+}
+
+html.light .m-skill-tag-chip--active {
+  border-color: rgb(var(--accent-500) / 0.55);
+  background: rgb(var(--accent-500) / 0.12);
+  color: rgb(var(--accent-700));
+}
+
 /* Cartes lieux — cover type Airbnb / Meetup */
 .m-place-card-cover {
   position: relative;

@@ -366,6 +366,17 @@ export function SkillsDirectory({
     )
   }, [cards])
 
+  /** Top tags en rail ; tag actif toujours visible même hors top 10. */
+  const skillRailTags = useMemo(() => {
+    if (filtersOpen) return skillCloud
+    const top = skillCloud.slice(0, 10)
+    if (!tag.trim()) return top
+    const key = tag.toLocaleLowerCase('fr')
+    if (top.some(([label]) => label.toLocaleLowerCase('fr') === key)) return top
+    const selected = skillCloud.find(([label]) => label.toLocaleLowerCase('fr') === key)
+    return selected ? [...top.slice(0, 9), selected] : top
+  }, [skillCloud, filtersOpen, tag])
+
   const mineAppears = mine != null && cards.some((c) => c.user_id === mine.user_id)
   const others = visible.filter((c) => !c.is_me)
 
@@ -588,31 +599,45 @@ export function SkillsDirectory({
           />
         </label>
         {skillCloud.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="m-skill-tag-rail" role="list" aria-label="Savoir-faire">
             <button
               type="button"
+              role="listitem"
               onClick={() => setTag('')}
-              className={`text-[11px] px-2.5 py-1 rounded-full border ${
-                tag === '' ? 'border-violet-500 bg-violet-600/30 text-violet-100' : 'border-slate-700 text-slate-400'
-              }`}
+              className={`m-skill-tag-chip shrink-0 ${tag === '' ? 'm-skill-tag-chip--active' : ''}`}
             >
-              Tous les savoir-faire
+              Tous
             </button>
-            {skillCloud.map(([label, count]) => (
+            {skillRailTags.map(([label, count]) => (
               <button
                 key={label}
                 type="button"
-                onClick={() => setTag((cur) => (cur.toLocaleLowerCase('fr') === label.toLocaleLowerCase('fr') ? '' : label))}
-                className={`text-[11px] px-2.5 py-1 rounded-full border ${
+                role="listitem"
+                onClick={() =>
+                  setTag((cur) =>
+                    cur.toLocaleLowerCase('fr') === label.toLocaleLowerCase('fr') ? '' : label
+                  )
+                }
+                className={`m-skill-tag-chip shrink-0 ${
                   tag.toLocaleLowerCase('fr') === label.toLocaleLowerCase('fr')
-                    ? 'border-violet-500 bg-violet-600/30 text-violet-100'
-                    : 'border-slate-700 text-slate-300 hover:text-white'
+                    ? 'm-skill-tag-chip--active'
+                    : ''
                 }`}
               >
                 {label}
-                <span className="ml-1 text-slate-500">{count}</span>
+                <span className="ml-1 opacity-60">{count}</span>
               </button>
             ))}
+            {!filtersOpen && skillCloud.length > 10 && (
+              <button
+                type="button"
+                role="listitem"
+                onClick={() => setFiltersOpen(true)}
+                className="m-skill-tag-chip shrink-0 border-dashed"
+              >
+                +{skillCloud.length - 10}
+              </button>
+            )}
           </div>
         )}
         <button
