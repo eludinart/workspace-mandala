@@ -24,8 +24,8 @@ type DrillItem = {
 }
 
 function levelClass(level: string): string {
-  if (level === 'critical') return 'border-red-700/70 bg-red-950/40 text-red-100'
-  if (level === 'warning') return 'border-amber-700/60 bg-amber-950/30 text-amber-100'
+  if (level === 'critical') return 'border-red-500/50 bg-red-600/10 text-slate-100'
+  if (level === 'warning') return 'border-amber-500/50 bg-amber-600/10 text-slate-100'
   return 'border-slate-700 bg-slate-900/60 text-slate-200'
 }
 
@@ -171,7 +171,7 @@ export function AdminPilotageTab({
               onClick={() => setDays(d)}
               className={`rounded-lg px-2.5 py-1 text-xs border ${
                 days === d
-                  ? 'border-violet-500 bg-violet-950/50 text-violet-100'
+                  ? 'border-violet-500 bg-violet-600/15 text-slate-100'
                   : 'border-slate-700 text-slate-400 hover:bg-slate-800'
               }`}
             >
@@ -747,7 +747,7 @@ export function AdminPilotageTab({
               {drill.kind === 'place' && drill.community_id != null && (
                 <button
                   type="button"
-                  className="w-full rounded-lg border border-violet-700/50 py-2 text-xs text-violet-200 hover:bg-violet-950/40"
+                  className="w-full rounded-lg border border-violet-500/40 py-2 text-xs text-slate-100 hover:bg-violet-600/10"
                   onClick={() => {
                     onOpenPlaces?.(drill.community_id)
                     setDrill(null)

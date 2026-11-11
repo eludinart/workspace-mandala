@@ -70,7 +70,7 @@ export function AdminPushTab() {
               onClick={() => setRange(r)}
               className={`rounded-lg px-3 py-1.5 text-xs border ${
                 range === r
-                  ? 'border-amber-600/60 bg-amber-950/40 text-amber-100'
+                  ? 'border-amber-500/50 bg-amber-600/15 text-slate-100'
                   : 'border-slate-700 text-slate-400'
               }`}
             >

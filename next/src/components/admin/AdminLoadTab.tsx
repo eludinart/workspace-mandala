@@ -5,8 +5,8 @@ import { adminApi, type AdminLoadDashboard } from '@/api/admin'
 import { ApiError } from '@/lib/api-client'
 
 function levelClass(level: string): string {
-  if (level === 'critical') return 'border-red-700/70 bg-red-950/40 text-red-100'
-  if (level === 'warning') return 'border-amber-700/60 bg-amber-950/30 text-amber-100'
+  if (level === 'critical') return 'border-red-500/50 bg-red-600/10 text-slate-100'
+  if (level === 'warning') return 'border-amber-500/50 bg-amber-600/10 text-slate-100'
   return 'border-slate-700 bg-slate-900/60 text-slate-200'
 }
 
