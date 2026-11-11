@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import type { SkillCard } from '@/api/skills'
 import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
+import { ImageLightbox } from '@/components/ImageLightbox'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
@@ -10,6 +12,7 @@ import { MemberGalleryRail } from '@/components/members/MemberGalleryRail'
 import { publicPlaceProfileHref } from '@/lib/skill-place-link'
 import { RESOURCE_KINDS } from '@/lib/resource-constants'
 import { SKILL_REGISTER_LABELS } from '@/lib/skill-constants'
+import { isAvatarImageUrl } from '@/lib/user-avatar'
 
 function resourceKindLabel(kind: string): string {
   return RESOURCE_KINDS.find((item) => item.id === kind)?.label ?? 'Ressource'
@@ -68,18 +71,40 @@ export function SkillFicheContent({
   onOpenConversation?: (channelId: number) => void
   onOpenAlerts?: () => void
 }) {
+  const [portraitLightbox, setPortraitLightbox] = useState(false)
+  const portraitSrc = isAvatarImageUrl(selected.avatar) ? selected.avatar! : null
+  const displayName = selected.display_name || selected.pseudo
+
   return (
     <div className="space-y-7">
       <header className="flex items-start gap-4">
-        <UserAvatar
-          avatar={selected.avatar}
-          avatarEmoji={selected.avatar_emoji}
-          size="xl"
-          alt={selected.pseudo}
-        />
+        {portraitSrc ? (
+          <button
+            type="button"
+            onClick={() => setPortraitLightbox(true)}
+            className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            aria-label={`Agrandir la photo de ${displayName}`}
+            title="Agrandir la photo"
+          >
+            <UserAvatar
+              avatar={portraitSrc}
+              avatarEmoji={selected.avatar_emoji}
+              size="xl"
+              alt={selected.pseudo}
+              className="cursor-zoom-in"
+            />
+          </button>
+        ) : (
+          <UserAvatar
+            avatar={selected.avatar}
+            avatarEmoji={selected.avatar_emoji}
+            size="xl"
+            alt={selected.pseudo}
+          />
+        )}
         <div className="min-w-0 pt-1">
           <h3 className="text-2xl font-semibold text-slate-50 leading-tight flex flex-wrap items-center gap-2">
-            <span>{selected.display_name || selected.pseudo}</span>
+            <span>{displayName}</span>
             {selected.pro_verified ? (
               <MandalaProBadge endorsementPlace={selected.pro_endorsement_place} />
             ) : selected.pro_boost ? (
@@ -296,6 +321,15 @@ export function SkillFicheContent({
         >
           Se connecter pour écrire
         </a>
+      )}
+
+      {portraitLightbox && portraitSrc && (
+        <ImageLightbox
+          src={portraitSrc}
+          alt={displayName}
+          label={`Photo de ${displayName}`}
+          onClose={() => setPortraitLightbox(false)}
+        />
       )}
     </div>
   )

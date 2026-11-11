@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { ImageLightbox } from '@/components/ImageLightbox'
 
 export function MemberGalleryRail({
   images,
@@ -11,15 +12,6 @@ export function MemberGalleryRail({
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null)
   const list = images.filter(Boolean).slice(0, 2)
-
-  useEffect(() => {
-    if (!lightbox) return
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setLightbox(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox])
 
   if (!list.length) return null
 
@@ -47,21 +39,7 @@ export function MemberGalleryRail({
         </ul>
       </section>
       {lightbox && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Aperçu photo"
-          onClick={() => setLightbox(null)}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={lightbox}
-            alt=""
-            className="max-h-full max-w-full rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ImageLightbox src={lightbox} onClose={() => setLightbox(null)} />
       )}
     </>
   )

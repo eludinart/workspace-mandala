@@ -37,7 +37,7 @@ Une fiche membre n’a qu’une photo d’avatar. On veut jusqu’à **3 photos*
 ## UI
 
 - Compte : bloc Portrait + bloc Ambiance (0–2 miniatures, ajouter / retirer / réordonner).
-- Fiche compétences : avatar + rail 0–2 photos + lightbox. Pas de galerie sur cartes listes.
+- Fiche compétences : portrait cliquable (lightbox plein écran) + rail 0–2 photos + lightbox. Les lightbox montent en portal sur `document.body` (au-dessus du chrome). Pas de galerie sur cartes listes.
 
 ## Hors scope
 
