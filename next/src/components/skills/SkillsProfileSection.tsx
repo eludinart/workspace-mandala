@@ -296,6 +296,7 @@ export function SkillsProfileSection() {
           <SkillFicheShare
             userId={profile.user_id}
             displayName=""
+            heading="Partager ma fiche"
             shareTitle="Ma fiche Mandala"
             canSharePublic={profile.scope === 'mandala'}
             alwaysShow

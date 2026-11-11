@@ -99,9 +99,7 @@ export function SkillFicheContent({
                 const label = (
                   <>
                     <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
-                    <span>
-                      Rattaché au lieu Mandala · <strong>{p.name}</strong>
-                    </span>
+                    <strong>{p.name}</strong>
                   </>
                 )
                 const className =
@@ -138,10 +136,12 @@ export function SkillFicheContent({
               {selected.profile_views_30d > 1 ? 's' : ''} de fiche sur 30 jours
             </p>
           )}
-          {(selected.is_me || selected.scope === 'mandala') && (
+          {/* Lien public : tout lecteur d’une fiche « Tout Mandala » peut partager. */}
+          {(selected.scope === 'mandala' || selected.is_me) && (
             <SkillFicheShare
               userId={selected.user_id}
               displayName={selected.display_name || selected.pseudo}
+              heading={selected.is_me ? 'Partager ma fiche' : 'Partager cette fiche'}
               shareTitle={selected.is_me ? 'Ma fiche Mandala' : undefined}
               canSharePublic={selected.scope === 'mandala'}
               alwaysShow={selected.is_me}

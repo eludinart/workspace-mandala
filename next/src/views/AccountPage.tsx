@@ -561,6 +561,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
                 u?.pseudo ||
                 ''
               }
+              heading="Partager ma fiche"
               shareTitle="Ma fiche Mandala"
               canSharePublic={skillsScope === 'mandala'}
               alwaysShow

@@ -10,6 +10,7 @@ import { useCommunity } from '@/contexts/CommunityContext'
 import { useNavAccess } from '@/hooks/useNavAccess'
 import { ApiError } from '@/lib/api-client'
 import { PlaceBillingSettingsPanel } from '@/components/billing/PlaceBillingSettingsPanel'
+import { PlaceShare } from '@/components/place/PlaceShare'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
 import { isAvatarImageUrl } from '@/lib/user-avatar'
 
@@ -442,6 +443,17 @@ export function PlaceSettingsPage({
                 </span>
               </span>
             </label>
+            {active?.slug ? (
+              <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2">
+                <PlaceShare
+                  slug={active.slug}
+                  placeName={name.trim() || active.name}
+                  canSharePublic={profilePublic}
+                  alwaysShow
+                  heading="Partager mon lieu"
+                />
+              </div>
+            ) : null}
           </fieldset>
 
           {active?.id != null && active.id > 0 && (

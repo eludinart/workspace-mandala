@@ -159,6 +159,7 @@ export default async function PublicSkillProfilePage({ params }: Props) {
         <SkillFicheShare
           userId={card.user_id}
           displayName={name}
+          heading="Partager cette fiche"
           canSharePublic
         />
 

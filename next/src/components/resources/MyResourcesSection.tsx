@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { resourcesApi, resourceMediaUrl, type ResourceCard, type ResourceDetail } from '@/api/resources'
 import { ResourceComposer } from '@/components/resources/ResourceComposer'
+import { ResourceShare } from '@/components/resources/ResourceShare'
 import { ApiError } from '@/lib/api-client'
 import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { resourceKindMeta } from '@/lib/resource-constants'
@@ -60,30 +61,40 @@ export function MyResourcesSection() {
       {cards.length === 0 && <p className="text-sm text-slate-500">Aucune ressource pour le moment.</p>}
       <ul className="space-y-2">
         {cards.map((card) => (
-          <li key={card.id} className="flex gap-3 items-center rounded-lg border border-slate-800 bg-slate-950/40 p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={
-                card.has_cover
-                  ? resourceMediaUrl(card.id, 'cover')
-                  : resourceDefaultCoverUrl(card.kind)
-              }
-              alt=""
-              className="w-14 h-14 rounded-lg object-cover"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-slate-100 truncate">{card.title}</p>
-              <p className="text-xs text-slate-500">
-                {resourceKindMeta(card.kind).label} · {SCOPE_LABEL[card.scope]}
-                {card.downloadable ? ' · téléchargeable' : ''}
-              </p>
+          <li key={card.id} className="rounded-lg border border-slate-800 bg-slate-950/40 p-2 space-y-2">
+            <div className="flex gap-3 items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={
+                  card.has_cover
+                    ? resourceMediaUrl(card.id, 'cover')
+                    : resourceDefaultCoverUrl(card.kind)
+                }
+                alt=""
+                className="w-14 h-14 rounded-lg object-cover"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-slate-100 truncate">{card.title}</p>
+                <p className="text-xs text-slate-500">
+                  {resourceKindMeta(card.kind).label} · {SCOPE_LABEL[card.scope]}
+                  {card.downloadable ? ' · téléchargeable' : ''}
+                </p>
+              </div>
+              <button type="button" className="text-xs text-violet-300" onClick={() => void edit(card)}>
+                Modifier
+              </button>
+              <button type="button" className="text-xs text-red-300" onClick={() => void remove(card)}>
+                Retirer
+              </button>
             </div>
-            <button type="button" className="text-xs text-violet-300" onClick={() => void edit(card)}>
-              Modifier
-            </button>
-            <button type="button" className="text-xs text-red-300" onClick={() => void remove(card)}>
-              Retirer
-            </button>
+            <ResourceShare
+              resourceId={card.id}
+              title={card.title}
+              canSharePublic={card.scope === 'mandala'}
+              alwaysShow
+              heading="Partager ma ressource"
+              compact
+            />
           </li>
         ))}
       </ul>

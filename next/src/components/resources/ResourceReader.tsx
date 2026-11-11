@@ -1,6 +1,7 @@
 'use client'
 
 import { resourceMediaUrl, type ResourceDetail } from '@/api/resources'
+import { ResourceShare } from '@/components/resources/ResourceShare'
 import { resourceDefaultCoverUrl } from '@/lib/resource-covers'
 import { resourceKindMeta } from '@/lib/resource-constants'
 
@@ -17,6 +18,7 @@ export function ResourceReader({
     ? resourceMediaUrl(resource.id, 'cover')
     : resourceDefaultCoverUrl(resource.kind)
   const mime = resource.file_mime ?? ''
+  const canSharePublic = resource.scope === 'mandala'
 
   return (
     <div className="fixed inset-0 z-[80] bg-slate-950 text-slate-100 flex flex-col">
@@ -44,6 +46,16 @@ export function ResourceReader({
           <p className="text-sm text-slate-400">
             {resource.author_avatar_emoji} {resource.author_pseudo}
           </p>
+          {(canSharePublic || resource.is_mine) && (
+            <ResourceShare
+              resourceId={resource.id}
+              title={resource.title}
+              canSharePublic={canSharePublic}
+              alwaysShow={resource.is_mine}
+              heading={resource.is_mine ? 'Partager ma ressource' : 'Partager cette ressource'}
+              compact
+            />
+          )}
           {resource.summary && <p className="text-slate-300">{resource.summary}</p>}
           {meta.mode === 'text' && resource.body_text && (
             <div className="whitespace-pre-wrap leading-relaxed text-slate-100">{resource.body_text}</div>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PublicCommunityCard } from '@/api/communities'
 import { placeLinksApi } from '@/api/place-links'
+import { shouldShowPlacesMapPanel } from '@/lib/places-map-panel'
 
 const FRANCE_CENTER: [number, number] = [46.6, 2.5]
 const DEFAULT_ZOOM = 5.5
@@ -112,6 +113,8 @@ type Props = {
   heightClassName?: string
   /** Masque la légende du bas (utile en mini-carte). */
   hideCaption?: boolean
+  /** Masque le panneau détail (utile en mini-carte profil : le lieu est déjà sélectionné). */
+  hideSelectionPanel?: boolean
   /** Change quand le conteneur change de taille (plein écran, etc.) → invalidateSize. */
   sizeToken?: string | number | boolean
   /** Classes du cadre extérieur (ex. plein écran sans coins). */
@@ -125,6 +128,7 @@ export function PlacesMap({
   onSelect,
   heightClassName = 'h-[min(48vh,22rem)] md:h-[min(58vh,34rem)] lg:h-[min(62vh,38rem)]',
   hideCaption = false,
+  hideSelectionPanel = false,
   sizeToken,
   frameClassName = '',
 }: Props) {
@@ -409,7 +413,12 @@ export function PlacesMap({
     return () => ro.disconnect()
   }, [mapReady])
 
-  const panelPlace = selectedPlace
+  const panelPlace = shouldShowPlacesMapPanel({
+    hasSelectedPlace: Boolean(selectedPlace),
+    hideSelectionPanel,
+  })
+    ? selectedPlace
+    : null
   const cityLine = panelPlace
     ? [panelPlace.postal_code, panelPlace.city]
         .map((v) => (v ? String(v).trim() : ''))

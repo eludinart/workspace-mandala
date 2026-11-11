@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
+import { PlaceShare } from '@/components/place/PlaceShare'
 import { RelierPlaceButton } from '@/components/place/RelierPlaceButton'
 import { richHtmlHasContent } from '@/lib/sanitize-rich-html'
 import { SkillsDirectory } from '@/components/skills/SkillsDirectory'
@@ -123,6 +124,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                 </a>
               )}
             </div>
+            <PlaceShare slug={place.slug} placeName={place.name} canSharePublic heading="Partager ce lieu" />
             {place.id > 0 && (
               <div className="pt-1">
                 <RelierPlaceButton targetCommunityId={place.id} targetName={place.name} />
@@ -276,6 +278,7 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
                     selectedSlug={place.slug}
                     heightClassName="h-44"
                     hideCaption
+                    hideSelectionPanel
                   />
                 </div>
                 {directions && (
