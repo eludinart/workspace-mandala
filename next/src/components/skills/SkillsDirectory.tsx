@@ -2,6 +2,7 @@
 
 import dynamic from 'next/dynamic'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   skillsApi,
   type AnnuaireMapMarker,
@@ -9,13 +10,10 @@ import {
   type SkillProfile,
   type SkillTag,
 } from '@/api/skills'
-import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
-import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { UserAvatar } from '@/components/UserAvatar'
 import { ACCOUNT_SKILLS_ANCHOR } from '@/components/skills/SkillsProfileSection'
+import { SkillFicheContent } from '@/components/skills/SkillFicheContent'
 import { ApiError } from '@/lib/api-client'
-import { RESOURCE_KINDS } from '@/lib/resource-constants'
-import { publicPlaceProfileHref } from '@/lib/skill-place-link'
 import {
   SKILL_REGISTER_LABELS,
   SKILL_REGISTERS,
@@ -45,50 +43,6 @@ export const OPEN_SKILL_USER_KEY = 'mandala_skill_user'
 export function queueSkillFiche(userId: number) {
   if (typeof window === 'undefined' || !userId) return
   sessionStorage.setItem(OPEN_SKILL_USER_KEY, String(userId))
-}
-
-function resourceKindLabel(kind: string): string {
-  return RESOURCE_KINDS.find((item) => item.id === kind)?.label ?? 'Ressource'
-}
-
-type ProseBlock = { title: string | null; body: string }
-
-/** Découpe une description en paragraphes, et isole « Titre : suite ». */
-function skillProseBlocks(text: string): ProseBlock[] {
-  const pieces = text
-    .replace(/\r\n/g, '\n')
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .flatMap((piece) =>
-      piece
-        .split(/(?<=\.)\)?\s+(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜŸÇŒÆ][^:\n]{2,80} : )/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-    )
-
-  return pieces.map((piece) => {
-    const match = piece.match(/^([^:\n]{3,80})\s*:\s+([\s\S]+)$/)
-    if (!match || match[1].includes('.')) return { title: null, body: piece }
-    return { title: match[1].trim(), body: match[2].trim() }
-  })
-}
-
-function SkillProse({ text }: { text: string }) {
-  const blocks = skillProseBlocks(text)
-  if (blocks.length === 0) return null
-  return (
-    <div className="space-y-4">
-      {blocks.map((block, index) => (
-        <div key={index} className="space-y-1">
-          {block.title && (
-            <p className="text-sm font-semibold text-slate-100">{block.title}</p>
-          )}
-          <p className="text-[15px] leading-7 text-slate-300 max-w-[68ch] break-words">{block.body}</p>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 function matchesTag(tags: SkillTag[], tag: string): boolean {
@@ -252,9 +206,10 @@ export function SkillsDirectory({
 
   useEffect(() => {
     if (!selectedId || typeof document === 'undefined') return
+    const mq = window.matchMedia('(max-width: 1023px)')
+    if (!mq.matches) return
     const prev = document.body.style.overflow
-    const isMobileSheet = window.matchMedia('(max-width: 1023px)').matches
-    if (isMobileSheet) document.body.style.overflow = 'hidden'
+    document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
     }
@@ -569,11 +524,6 @@ export function SkillsDirectory({
               setSelectedMarkerId(m.id)
               if ((m.kind === 'practice' || m.kind === 'residence') && m.user_id) {
                 setSelectedId(m.user_id)
-                window.setTimeout(() => {
-                  document
-                    .getElementById('annuaire-fiche')
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }, 80)
               }
             }}
           />
@@ -791,260 +741,58 @@ export function SkillsDirectory({
 
         <article
           id="annuaire-fiche"
-          className={`min-w-0 border border-slate-800 bg-slate-900 scroll-mt-24 ${
-            selected
-              ? 'fixed inset-0 z-[70] overflow-y-auto p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 lg:relative lg:inset-auto lg:z-10 lg:overflow-hidden lg:rounded-3xl lg:p-7 lg:min-h-[16rem] order-2'
-              : 'relative z-10 hidden lg:block overflow-hidden rounded-3xl p-5 sm:p-7 min-h-[16rem] order-2'
-          } ${selected?.pro_verified ? 'm-pro-card' : ''}`}
+          className={`hidden lg:block relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] order-2 scroll-mt-24 ${
+            selected?.pro_verified ? 'm-pro-card' : ''
+          }`}
         >
           {!selected && (
             <p className="text-sm text-slate-500">Sélectionnez une personne pour lire sa fiche.</p>
           )}
           {selected && (
-            <div className="space-y-7 max-w-3xl mx-auto lg:max-w-none">
-              <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 py-2 mb-1 flex items-center justify-between gap-3 bg-slate-900/95 backdrop-blur border-b border-slate-800 lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none lg:py-0 lg:mb-0">
-                <p className="text-xs uppercase tracking-wider text-slate-500 lg:hidden">Fiche</p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 lg:hidden"
-                >
-                  Fermer
-                </button>
-              </div>
-              <header className="flex items-start gap-4">
-                <UserAvatar
-                  avatar={selected.avatar}
-                  avatarEmoji={selected.avatar_emoji}
-                  size="xl"
-                  alt={selected.pseudo}
-                />
-                <div className="min-w-0 pt-1">
-                  <h3 className="text-2xl font-semibold text-slate-50 leading-tight flex flex-wrap items-center gap-2">
-                    <span>{selected.display_name || selected.pseudo}</span>
-                    {selected.pro_verified ? (
-                      <MandalaProBadge endorsementPlace={selected.pro_endorsement_place} />
-                    ) : selected.pro_boost ? (
-                      <MandalaProBadge variant="boost" />
-                    ) : null}
-                  </h3>
-                  {selected.pro_tagline && (
-                    <p className="mt-1 text-sm text-slate-200">{selected.pro_tagline}</p>
-                  )}
-                  {selected.skills_visible !== false && selected.scope === 'mandala' && (
-                    <p className="mt-1 text-xs font-medium text-violet-300">Visible sur Mandala</p>
-                  )}
-                  {selected.places.length > 0 ? (
-                    <ul className="mt-2 flex flex-wrap gap-1.5">
-                      {selected.places.map((p) => {
-                        const href = publicPlaceProfileHref(p)
-                        const label = (
-                          <>
-                            <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
-                            <span>
-                              Rattaché au lieu Mandala · <strong>{p.name}</strong>
-                            </span>
-                          </>
-                        )
-                        const className =
-                          'inline-flex items-center gap-1.5 rounded-full border border-amber-700/50 bg-amber-950/35 px-2.5 py-1 text-xs text-amber-100'
-                        return (
-                          <li key={p.id}>
-                            {href ? (
-                              <a href={href} className={`${className} hover:bg-amber-900/40`}>
-                                {label}
-                              </a>
-                            ) : (
-                              <span className={className} title="Profil du lieu privé">
-                                {label}
-                              </span>
-                            )}
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-xs text-slate-500">Sans rattachement à un lieu Mandala</p>
-                  )}
-                  {selected.residence_city && (
-                    <p className="mt-1.5 text-xs text-emerald-300/90">
-                      Habite à {selected.residence_city}
-                    </p>
-                  )}
-                  {(selected.practice_locations?.length ?? 0) > 0 && (
-                    <p className="mt-1.5 text-xs text-sky-300/90">
-                      Exerce à {(selected.practice_locations ?? []).join(' · ')}
-                    </p>
-                  )}
-                  {selected.is_me && selected.profile_views_30d != null && (
-                    <p className="mt-1 text-xs text-slate-400">
-                      {selected.profile_views_30d} vue
-                      {selected.profile_views_30d > 1 ? 's' : ''} de fiche sur 30 jours
-                    </p>
-                  )}
-                  <a
-                    href={`/competences/${selected.user_id}`}
-                    className="mt-2 inline-block text-xs text-violet-300 underline underline-offset-2"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Page publique SEO
-                  </a>
-                </div>
-              </header>
-
-              {(selected.pro_modalities ||
-                selected.pro_service_area ||
-                selected.pro_external_url) && (
-                <section className="space-y-1 rounded-xl border border-violet-900/40 bg-violet-950/20 px-4 py-3 text-sm text-slate-300">
-                  {selected.pro_service_area && (
-                    <p>Zone : {selected.pro_service_area}</p>
-                  )}
-                  {selected.pro_modalities && <p>{selected.pro_modalities}</p>}
-                  {selected.pro_external_url && (
-                    <a
-                      href={selected.pro_external_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-violet-300 underline underline-offset-2"
-                    >
-                      Site / prise de rendez-vous
-                    </a>
-                  )}
-                </section>
-              )}
-
-              {!!selected.bio?.trim() && (
-                <section className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Bio</h4>
-                  <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap max-w-[68ch]">
-                    {selected.bio.trim()}
-                  </p>
-                </section>
-              )}
-
-              {selected.skills_visible !== false && selected.tags.length > 0 && (
-                <section className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Savoir-faire</h4>
-                  <ul className="flex min-w-0 flex-wrap gap-2">
-                    {selected.tags.map((t) => (
-                      <li
-                        key={`${t.label}-${t.register}`}
-                        className="max-w-full rounded-2xl border border-slate-700 bg-slate-950/40 px-3 py-2"
-                      >
-                        <p className="text-sm text-slate-100 break-words">{t.label}</p>
-                        <p className="text-[11px] text-slate-500">{SKILL_REGISTER_LABELS[t.register]}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {selected.skills_visible !== false && selected.offer_text && (
-                <section className="space-y-3 border-t border-slate-800 pt-6">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Ce que je peux apporter
-                  </h4>
-                  <SkillProse text={selected.offer_text} />
-                </section>
-              )}
-
-              {selected.skills_visible !== false && selected.seek_text && (
-                <section className="space-y-3 border-t border-slate-800 pt-6">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Ce que je cherche
-                  </h4>
-                  <SkillProse text={selected.seek_text} />
-                </section>
-              )}
-
-              {selected.skills_visible !== false && selected.frame_text && (
-                <section className="space-y-3 border-t border-slate-800 pt-6">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Mon cadre</h4>
-                  <SkillProse text={selected.frame_text} />
-                </section>
-              )}
-
-              <div className="border-t border-slate-800 pt-6">
-                <ReturnsBlock
-                  key={selected.user_id}
-                  mode="person"
-                  userId={selected.user_id}
-                  communitySlug={communitySlug || selected.shared_place_slug || undefined}
-                  compact
-                  heading="Retours"
-                  allowDesignate={!selected.is_me}
-                />
-              </div>
-
-              {(selected.resources?.length ?? 0) > 0 && (
-                <section className="space-y-3 border-t border-slate-800 pt-6">
-                  <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Ressources</h4>
-                  <ul className="space-y-2">
-                    {selected.resources!.map((resource) => (
-                      <li key={resource.id} className="rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-3">
-                        <p className="text-[11px] uppercase tracking-wide text-slate-500">
-                          {resourceKindLabel(resource.kind)}
-                        </p>
-                        <p className="text-sm font-medium text-slate-100">{resource.title}</p>
-                        {resource.summary && (
-                          <p className="mt-1 text-sm leading-6 text-slate-400">{resource.summary}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {!selected.bio?.trim() &&
-                selected.skills_visible === false &&
-                (selected.resources?.length ?? 0) === 0 && (
-                  <p className="text-sm text-slate-500">
-                    Cette personne n’a pas encore partagé sa bio, ses compétences ni ses ressources.
-                  </p>
-                )}
-
-              {variant === 'app' && !selected.is_me && (
-                <div className="flex flex-wrap gap-2">
-                  {(selected.shares_place || selected.pro_verified) && onOpenMessages && (
-                    <button
-                      type="button"
-                      onClick={() => void contactPro(selected)}
-                      className="text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
-                    >
-                      {selected.pro_verified && !selected.shares_place
-                        ? 'Contacter (Mandala Pro)'
-                        : 'Envoyer un message'}
-                    </button>
-                  )}
-                  {!selected.shares_place && !selected.pro_verified && (
-                    <MeetRequestButton
-                      userId={selected.user_id}
-                      onOpenConversation={onOpenConversation}
-                      onOpenAlerts={onOpenAlerts}
-                    />
-                  )}
-                  {!selected.shares_place && selected.pro_verified && (
-                    <MeetRequestButton
-                      userId={selected.user_id}
-                      onOpenConversation={onOpenConversation}
-                      onOpenAlerts={onOpenAlerts}
-                    />
-                  )}
-                </div>
-              )}
-              {variant === 'public' && (
-                <a
-                  href="/app"
-                  className="inline-block text-sm px-4 py-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500"
-                >
-                  Se connecter pour écrire
-                </a>
-              )}
-            </div>
+            <SkillFicheContent
+              selected={selected}
+              variant={variant}
+              communitySlug={communitySlug}
+              onContact={(card) => void contactPro(card)}
+              onOpenConversation={onOpenConversation}
+              onOpenAlerts={onOpenAlerts}
+            />
           )}
         </article>
       </div>
+
+      {selected &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="lg:hidden fixed inset-0 z-[100] flex flex-col bg-slate-950"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Fiche compétences"
+          >
+            <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 bg-slate-950/95 pt-[max(0.75rem,env(safe-area-inset-top))]">
+              <p className="text-xs uppercase tracking-wider text-slate-500">Fiche</p>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Fermer
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              <SkillFicheContent
+                selected={selected}
+                variant={variant}
+                communitySlug={communitySlug}
+                onContact={(card) => void contactPro(card)}
+                onOpenConversation={onOpenConversation}
+                onOpenAlerts={onOpenAlerts}
+              />
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
