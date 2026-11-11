@@ -412,12 +412,12 @@ function AlertForm({ communitySlug, aboutUserId }: { communitySlug?: string; abo
   return (
     <div className="space-y-2">
       <button type="button" onClick={() => setOpen((v) => !v)} className="text-xs text-slate-500 hover:text-slate-300">
-        Un problème de cadre, hors évaluation publique
+        Signaler un problème aux administrateurs
       </button>
       {open && (
         <div className="space-y-2">
           <p className="text-xs text-slate-500">
-            Ceci reste lisible seulement par les administrateurs de l’application. Ce n’est pas un retour.
+            Ce message n’est vu que par les administrateurs. Il n’est pas publié comme un retour.
           </p>
           {!communitySlug && (
             <input
