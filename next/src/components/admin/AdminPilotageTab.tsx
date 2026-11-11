@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { adminApi, type AdminPilotageDashboard } from '@/api/admin'
+import { adminApi, type AdminPilotageDashboard, type AdminPilotageDays } from '@/api/admin'
 import { ApiError } from '@/lib/api-client'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { PilotageLoadChart } from '@/components/admin/PilotageLoadChart'
 import { PilotageSeriesChart } from '@/components/admin/PilotageSeriesChart'
+import { PILOTAGE_DAY_OPTIONS } from '@/lib/db-admin-pilotage'
 import type { PilotageDrillKind, PilotageSeriesMetric } from '@/lib/db-admin-pilotage-drill'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 
@@ -86,7 +87,7 @@ export function AdminPilotageTab({
   onOpenPush?: () => void
   onOpenPlaces?: (communityId?: number) => void
 }) {
-  const [days, setDays] = useState<7 | 30 | 90>(7)
+  const [days, setDays] = useState<AdminPilotageDays>(7)
   const [data, setData] = useState<AdminPilotageDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<string | null>(null)
@@ -178,8 +179,12 @@ export function AdminPilotageTab({
     <div className="space-y-8 relative">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-medium text-slate-100">Pilotage</h2>
-        <div className="flex gap-1 ml-2">
-          {([7, 30, 90] as const).map((d) => (
+        <div
+          className="flex flex-wrap gap-1 ml-2"
+          role="group"
+          aria-label="Période du pilotage"
+        >
+          {PILOTAGE_DAY_OPTIONS.map(({ days: d, label }) => (
             <button
               key={d}
               type="button"
@@ -190,7 +195,7 @@ export function AdminPilotageTab({
                   : 'border-slate-700 text-slate-400 hover:bg-slate-800'
               }`}
             >
-              {d} j
+              {label}
             </button>
           ))}
         </div>
@@ -332,6 +337,26 @@ export function AdminPilotageTab({
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                 Vie du réseau
               </h3>
+              <div
+                className="flex flex-wrap gap-1"
+                role="group"
+                aria-label="Échelle de temps du chart"
+              >
+                {PILOTAGE_DAY_OPTIONS.map(({ days: d, label }) => (
+                  <button
+                    key={`chart-${d}`}
+                    type="button"
+                    onClick={() => setDays(d)}
+                    className={`rounded-lg px-2.5 py-1 text-xs border ${
+                      days === d
+                        ? 'border-violet-500 bg-violet-600/15 text-slate-100'
+                        : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <button
                 type="button"
                 className="ml-auto text-xs text-slate-400 underline hover:text-slate-200"
@@ -349,7 +374,8 @@ export function AdminPilotageTab({
               </button>
             </div>
             <p className="text-xs text-slate-400">
-              Inscriptions, rejoins et actifs (jour Paris). Cliquez un point pour la liste du jour.
+              Inscriptions, rejoins et actifs (jour Paris). Changez l’échelle pour zoomer dans le
+              temps — cliquez un point pour la liste du jour.
             </p>
             {seriesAllZero && (
               <p className="text-sm text-slate-500 rounded-lg border border-slate-800 px-3 py-2">

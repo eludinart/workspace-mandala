@@ -20,9 +20,11 @@ describe('normalizePilotageDays', () => {
     assert.equal(normalizePilotageDays(''), 7)
     assert.equal(normalizePilotageDays('12'), 7)
   })
-  it('accepts 30 and 90', () => {
+  it('accepts 1, 30, 90 and 365', () => {
+    assert.equal(normalizePilotageDays('1'), 1)
     assert.equal(normalizePilotageDays('30'), 30)
     assert.equal(normalizePilotageDays('90'), 90)
+    assert.equal(normalizePilotageDays('365'), 365)
   })
 })
 

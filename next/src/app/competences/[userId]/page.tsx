@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation'
 import { isDbConfigured } from '@/lib/db'
 import { getPublicSkillCard } from '@/lib/db-skills'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
+import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
+import { skillFichePublicAbsoluteUrl } from '@/lib/skill-share'
 
 type Props = { params: Promise<{ userId: string }> }
 
@@ -34,7 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     openGraph: {
       title,
       description,
-      url: `https://mandala.eludein.art/competences/${userId}`,
+      url: skillFichePublicAbsoluteUrl(userId, 'https://mandala.eludein.art'),
     },
   }
 }
@@ -148,6 +150,12 @@ export default async function PublicSkillProfilePage({ params }: Props) {
             {card.pro_modalities && <p>{card.pro_modalities}</p>}
           </section>
         )}
+
+        <SkillFicheShare
+          userId={card.user_id}
+          displayName={name}
+          canSharePublic
+        />
 
         <div className="flex flex-wrap gap-3 pt-4">
           <Link

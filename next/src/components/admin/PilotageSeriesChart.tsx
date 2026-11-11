@@ -61,6 +61,8 @@ export function PilotageSeriesChart({ series, onSelectDay, height = 260 }: Props
             tick={{ fill: '#94a3b8', fontSize: 11 }}
             axisLine={{ stroke: '#334155' }}
             tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={data.length > 90 ? 40 : data.length > 30 ? 28 : 16}
           />
           <YAxis
             allowDecimals={false}

@@ -176,17 +176,48 @@ async function getAccessToken(): Promise<string | null> {
 
 export type FcmSendResult = 'ok' | 'gone' | 'error'
 
+export type FcmSendOutcome = {
+  result: FcmSendResult
+  /** Court détail pour mdl_push_sends.error_detail (≤255). */
+  detail?: string
+}
+
+/** Formate un échec FCM HTTP v1 pour logs / error_detail (tronqué à 220). */
+export function formatFcmErrorDetail(
+  kind: 'http' | 'response' | 'oauth' | 'no_project',
+  parts: { status?: number; body?: string; error?: unknown } = {}
+): string {
+  const body =
+    parts.body?.replace(/\s+/g, ' ').trim() ||
+    (parts.error != null ? JSON.stringify(parts.error).replace(/\s+/g, ' ').trim() : '')
+  const statusBit = parts.status != null ? String(parts.status) : ''
+  const prefix =
+    kind === 'http'
+      ? `fcm_http${statusBit ? `_${statusBit}` : ''}`
+      : kind === 'response'
+        ? 'fcm_response_error'
+        : kind === 'oauth'
+          ? 'fcm_oauth'
+          : 'fcm_no_project'
+  const raw = body ? `${prefix} ${body}` : prefix
+  return raw.slice(0, 220)
+}
+
 export async function sendFcmToSubscription(
   sub: PushSubscriptionRow,
   title: string,
   body: string,
   webPath: string,
   options?: { tag?: string; sendId?: number; sig?: string }
-): Promise<FcmSendResult> {
+): Promise<FcmSendOutcome> {
   const projectId = getProjectId()
-  if (!projectId) return 'error'
+  if (!projectId) {
+    return { result: 'error', detail: formatFcmErrorDetail('no_project') }
+  }
   const accessToken = await getAccessToken()
-  if (!accessToken) return 'error'
+  if (!accessToken) {
+    return { result: 'error', detail: formatFcmErrorDetail('oauth') }
+  }
 
   const origin = (process.env.NEXT_PUBLIC_APP_URL || 'https://mandala.eludein.art').replace(/\/$/, '')
   const link = webPath.startsWith('http') ? webPath : `${origin}${webPath.startsWith('/') ? webPath : `/${webPath}`}`
@@ -248,21 +279,23 @@ export async function sendFcmToSubscription(
 
   if (res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: unknown }
-    if (!data.error) return 'ok'
-    console.warn('[FCM] Erreur réponse', sub.endpoint.slice(0, 24), data.error)
-    return 'error'
+    if (!data.error) return { result: 'ok' }
+    const detail = formatFcmErrorDetail('response', { error: data.error })
+    console.warn('[FCM] Erreur réponse', sub.endpoint.slice(0, 24), detail)
+    return { result: 'error', detail }
   }
 
   const errText = await res.text().catch(() => '')
-  console.warn('[FCM] HTTP', res.status, sub.endpoint.slice(0, 24), errText.slice(0, 200))
+  const detail = formatFcmErrorDetail('http', { status: res.status, body: errText })
+  console.warn('[FCM] HTTP', res.status, sub.endpoint.slice(0, 24), detail)
   if (
     res.status === 404 ||
     /NotRegistered|UNREGISTERED|INVALID_ARGUMENT|Requested entity was not found/i.test(errText)
   ) {
     await deletePushSubscriptionById(sub.id).catch(() => {})
-    return 'gone'
+    return { result: 'gone', detail }
   }
-  return 'error'
+  return { result: 'error', detail }
 }
 
 /** Compat anciens appels (messages) — délègue au routeur web-push-send. */

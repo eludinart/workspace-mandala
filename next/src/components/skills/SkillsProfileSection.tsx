@@ -12,6 +12,7 @@ export const ACCOUNT_SKILLS_ANCHOR = 'mandala_account_anchor'
 import { skillsApi, type SkillProfile, type SkillTag } from '@/api/skills'
 import { PersonLocationFields } from '@/components/geo/PersonLocationFields'
 import { PracticePlacesEditor } from '@/components/geo/PracticePlacesEditor'
+import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
 import { useCommunity } from '@/contexts/CommunityContext'
 import { ApiError, api } from '@/lib/api-client'
 import { emitMandalaMapChanged } from '@/lib/map-changed'
@@ -288,14 +289,18 @@ export function SkillsProfileSection() {
                     : ''}
             </p>
           )}
-          <a
-            href={`/competences/${profile.user_id}`}
-            className="text-violet-300 underline underline-offset-2"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Aperçu page publique
-          </a>
+        </div>
+      )}
+      {profile.user_id > 0 && (
+        <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2 space-y-1">
+          <p className="text-xs font-medium text-slate-300">Partager ma fiche</p>
+          <SkillFicheShare
+            userId={profile.user_id}
+            displayName=""
+            shareTitle="Ma fiche Mandala"
+            canSharePublic={profile.scope === 'mandala'}
+            compact
+          />
         </div>
       )}
       <p className="text-sm text-slate-400">

@@ -104,10 +104,12 @@ export type AdminLoadDashboard = {
   } | null
 }
 
+export type AdminPilotageDays = 1 | 7 | 30 | 90 | 365
+
 export type AdminPilotageDashboard = {
   ok: boolean
   generated_at: string
-  days: 7 | 30 | 90
+  days: AdminPilotageDays
   range: { from: string; to: string }
   kpis: {
     total_users: number
@@ -151,13 +153,13 @@ export type AdminPilotageDashboard = {
 
 export const adminApi = {
   load: () => api.get('/api/admin/load') as Promise<AdminLoadDashboard>,
-  pilotage: (days: 7 | 30 | 90 = 7) =>
+  pilotage: (days: AdminPilotageDays = 7) =>
     api.get(`/api/admin/pilotage?days=${days}`) as Promise<AdminPilotageDashboard>,
-  pilotageExportUrl: (days: 7 | 30 | 90, kind: 'activity' | 'series') =>
+  pilotageExportUrl: (days: AdminPilotageDays, kind: 'activity' | 'series') =>
     `/api/admin/pilotage/export?days=${days}&kind=${kind}`,
   pilotageDrill: (params: {
     kind: string
-    days?: 7 | 30 | 90
+    days?: AdminPilotageDays
     day?: string
     metric?: 'registrations' | 'joins' | 'dau'
     community_id?: number

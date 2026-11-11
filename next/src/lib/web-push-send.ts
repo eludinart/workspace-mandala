@@ -118,15 +118,17 @@ async function sendToSubscription(
       }
       return 'error'
     }
-    const result = await sendFcmToSubscription(sub, title, body, webPath, {
+    const { result, detail } = await sendFcmToSubscription(sub, title, body, webPath, {
       tag,
       sendId: sendId > 0 ? sendId : undefined,
       sig: sig || undefined,
     })
     if (result !== 'ok' && sendId > 0) {
-      await updatePushSendStatus(sendId, result === 'gone' ? 'gone' : 'error', `fcm_${result}`).catch(
-        () => {}
-      )
+      await updatePushSendStatus(
+        sendId,
+        result === 'gone' ? 'gone' : 'error',
+        detail || `fcm_${result}`
+      ).catch(() => {})
     }
     return result
   }

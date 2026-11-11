@@ -5,6 +5,7 @@ import { MeetRequestButton } from '@/components/directory/MeetRequestButton'
 import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
+import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
 import { publicPlaceProfileHref } from '@/lib/skill-place-link'
 import { RESOURCE_KINDS } from '@/lib/resource-constants'
 import { SKILL_REGISTER_LABELS } from '@/lib/skill-constants'
@@ -136,14 +137,15 @@ export function SkillFicheContent({
               {selected.profile_views_30d > 1 ? 's' : ''} de fiche sur 30 jours
             </p>
           )}
-          <a
-            href={`/competences/${selected.user_id}`}
-            className="mt-2 inline-block text-xs text-violet-300 underline underline-offset-2"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Page publique SEO
-          </a>
+          {(selected.scope === 'mandala' || selected.is_me) && (
+            <SkillFicheShare
+              userId={selected.user_id}
+              displayName={selected.display_name || selected.pseudo}
+              shareTitle={selected.is_me ? 'Ma fiche Mandala' : undefined}
+              canSharePublic={selected.scope === 'mandala'}
+              compact
+            />
+          )}
         </div>
       </header>
 
