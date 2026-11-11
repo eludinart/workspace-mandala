@@ -92,9 +92,7 @@ export function SkillsDirectory({
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
   /** Sur un lieu : défaut Membres (Tous n’a pas de sens). Sinon double vision globale. */
-  const [audienceInternal, setAudienceInternal] = useState<'all' | 'pro' | 'members'>(() =>
-    lockToPlace || (!peopleDirectory && !!communitySlug) ? 'members' : 'all'
-  )
+  const [audienceInternal, setAudienceInternal] = useState<'all' | 'pro' | 'members'>('all')
   const audience = audienceProp ?? audienceInternal
   const setAudience = (next: 'all' | 'pro' | 'members') => {
     if (audienceProp === undefined) setAudienceInternal(next)
@@ -121,15 +119,19 @@ export function SkillsDirectory({
   const placeScoped =
     lockToPlace || (variant === 'app' && !peopleDirectory && view === 'place')
 
-  /** Sur un lieu : seulement Pro / Membres — « Tous » mélange les deux sans apport. */
+  /**
+   * Sur un lieu : Mandala Pro | Membres.
+   * Membres = tout le lieu (`all`, y compris Pro). Pro = badge only.
+   * (L’ancien `members` = « sans Pro » ne s’applique qu’à l’annuaire Mandala global.)
+   */
   const audienceTabs = placeScoped
-    ? ([['pro', 'Mandala Pro'], ['members', 'Membres']] as const)
+    ? ([['pro', 'Mandala Pro'], ['all', 'Membres']] as const)
     : ([['all', 'Tous'], ['pro', 'Mandala Pro'], ['members', 'Membres']] as const)
 
   useEffect(() => {
-    if (!placeScoped || audience !== 'all') return
-    if (audienceProp === undefined) setAudienceInternal('members')
-    onAudienceChange?.('members')
+    if (!placeScoped || audience !== 'members') return
+    if (audienceProp === undefined) setAudienceInternal('all')
+    onAudienceChange?.('all')
   }, [placeScoped, audience, audienceProp, onAudienceChange])
 
   const load = useCallback(async () => {
@@ -388,13 +390,11 @@ export function SkillsDirectory({
       ? 'Professionnels validés — badge, zone d’intervention, contact facilité.'
       : audience === 'members'
         ? 'Membres qui partagent leurs pratiques, sans badge Mandala Pro.'
-        : lockToPlace
-          ? 'Pros et membres de ce lieu, filtrables.'
+        : placeScoped || lockToPlace || view === 'place'
+          ? 'Tous les membres du lieu — y compris Mandala Pro.'
           : variant === 'public'
             ? 'Pros validés et membres du réseau — filtrez selon ce que vous cherchez.'
-            : view === 'place'
-              ? 'Fiches du lieu : pros et membres, visibles ensemble.'
-              : 'Fiches ouvertes à Mandala : pros et membres, filtrables.'
+            : 'Fiches ouvertes à Mandala : pros et membres, filtrables.'
 
   return (
     <div className="space-y-5">
