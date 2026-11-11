@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PublicCommunityCard } from '@/api/communities'
 import { PlacePublicCard } from '@/components/public/PlacePublicCard'
 
@@ -23,43 +23,76 @@ export function PlacesCarousel({
   onJoinPlace,
   joinBusySlug = null,
 }: Props) {
-  const [index, setIndex] = useState(0)
+  const scrollerRef = useRef<HTMLDivElement>(null)
+  const [activeIndex, setActiveIndex] = useState(0)
   const count = places.length
 
-  useEffect(() => {
-    if (index < count) return
-    setIndex(0)
-  }, [index, count])
+  const scrollToIndex = useCallback((i: number, behavior: ScrollBehavior = 'smooth') => {
+    const root = scrollerRef.current
+    if (!root) return
+    const card = root.querySelector<HTMLElement>(`[data-place-rail-index="${i}"]`)
+    if (!card) return
+    const left = card.offsetLeft - (root.clientWidth - card.clientWidth) / 2
+    root.scrollTo({ left: Math.max(0, left), behavior })
+  }, [])
 
   useEffect(() => {
     if (!selectedSlug) return
     const i = places.findIndex((p) => p.slug === selectedSlug)
-    if (i >= 0) setIndex(i)
-  }, [selectedSlug, places])
+    if (i < 0) return
+    setActiveIndex(i)
+    scrollToIndex(i)
+  }, [selectedSlug, places, scrollToIndex])
+
+  useEffect(() => {
+    const root = scrollerRef.current
+    if (!root || count < 1) return
+
+    const updateActive = () => {
+      const mid = root.scrollLeft + root.clientWidth / 2
+      let best = 0
+      let bestDist = Infinity
+      root.querySelectorAll<HTMLElement>('[data-place-rail-index]').forEach((el) => {
+        const i = Number(el.dataset.placeRailIndex)
+        const center = el.offsetLeft + el.clientWidth / 2
+        const dist = Math.abs(center - mid)
+        if (dist < bestDist) {
+          bestDist = dist
+          best = i
+        }
+      })
+      setActiveIndex(best)
+    }
+
+    updateActive()
+    root.addEventListener('scroll', updateActive, { passive: true })
+    return () => root.removeEventListener('scroll', updateActive)
+  }, [count, places])
 
   const go = useCallback(
     (delta: number) => {
       if (count < 2) return
-      setIndex((prev) => (prev + delta + count) % count)
+      const next = (activeIndex + delta + count) % count
+      setActiveIndex(next)
+      scrollToIndex(next)
+      const slug = places[next]?.slug
+      if (slug) onSelect?.(slug)
     },
-    [count]
+    [activeIndex, count, onSelect, places, scrollToIndex]
   )
 
   if (count === 0) return null
 
-  const place = places[index]
-  if (!place) return null
-
   return (
     <div
-      className="space-y-4"
+      className="m-place-rail space-y-3"
       role="region"
       aria-roledescription="carrousel"
       aria-label="Lieux du réseau Mandala"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 px-0.5">
         <p className="text-xs text-slate-500">
-          {index + 1} / {count}
+          {activeIndex + 1} / {count}
         </p>
         {count > 1 && (
           <div className="flex items-center gap-2">
@@ -83,48 +116,47 @@ export function PlacesCarousel({
         )}
       </div>
 
-      <div className="overflow-hidden">
-        <div
-          className="m-skills-carousel-track"
-          style={{ transform: `translateX(-${index * 100}%)` }}
-        >
-          {places.map((p) => (
-            <div
-              key={p.slug}
-              id={`mur-lieu-${p.slug}`}
-              className="w-full shrink-0 px-0.5"
-              aria-hidden={p.slug !== place.slug}
-            >
-              <PlacePublicCard
-                place={p}
-                selected={selectedSlug === p.slug}
-                onSelect={() => onSelect?.(p.slug)}
-                showRelier={showRelier}
-                showJoin={showJoin}
-                onJoin={onJoinPlace ? () => onJoinPlace(p) : undefined}
-                joinBusy={joinBusySlug === p.slug}
-                compact
-              />
-            </div>
-          ))}
-        </div>
+      <div ref={scrollerRef} className="m-place-rail-scroller">
+        {places.map((p, i) => (
+          <div
+            key={p.slug}
+            id={`mur-lieu-${p.slug}`}
+            data-place-rail-index={i}
+            className="m-place-rail-slide"
+          >
+            <PlacePublicCard
+              place={p}
+              selected={selectedSlug === p.slug || activeIndex === i}
+              onSelect={() => onSelect?.(p.slug)}
+              showRelier={showRelier}
+              showJoin={showJoin}
+              onJoin={onJoinPlace ? () => onJoinPlace(p) : undefined}
+              joinBusy={joinBusySlug === p.slug}
+              compact
+            />
+          </div>
+        ))}
       </div>
 
-      {count > 1 && (
+      {count > 1 && count <= 12 && (
         <div className="flex justify-center gap-1.5" role="tablist" aria-label="Choisir un lieu">
           {places.map((p, i) => (
             <button
               key={p.slug}
               type="button"
               role="tab"
-              aria-selected={i === index}
+              aria-selected={i === activeIndex}
               aria-label={p.name}
               className={`h-2 rounded-full transition-all ${
-                i === index
+                i === activeIndex
                   ? 'w-6 bg-[rgb(var(--accent-400))]'
                   : 'w-2 bg-slate-700 hover:bg-slate-500'
               }`}
-              onClick={() => setIndex(i)}
+              onClick={() => {
+                setActiveIndex(i)
+                scrollToIndex(i)
+                onSelect?.(p.slug)
+              }}
             />
           ))}
         </div>

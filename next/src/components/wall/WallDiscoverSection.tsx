@@ -185,7 +185,7 @@ export function WallDiscoverSection({
             <p className="m-landing-eyebrow">Communautés</p>
             <h2 className="text-2xl sm:text-3xl">Tous les lieux</h2>
             <p className="text-sm text-slate-500">
-              Faites défiler pour découvrir chaque lieu du réseau.
+              Glissez horizontalement pour parcourir les lieux.
             </p>
           </div>
           <PlacesCarousel

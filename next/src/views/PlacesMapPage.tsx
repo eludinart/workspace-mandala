@@ -109,7 +109,7 @@ export function PlacesMapPage() {
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Les lieux inscrits</h2>
         <p className="text-sm text-slate-500">
-          Faites défiler pour découvrir chaque lieu du réseau.
+          Glissez horizontalement pour parcourir les lieux.
         </p>
 
         {loading && places.length === 0 && (
