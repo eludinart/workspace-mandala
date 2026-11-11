@@ -23,6 +23,7 @@ import {
   assertCanListPlacePublic,
 } from './billing-access'
 import { getProBoostFlagsForUsers } from './db-billing'
+import { emitProductEvent } from './db-product-events'
 
 export type CommunityRecord = {
   id: number
@@ -885,6 +886,13 @@ export async function joinCommunity(params: {
       /* non bloquant */
     })
 
+  void emitProductEvent({
+    type: 'place.joined',
+    userId: params.userId,
+    communityId: community.id,
+    payload: { slug: community.slug },
+  })
+
   return { ...community, role }
 }
 
@@ -1546,6 +1554,13 @@ export async function removeUserFromCommunity(
   const remaining = await listCommunitiesForUser(targetUserId)
   if (remaining.length === 0) await markContinueWithoutPlace(targetUserId)
   await refreshCoreConversation(communityId)
+
+  void emitProductEvent({
+    type: 'place.left',
+    userId: targetUserId,
+    communityId,
+    payload: { remaining: remaining.length },
+  })
 }
 
 export async function requireCommunityMembership(
@@ -2032,6 +2047,7 @@ async function writeUserMeta(userId: number, key: string, value: string): Promis
 export async function markContinueWithoutPlace(userId: number): Promise<void> {
   if (!userId) return
   await writeUserMeta(userId, CONTINUE_WITHOUT_PLACE_META, '1')
+  void emitProductEvent({ type: 'onboarding.continue_without_place', userId })
 }
 
 export async function hasContinuedWithoutPlace(userId: number): Promise<boolean> {
@@ -2122,5 +2138,11 @@ export async function acceptCommunityCharter(
      ON DUPLICATE KEY UPDATE charter_hash = VALUES(charter_hash), accepted_at = VALUES(accepted_at)`,
     [community.id, userId, hash, now]
   )
+  void emitProductEvent({
+    type: 'charter.accepted',
+    userId,
+    communityId: community.id,
+    payload: { slug: community.slug },
+  })
   return { accepted_at: now, slug: community.slug }
 }

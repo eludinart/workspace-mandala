@@ -337,6 +337,7 @@ export function MandalaApp() {
     const eventId = eventIdRaw ? Number(eventIdRaw) : undefined
     const adminTabRaw = params.get('adminTab')
     const adminTabs: AdminTabId[] = [
+      'pilotage',
       'people',
       'communications',
       'load',

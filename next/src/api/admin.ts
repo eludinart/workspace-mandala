@@ -104,8 +104,57 @@ export type AdminLoadDashboard = {
   } | null
 }
 
+export type AdminPilotageDashboard = {
+  ok: boolean
+  generated_at: string
+  days: 7 | 30 | 90
+  range: { from: string; to: string }
+  kpis: {
+    total_users: number
+    registrations: number
+    joins: number
+    continue_without_place: number
+    active_24h: number
+    dau: number
+    wau: number
+    mau: number
+  }
+  series: Array<{ day: string; registrations: number; joins: number; dau: number }>
+  activity: Array<{
+    at: string
+    kind: string
+    user_id: number | null
+    user_label: string | null
+    community_id: number | null
+    community_name: string | null
+  }>
+  funnel: {
+    registered: number
+    chose_place: number
+    continue_without_place: number
+    active_d1: number
+    active_d7: number
+  }
+  places: Array<{
+    id: number
+    slug: string
+    name: string
+    members: number
+    joins_30d: number
+    left_30d: number
+    active_members_7d: number
+  }>
+  product_alerts: AdminLoadDashboard['alerts']
+  health: Omit<AdminLoadDashboard, 'ok' | 'generated_at'>
+  alerts: AdminLoadDashboard['alerts']
+}
+
 export const adminApi = {
   load: () => api.get('/api/admin/load') as Promise<AdminLoadDashboard>,
+  pilotage: (days: 7 | 30 | 90 = 7) =>
+    api.get(`/api/admin/pilotage?days=${days}`) as Promise<AdminPilotageDashboard>,
+  pilotageExportUrl: (days: 7 | 30 | 90, kind: 'activity' | 'series') =>
+    `/api/admin/pilotage/export?days=${days}&kind=${kind}`,
   users: {
     get: (userId: number, communitySlug?: string) => {
       const qs = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''

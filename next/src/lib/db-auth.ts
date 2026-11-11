@@ -15,6 +15,7 @@ import {
   formatPublicDisplayName,
   validatePersonName,
 } from './mandala-display-name'
+import { emitProductEvent, touchSessionDay } from './db-product-events'
 
 /** Crée mdl_users, mdl_usermeta, mdl_mandala_app_roles si absentes. */
 export async function ensureAuthTables(): Promise<void> {
@@ -495,6 +496,9 @@ export async function authRegister(
   )
 
   await syncUserDisplayIdentity(userId, safeFirst, safeLast, false)
+
+  void emitProductEvent({ type: 'user.registered', userId, payload: { email } })
+  void touchSessionDay(userId)
 
   const wpRole = await getWpRole(userId)
   const appRole = await getAppRole(userId, wpRole, email)

@@ -21,6 +21,7 @@ import { AdminFeatureDoorsTab } from '@/components/admin/AdminFeatureDoorsTab'
 import { AdminContentReportsTab } from '@/components/admin/AdminContentReportsTab'
 import { AdminPushTab } from '@/components/admin/AdminPushTab'
 import { AdminLoadTab } from '@/components/admin/AdminLoadTab'
+import { AdminPilotageTab } from '@/components/admin/AdminPilotageTab'
 import { ExplainCard } from '@/components/help/ExplainCard'
 
 import type { AdminTabId } from '@/lib/nav'
@@ -59,6 +60,7 @@ function isoDaysAgo(days: number) {
 }
 
 const TABS: { id: AdminTabId; label: string }[] = [
+  { id: 'pilotage', label: 'Pilotage' },
   { id: 'people', label: 'Personnes' },
   { id: 'communications', label: 'Communications' },
   { id: 'places', label: 'Lieux & communautés' },
@@ -600,6 +602,8 @@ export function AdminPage({
           )}
         </div>
       )}
+
+      {tab === 'pilotage' && <AdminPilotageTab />}
 
       {tab === 'load' && <AdminLoadTab />}
 

@@ -3,6 +3,7 @@ import type { MandalaPage } from '@/components/MandalaApp'
 export { ORGANISATION_PLACE_PAGES } from '@/lib/place-manage'
 
 export type AdminTabId =
+  | 'pilotage'
   | 'people'
   | 'communications'
   | 'load'
@@ -160,6 +161,14 @@ export const SITE_MANAGER_NAV = ORGANISATION_NAV
 
 /** Raccourcis admin application (accès tous les lieux). */
 export const ADMIN_NAV: AdminNavItem[] = [
+  {
+    id: 'admin-pilotage',
+    label: 'Pilotage',
+    icon: '📈',
+    adminTab: 'pilotage',
+    section: 'main',
+    description: 'Croissance, engagement, santé lieux et serveur',
+  },
   {
     id: 'admin-people',
     label: 'Personnes & rôles',

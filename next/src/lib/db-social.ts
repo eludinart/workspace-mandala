@@ -15,6 +15,7 @@ import { isAvatarImageUrl } from './user-avatar'
 import { removeUpload } from './resource-files'
 import { invalidateNotifUnreadCache } from './db-notifications'
 import { isBlockedEitherWay } from './db-moderation'
+import { touchSessionDay } from './db-product-events'
 
 const PRESENCE_ONLINE_SECONDS = 300
 
@@ -66,6 +67,7 @@ async function touchSocialPresence(pool: Awaited<ReturnType<typeof getPool>>, us
 export async function recordSocialPresenceHeartbeat(userId: number): Promise<void> {
   const pool = getPool()
   await touchSocialPresence(pool, userId)
+  void touchSessionDay(userId)
 }
 
 async function fetchUsersAvatarMap(
