@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import { useState } from 'react'
 import type { PublicCommunityProfile } from '@/api/communities'
 import { CommunityAvatar } from '@/components/CommunityAvatar'
 import { CharterPreview } from '@/components/place/CharterEditor'
@@ -56,6 +57,7 @@ function directionsUrl(place: PublicCommunityProfile): string | null {
 
 export function PlacePublicProfile({ place }: { place: PublicCommunityProfile }) {
   const { user, loading: authLoading } = useAuth()
+  const [charterOpen, setCharterOpen] = useState(false)
   const website = place.website?.trim()
   const email = place.contact_email?.trim()
   const address = composeAddress(place)
@@ -153,13 +155,32 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
               </section>
             )}
 
-            {/* Charte / valeurs */}
+            {/* Charte / valeurs — repliée par défaut (ne pas masquer l’annuaire) */}
             {hasCharter && (
               <section className="space-y-3">
-                <h2 className="text-xl font-semibold">Charte &amp; valeurs</h2>
-                <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6">
-                  <CharterPreview html={place.charter} />
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <h2 className="text-xl font-semibold">Charte &amp; valeurs</h2>
+                  <button
+                    type="button"
+                    onClick={() => setCharterOpen((v) => !v)}
+                    aria-expanded={charterOpen}
+                    className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800"
+                  >
+                    {charterOpen ? 'Replier' : 'Lire la charte'}
+                  </button>
                 </div>
+                {charterOpen ? (
+                  <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6">
+                    <CharterPreview html={place.charter} />
+                  </div>
+                ) : (
+                  <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/40 p-5 sm:p-6 max-h-28">
+                    <div className="pointer-events-none select-none opacity-70" aria-hidden>
+                      <CharterPreview html={place.charter} />
+                    </div>
+                    <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent" />
+                  </div>
+                )}
               </section>
             )}
 

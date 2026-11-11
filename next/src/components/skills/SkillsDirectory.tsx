@@ -220,8 +220,6 @@ export function SkillsDirectory({
 
   useEffect(() => {
     if (!selectedId || typeof document === 'undefined') return
-    const mq = window.matchMedia('(max-width: 1023px)')
-    if (!mq.matches) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
@@ -229,20 +227,21 @@ export function SkillsDirectory({
     }
   }, [selectedId])
 
-  /** Au clic fiche : remonter au début (desktop) / haut de la feuille (mobile). */
   useEffect(() => {
     if (!selectedId || typeof document === 'undefined') return
-    const mobile = window.matchMedia('(max-width: 1023px)').matches
-    if (mobile) {
-      requestAnimationFrame(() => {
-        mobileFicheScrollRef.current?.scrollTo({ top: 0 })
-      })
-      return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSelectedId(null)
     }
-    const el = document.getElementById('annuaire-fiche')
-    if (!el) return
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    el.focus({ preventScroll: true })
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedId])
+
+  /** Au clic fiche : remonter en haut du popup. */
+  useEffect(() => {
+    if (!selectedId || typeof document === 'undefined') return
+    requestAnimationFrame(() => {
+      mobileFicheScrollRef.current?.scrollTo({ top: 0 })
+    })
   }, [selectedId])
 
   useEffect(() => {
@@ -680,117 +679,93 @@ export function SkillsDirectory({
       </p>
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
-        <ul className="grid min-w-0 gap-3 lg:order-1">
-          {!loading && !refreshing && visible.length === 0 && (
-            <li className="sm:col-span-2 rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">
-              Aucune fiche ne correspond. Les personnes choisissent elles-mêmes d’apparaître ici.
-            </li>
-          )}
-          {visible.map((card) => {
-            const active = selected?.user_id === card.user_id
-            return (
-              <li key={card.user_id} className="min-w-0">
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(card.user_id)}
-                  className={`w-full min-w-0 overflow-hidden text-left rounded-2xl border p-4 space-y-3 transition-colors ${
-                    card.pro_verified
-                      ? `m-pro-card ${active ? 'ring-2 ring-violet-400/40' : ''}`
-                      : active
-                        ? 'border-violet-500/70 bg-violet-950/30'
-                        : 'border-slate-800 bg-slate-900/50 hover:border-violet-800/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate flex flex-wrap items-center gap-2">
-                        <span className="truncate">{card.display_name || card.pseudo}</span>
-                        {card.pro_verified ? (
-                          <MandalaProBadge endorsementPlace={card.pro_endorsement_place} />
-                        ) : card.pro_boost ? (
-                          <MandalaProBadge variant="boost" />
-                        ) : null}
-                      </p>
-                      {card.places.length > 0 ? (
-                        <div className="mt-0.5 flex flex-wrap gap-1">
-                          {card.places.map((p) => (
-                            <span
-                              key={p.id}
-                              className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-0.5 text-[11px] text-amber-100"
-                            >
-                              <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
-                              <span className="truncate">Lieu Mandala · {p.name}</span>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-slate-500">Sans lieu Mandala</p>
-                      )}
-                      {card.residence_city && (
-                        <p className="text-[11px] text-emerald-300/90 truncate">
-                          Habite · {card.residence_city}
-                        </p>
-                      )}
-                      {(card.practice_locations?.length ?? 0) > 0 && (
-                        <p className="text-[11px] text-sky-300/90 truncate">
-                          Exerce · {(card.practice_locations ?? []).join(' · ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {(card.bio || card.pro_tagline || card.offer_text) && (
-                    <p className="min-w-0 text-sm leading-relaxed text-slate-400 line-clamp-3 break-words">
-                      {(card.bio || card.pro_tagline || card.offer_text || '')
-                        .replace(/\s+/g, ' ')
-                        .trim()}
+      <ul className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {!loading && !refreshing && visible.length === 0 && (
+          <li className="sm:col-span-2 xl:col-span-3 rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">
+            Aucune fiche ne correspond. Les personnes choisissent elles-mêmes d’apparaître ici.
+          </li>
+        )}
+        {visible.map((card) => {
+          const active = selected?.user_id === card.user_id
+          return (
+            <li key={card.user_id} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setSelectedId(card.user_id)}
+                className={`w-full h-full min-w-0 overflow-hidden text-left rounded-2xl border p-4 space-y-3 transition-colors ${
+                  card.pro_verified
+                    ? `m-pro-card ${active ? 'ring-2 ring-violet-400/40' : ''}`
+                    : active
+                      ? 'border-violet-500/70 bg-violet-950/30'
+                      : 'border-slate-800 bg-slate-900/50 hover:border-violet-800/50'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <UserAvatar avatar={card.avatar} avatarEmoji={card.avatar_emoji} size="md" alt={card.pseudo} />
+                  <div className="min-w-0">
+                    <p className="font-medium truncate flex flex-wrap items-center gap-2">
+                      <span className="truncate">{card.display_name || card.pseudo}</span>
+                      {card.pro_verified ? (
+                        <MandalaProBadge endorsementPlace={card.pro_endorsement_place} />
+                      ) : card.pro_boost ? (
+                        <MandalaProBadge variant="boost" />
+                      ) : null}
                     </p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5 min-w-0">
-                    {card.tags.slice(0, 4).map((t) => (
-                      <span
-                        key={`${t.label}-${t.register}`}
-                        className="max-w-full text-[11px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-300 break-words"
-                      >
-                        {t.label}
-                      </span>
-                    ))}
+                    {card.places.length > 0 ? (
+                      <div className="mt-0.5 flex flex-wrap gap-1">
+                        {card.places.map((p) => (
+                          <span
+                            key={p.id}
+                            className="inline-flex max-w-full items-center gap-1 truncate rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-0.5 text-[11px] text-amber-100"
+                          >
+                            <span aria-hidden>{p.logo_emoji || '🏛️'}</span>
+                            <span className="truncate">Lieu Mandala · {p.name}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">Sans lieu Mandala</p>
+                    )}
+                    {card.residence_city && (
+                      <p className="text-[11px] text-emerald-300/90 truncate">
+                        Habite · {card.residence_city}
+                      </p>
+                    )}
+                    {(card.practice_locations?.length ?? 0) > 0 && (
+                      <p className="text-[11px] text-sky-300/90 truncate">
+                        Exerce · {(card.practice_locations ?? []).join(' · ')}
+                      </p>
+                    )}
                   </div>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-
-        <article
-          id="annuaire-fiche"
-          tabIndex={-1}
-          className={`hidden lg:block relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] order-2 scroll-mt-24 outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 ${
-            selected?.pro_verified ? 'm-pro-card' : ''
-          }`}
-        >
-          {!selected && (
-            <p className="text-sm text-slate-500">Sélectionnez une personne pour lire sa fiche.</p>
-          )}
-          {selected && (
-            <SkillFicheContent
-              selected={selected}
-              variant={variant}
-              communitySlug={communitySlug}
-              onContact={(card) => void contactPro(card)}
-              onOpenConversation={onOpenConversation}
-              onOpenAlerts={onOpenAlerts}
-            />
-          )}
-        </article>
-      </div>
+                </div>
+                {(card.bio || card.pro_tagline || card.offer_text) && (
+                  <p className="min-w-0 text-sm leading-relaxed text-slate-400 line-clamp-3 break-words">
+                    {(card.bio || card.pro_tagline || card.offer_text || '')
+                      .replace(/\s+/g, ' ')
+                      .trim()}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-1.5 min-w-0">
+                  {card.tags.slice(0, 4).map((t) => (
+                    <span
+                      key={`${t.label}-${t.register}`}
+                      className="max-w-full text-[11px] px-2 py-0.5 rounded-full border border-slate-700 text-slate-300 break-words"
+                    >
+                      {t.label}
+                    </span>
+                  ))}
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
 
       {selected &&
         typeof document !== 'undefined' &&
         createPortal(
           <div
-            className="lg:hidden fixed inset-0 z-[100] flex flex-col bg-slate-950"
+            className="fixed inset-0 z-[100] flex flex-col bg-slate-950"
             role="dialog"
             aria-modal="true"
             aria-label="Fiche compétences"
@@ -809,14 +784,16 @@ export function SkillsDirectory({
               ref={mobileFicheScrollRef}
               className="flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
             >
-              <SkillFicheContent
-                selected={selected}
-                variant={variant}
-                communitySlug={communitySlug}
-                onContact={(card) => void contactPro(card)}
-                onOpenConversation={onOpenConversation}
-                onOpenAlerts={onOpenAlerts}
-              />
+              <div className="mx-auto w-full max-w-2xl">
+                <SkillFicheContent
+                  selected={selected}
+                  variant={variant}
+                  communitySlug={communitySlug}
+                  onContact={(card) => void contactPro(card)}
+                  onOpenConversation={onOpenConversation}
+                  onOpenAlerts={onOpenAlerts}
+                />
+              </div>
             </div>
           </div>,
           document.body
