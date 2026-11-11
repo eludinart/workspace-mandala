@@ -5,6 +5,7 @@ import { isDbConfigured } from '@/lib/db'
 import { getPublicSkillCard } from '@/lib/db-skills'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
 import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
+import { MemberGalleryRail } from '@/components/members/MemberGalleryRail'
 import { skillFichePublicAbsoluteUrl } from '@/lib/skill-share'
 
 type Props = { params: Promise<{ userId: string }> }
@@ -83,6 +84,10 @@ export default async function PublicSkillProfilePage({ params }: Props) {
             <p className="text-sm text-emerald-300/90">Habite à {card.residence_city}</p>
           )}
         </header>
+
+        {(card.gallery_images?.length ?? 0) > 0 && (
+          <MemberGalleryRail images={card.gallery_images ?? []} label="Ambiance / activité" />
+        )}
 
         {!!card.bio?.trim() && (
           <section className="space-y-2">

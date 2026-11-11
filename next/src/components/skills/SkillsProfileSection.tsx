@@ -292,14 +292,13 @@ export function SkillsProfileSection() {
         </div>
       )}
       {profile.user_id > 0 && (
-        <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2 space-y-1">
-          <p className="text-xs font-medium text-slate-300">Partager ma fiche</p>
+        <div className="rounded-lg border border-slate-700/80 bg-slate-950/50 px-3 py-2">
           <SkillFicheShare
             userId={profile.user_id}
             displayName=""
             shareTitle="Ma fiche Mandala"
             canSharePublic={profile.scope === 'mandala'}
-            compact
+            alwaysShow
           />
         </div>
       )}

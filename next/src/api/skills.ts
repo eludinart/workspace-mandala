@@ -69,6 +69,7 @@ export type SkillCard = {
   longitude?: number | null
   practice_locations?: string[]
   practice_places?: PracticePlace[]
+  gallery_images?: string[]
 }
 
 export type SkillNote = {

@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { notificationsApi } from '@/api/notifications'
 import { ACCOUNT_SKILLS_ANCHOR, SkillsProfileSection } from '@/components/skills/SkillsProfileSection'
+import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
 import { skillsApi } from '@/api/skills'
+import type { SkillScope } from '@/lib/skill-constants'
 import { MyResourcesSection } from '@/components/resources/MyResourcesSection'
 import { accountApi } from '@/api/account'
 import { authApi } from '@/api/auth'
@@ -27,6 +29,7 @@ import {
   type PaymentSurface,
 } from '@/lib/play-distribution-context'
 import { compressAvatarImage } from '@/lib/compress-avatar-image'
+import { USER_GALLERY_MAX_IMAGES } from '@/lib/user-gallery-images'
 import { formatPublicDisplayName } from '@/lib/mandala-display-name'
 import { formatPlaceMembershipLabel, isCommunityManagerRole } from '@/lib/community-role-labels'
 import { RemoveMemberConfirmDialog } from '@/components/admin/RemoveMemberConfirmDialog'
@@ -87,6 +90,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
     avatar_emoji?: string
   } | null
   const fileRef = useRef<HTMLInputElement>(null)
+  const galleryFileRef = useRef<HTMLInputElement>(null)
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [showFullLastName, setShowFullLastName] = useState(false)
@@ -103,7 +107,10 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const [practicePlaces, setPracticePlaces] = useState<PracticePlace[]>([])
   const [avatarEmoji, setAvatarEmoji] = useState('🌸')
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [galleryImages, setGalleryImages] = useState<string[]>([])
   const [profilePublic, setProfilePublic] = useState(true)
+  const [skillsUserId, setSkillsUserId] = useState(0)
+  const [skillsScope, setSkillsScope] = useState<SkillScope>('hidden')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -151,6 +158,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         bio?: string
         avatar?: string
         avatar_emoji?: string
+        gallery_images?: string[]
       }
       setFirstName(p.first_name ?? '')
       setLastName(p.last_name ?? '')
@@ -158,9 +166,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
       setBio(p.bio ?? '')
       setAvatarEmoji(p.avatar_emoji ?? '🌸')
       setAvatarPreview(p.avatar ?? null)
+      setGalleryImages(
+        Array.isArray(p.gallery_images)
+          ? p.gallery_images.filter(Boolean).slice(0, USER_GALLERY_MAX_IMAGES)
+          : []
+      )
       setProfilePublic(p.profile_public !== false)
       try {
         const skills = await skillsApi.getMine()
+        setSkillsUserId(skills.profile.user_id)
+        setSkillsScope(skills.profile.scope)
         setLocation({
           location_mode: skills.profile.location_mode === 'address' ? 'address' : 'city',
           residence_city: skills.profile.residence_city ?? '',
@@ -239,6 +254,49 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
     }
   }
 
+  const onGalleryPhoto = async (file: File | null) => {
+    if (!file || !file.type.startsWith('image/')) return
+    if (galleryImages.length >= USER_GALLERY_MAX_IMAGES) {
+      setErr(`Maximum ${USER_GALLERY_MAX_IMAGES} photos d'ambiance.`)
+      return
+    }
+    setErr(null)
+    try {
+      const { dataUrl, error } = await compressAvatarImage(file)
+      if (error || !dataUrl) {
+        setErr(error ?? 'Impossible de traiter cette image')
+        return
+      }
+      setGalleryImages((prev) => [...prev, dataUrl].slice(0, USER_GALLERY_MAX_IMAGES))
+    } catch {
+      setErr('Impossible de traiter cette image')
+    }
+  }
+
+  const removeGalleryAt = (index: number) => {
+    setGalleryImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const moveGallery = (index: number, dir: -1 | 1) => {
+    setGalleryImages((prev) => {
+      const next = [...prev]
+      const j = index + dir
+      if (j < 0 || j >= next.length) return prev
+      ;[next[index], next[j]] = [next[j], next[index]]
+      return next
+    })
+  }
+
+  const clearPortrait = () => {
+    if (skillsScope === 'mandala' || skillsScope === 'places') {
+      setErr(
+        'Photo de profil requise pour une fiche compétences visible (Mandala ou lieux).'
+      )
+      return
+    }
+    setAvatarPreview(null)
+  }
+
   const persistMapOptIn = useCallback(
     async (next: boolean, opts?: { city?: string }) => {
       const cityPayload: { city?: string; show_on_map: boolean } = {
@@ -288,6 +346,13 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           return
         }
       }
+      if (!avatarPreview && (skillsScope === 'mandala' || skillsScope === 'places')) {
+        setErr(
+          'Photo de profil requise pour une fiche compétences visible (Mandala ou lieux).'
+        )
+        setSaving(false)
+        return
+      }
       await accountApi.updateProfile({
         first_name: firstName.trim(),
         last_name: lastName.trim(),
@@ -295,6 +360,7 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         bio: bio.trim(),
         avatar_emoji: avatarEmoji,
         profile_public: profilePublic,
+        gallery_images: galleryImages,
         ...(avatarPreview ? { avatar: avatarPreview } : { avatar: '' }),
       })
       try {
@@ -304,6 +370,17 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
           (location.residence_city.trim() || practicePlaces.length > 0)
             ? 'mandala'
             : skills.profile.scope
+        if (
+          (nextScope === 'mandala' || nextScope === 'places') &&
+          !avatarPreview
+        ) {
+          setErr(
+            'Photo de profil requise pour une fiche compétences visible (Mandala ou lieux).'
+          )
+          setSaving(false)
+          return
+        }
+        setSkillsScope(nextScope)
         await skillsApi.saveMine({
           scope: nextScope,
           offer_text: skills.profile.offer_text,
@@ -323,6 +400,8 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             practicePlaces.some((p) => p.mode === 'address'),
           practice_locations: practicePlaces,
         })
+        setSkillsUserId(skills.profile.user_id)
+        setSkillsScope(nextScope)
         emitMandalaMapChanged()
       } catch {
         /* profil identité déjà sauvé */
@@ -439,6 +518,9 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         : 'border-slate-700 text-slate-300 hover:border-violet-500/50 hover:text-violet-200',
     ].join(' ')
 
+  const authUserId = typeof user?.id === 'number' ? user.id : Number(user?.id) || 0
+  const shareUserId = skillsUserId || authUserId
+
   return (
     <div className="m-user-form w-full space-y-6">
       <ExplainCard screen="account" />
@@ -470,44 +552,73 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         <h2 id="account-section-title" className="text-lg font-semibold text-slate-200">
           Profil
         </h2>
+        {shareUserId > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <SkillFicheShare
+              userId={shareUserId}
+              displayName={
+                formatPublicDisplayName(firstName, lastName, showFullLastName) ||
+                u?.pseudo ||
+                ''
+              }
+              shareTitle="Ma fiche Mandala"
+              canSharePublic={skillsScope === 'mandala'}
+              alwaysShow
+            />
+          </div>
+        )}
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-4">
           <p className="text-sm text-slate-500">Email : {u?.email ?? '—'}</p>
 
-          <div className="flex items-center gap-4">
-            {avatarPreview ? (
-              <img
-                src={avatarPreview}
-                alt=""
-                className="w-20 h-20 rounded-full object-cover border border-slate-700"
-              />
-            ) : (
-              <span className="text-5xl w-20 h-20 flex items-center justify-center">{avatarEmoji}</span>
-            )}
-            <div className="space-y-2">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => void onPhoto(e.target.files?.[0] ?? null)}
-              />
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 hover:bg-slate-800"
-              >
-                Choisir une photo
-              </button>
-              {avatarPreview && (
+          <div className="space-y-2">
+            <p className="text-sm text-slate-400">Photo de toi (profil)</p>
+            <div className="flex items-center gap-4">
+              {avatarPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarPreview}
+                  alt=""
+                  className="w-20 h-20 rounded-full object-cover border border-slate-700"
+                />
+              ) : (
+                <span className="text-5xl w-20 h-20 flex items-center justify-center">
+                  {avatarEmoji}
+                </span>
+              )}
+              <div className="space-y-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    void onPhoto(e.target.files?.[0] ?? null)
+                    e.target.value = ''
+                  }}
+                />
                 <button
                   type="button"
-                  onClick={() => setAvatarPreview(null)}
-                  className="text-xs text-slate-500 block"
+                  onClick={() => fileRef.current?.click()}
+                  className="text-sm px-3 py-1.5 rounded-lg border border-slate-600 hover:bg-slate-800"
                 >
-                  Retirer la photo
+                  Choisir une photo
                 </button>
-              )}
+                {avatarPreview && (
+                  <button
+                    type="button"
+                    onClick={clearPortrait}
+                    className="text-xs text-slate-500 block"
+                  >
+                    Retirer la photo
+                  </button>
+                )}
+              </div>
             </div>
+            {(skillsScope === 'mandala' || skillsScope === 'places') && (
+              <p className="text-xs text-amber-300/90">
+                Requise tant que ta fiche compétences est visible (Mandala ou lieux).
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -521,6 +632,70 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
                 {e}
               </button>
             ))}
+          </div>
+
+          <div className="space-y-2 border-t border-slate-800 pt-4">
+            <p className="text-sm text-slate-400">Ambiance / activité (optionnel, max 2)</p>
+            <p className="text-xs text-slate-500">
+              Visibles avec ta fiche compétences, selon la même portée.
+            </p>
+            <input
+              ref={galleryFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void onGalleryPhoto(e.target.files?.[0] ?? null)
+                e.target.value = ''
+              }}
+            />
+            <ul className="flex flex-wrap gap-3">
+              {galleryImages.map((src, i) => (
+                <li
+                  key={`${i}-${src.slice(0, 32)}`}
+                  className="w-28 space-y-1 rounded-xl border border-slate-700 bg-slate-950/50 p-1.5"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="" className="h-20 w-full rounded-lg object-cover" />
+                  <div className="flex justify-between gap-1">
+                    <button
+                      type="button"
+                      disabled={i === 0}
+                      onClick={() => moveGallery(i, -1)}
+                      className="text-[10px] text-slate-400 disabled:opacity-30"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeGalleryAt(i)}
+                      className="text-[10px] text-rose-400"
+                    >
+                      Retirer
+                    </button>
+                    <button
+                      type="button"
+                      disabled={i === galleryImages.length - 1}
+                      onClick={() => moveGallery(i, 1)}
+                      className="text-[10px] text-slate-400 disabled:opacity-30"
+                    >
+                      →
+                    </button>
+                  </div>
+                </li>
+              ))}
+              {galleryImages.length < USER_GALLERY_MAX_IMAGES && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => galleryFileRef.current?.click()}
+                    className="flex h-[7.25rem] w-28 items-center justify-center rounded-xl border border-dashed border-slate-600 text-xs text-slate-400 hover:border-violet-500 hover:text-violet-200"
+                  >
+                    + Ajouter
+                  </button>
+                </li>
+              )}
+            </ul>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

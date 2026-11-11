@@ -13,6 +13,7 @@ export function SkillFicheShare({
   shareTitle,
   canSharePublic,
   compact = false,
+  alwaysShow = false,
 }: {
   userId: number
   displayName: string
@@ -21,11 +22,17 @@ export function SkillFicheShare({
   /** True seulement si scope === 'mandala' (page publique réelle). */
   canSharePublic: boolean
   compact?: boolean
+  /**
+   * Affiche le bloc même si le lien public n’est pas encore actif
+   * (ex. propriétaire sur formulaire Profil / Compétences / sa fiche).
+   */
+  alwaysShow?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
   if (!userId) return null
+  if (!canSharePublic && !alwaysShow) return null
 
   const shareUrl = skillFichePublicAbsoluteUrl(userId)
   const path = skillFichePublicPath(userId)
@@ -63,36 +70,53 @@ export function SkillFicheShare({
     await copyLink()
   }
 
-  if (!canSharePublic) {
-    return (
-      <p className={compact ? 'mt-2 text-xs text-slate-500' : 'text-xs text-slate-500'}>
-        Lien public indisponible tant que la fiche n’est pas en « Tout Mandala ».
-      </p>
-    )
-  }
-
   const btn =
     'rounded-xl border border-slate-700 text-slate-200 hover:bg-slate-900 ' +
     (compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm')
+  const btnDisabled = `${btn} opacity-50 cursor-not-allowed`
 
   return (
-    <div className={compact ? 'mt-2 space-y-1' : 'space-y-2'}>
+    <div className={compact ? 'mt-2 space-y-1.5' : 'space-y-2'}>
+      {!compact && (
+        <p className="text-xs font-medium text-slate-300">Lien de partage</p>
+      )}
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => void nativeShare()} className={btn}>
+        <button
+          type="button"
+          onClick={() => void nativeShare()}
+          className={canSharePublic ? btn : btnDisabled}
+          aria-disabled={!canSharePublic}
+        >
           Partager…
         </button>
-        <button type="button" onClick={() => void copyLink()} className={btn}>
+        <button
+          type="button"
+          onClick={() => void copyLink()}
+          className={canSharePublic ? btn : btnDisabled}
+          aria-disabled={!canSharePublic}
+        >
           {copied ? 'Copié' : 'Copier le lien'}
         </button>
-        <a
-          href={path}
-          className={`${btn} inline-flex items-center text-violet-300 hover:border-violet-600`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Ouvrir la page
-        </a>
+        {canSharePublic ? (
+          <a
+            href={path}
+            className={`${btn} inline-flex items-center text-violet-300 hover:border-violet-600`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Ouvrir la page
+          </a>
+        ) : (
+          <span className={`${btnDisabled} inline-flex items-center`}>Ouvrir la page</span>
+        )}
       </div>
+      {canSharePublic ? (
+        <p className="text-xs text-slate-400 break-all">{shareUrl}</p>
+      ) : (
+        <p className="text-xs text-slate-500">
+          Lien public indisponible tant que la fiche n’est pas en « Tout Mandala ».
+        </p>
+      )}
       {err && <p className="text-xs text-rose-400">{err}</p>}
     </div>
   )

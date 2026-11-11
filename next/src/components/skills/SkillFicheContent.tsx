@@ -6,6 +6,7 @@ import { ReturnsBlock } from '@/components/returns/ReturnsBlock'
 import { UserAvatar } from '@/components/UserAvatar'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import { SkillFicheShare } from '@/components/skills/SkillFicheShare'
+import { MemberGalleryRail } from '@/components/members/MemberGalleryRail'
 import { publicPlaceProfileHref } from '@/lib/skill-place-link'
 import { RESOURCE_KINDS } from '@/lib/resource-constants'
 import { SKILL_REGISTER_LABELS } from '@/lib/skill-constants'
@@ -137,17 +138,22 @@ export function SkillFicheContent({
               {selected.profile_views_30d > 1 ? 's' : ''} de fiche sur 30 jours
             </p>
           )}
-          {(selected.scope === 'mandala' || selected.is_me) && (
+          {(selected.is_me || selected.scope === 'mandala') && (
             <SkillFicheShare
               userId={selected.user_id}
               displayName={selected.display_name || selected.pseudo}
               shareTitle={selected.is_me ? 'Ma fiche Mandala' : undefined}
               canSharePublic={selected.scope === 'mandala'}
+              alwaysShow={selected.is_me}
               compact
             />
           )}
         </div>
       </header>
+
+      {(selected.gallery_images?.length ?? 0) > 0 && (
+        <MemberGalleryRail images={selected.gallery_images ?? []} label="Ambiance / activité" />
+      )}
 
       {(selected.pro_modalities || selected.pro_service_area || selected.pro_external_url) && (
         <section className="space-y-1 rounded-xl border border-violet-900/40 bg-violet-950/20 px-4 py-3 text-sm text-slate-300">

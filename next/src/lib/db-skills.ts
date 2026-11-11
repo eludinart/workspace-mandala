@@ -33,6 +33,8 @@ import {
   practicePlaceLabels,
   type PracticePlace,
 } from './practice-locations'
+import { listUserGalleryImages, userHasPortraitPhoto } from './db-user-gallery'
+import { portraitRequiredMessage, skillScopeRequiresPortrait } from './user-gallery-images'
 
 function applyProFlags(card: SkillCard, flags: ProDirectoryFlags | undefined): void {
   if (!flags) return
@@ -138,6 +140,8 @@ export type SkillCard = {
   practice_locations?: string[]
   /** Détail lieux d’exercice pour la carte (GPS éventuel). */
   practice_places?: PracticePlace[]
+  /** Photos ambiance (0–2), fiche ouverte seulement — pas listes. */
+  gallery_images?: string[]
 }
 
 export type SkillNote = {
@@ -444,6 +448,12 @@ export type SkillProfileInput = {
 
 export async function saveMySkillProfile(userId: number, input: SkillProfileInput): Promise<SkillProfile> {
   await ensureSkillTables()
+  if (skillScopeRequiresPortrait(input.scope)) {
+    const hasPortrait = await userHasPortraitPhoto(userId)
+    if (!hasPortrait) {
+      throw Object.assign(new Error(portraitRequiredMessage()), { status: 400 })
+    }
+  }
   const mine = await listCommunitiesForUser(userId)
   const mineIds = new Set(mine.map((c) => c.id))
   const placeIds =
@@ -798,6 +808,7 @@ export async function getPublicSkillCard(subjectId: number): Promise<SkillCard |
     skillsVisible: true,
     resources: [],
   })
+  card.gallery_images = await listUserGalleryImages(subjectId)
   const proFlags = await getProBoostFlagsForUsers([subjectId])
   applyProFlags(card, proFlags.get(subjectId))
   void recordSkillProfileView(subjectId, null).catch(() => {})
@@ -838,6 +849,9 @@ export async function getVisibleSkillCard(viewerId: number, subjectId: number): 
       summary: r.summary,
     })),
   })
+  if (skillsVisible || viewerId === subjectId) {
+    card.gallery_images = await listUserGalleryImages(subjectId)
+  }
   card.shares_place = memberShares
   card.shared_place_slug = shared?.slug ?? null
   const proFlags = await getProBoostFlagsForUsers([subjectId])

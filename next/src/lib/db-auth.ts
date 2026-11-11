@@ -16,6 +16,12 @@ import {
   validatePersonName,
 } from './mandala-display-name'
 import { emitProductEvent, touchSessionDay } from './db-product-events'
+import {
+  listUserGalleryImages,
+  readSkillScopeRaw,
+  replaceUserGalleryImages,
+} from './db-user-gallery'
+import { portraitRequiredMessage, skillScopeRequiresPortrait } from './user-gallery-images'
 
 /** Crée mdl_users, mdl_usermeta, mdl_mandala_app_roles si absentes. */
 export async function ensureAuthTables(): Promise<void> {
@@ -232,6 +238,7 @@ async function appendProfileMeta(userId: number, out: Record<string, unknown>): 
   ;(out as Record<string, unknown>).bio = meta.mdl_bio || null
   ;(out as Record<string, unknown>).avatar = meta.mdl_avatar || null
   ;(out as Record<string, unknown>).avatar_emoji = meta.mdl_avatar_emoji || null
+  ;(out as Record<string, unknown>).gallery_images = await listUserGalleryImages(userId)
   ;(out as Record<string, unknown>).profile_public = (meta.mdl_profile_public ?? '') === '1'
   ;(out as Record<string, unknown>).points_de_rosee = parseInt(meta.mdl_points_de_rosee ?? '5', 10)
   ;(out as Record<string, unknown>).avatar_graine_id = meta.mdl_avatar_graine_id || null
@@ -611,6 +618,10 @@ export async function updateProfile(
   if (Object.prototype.hasOwnProperty.call(body, 'avatar')) {
     const avatar = body.avatar
     if (avatar === null || avatar === '') {
+      const scope = await readSkillScopeRaw(userId)
+      if (skillScopeRequiresPortrait(scope)) {
+        throw Object.assign(new Error(portraitRequiredMessage()), { status: 400 })
+      }
       await upsertUsermeta(userId, 'mdl_avatar', '')
     } else if (typeof avatar === 'string' && /^data:image\/(jpeg|png|webp|gif);base64,/i.test(avatar)) {
       const raw = Buffer.from(avatar.replace(/^data:image\/\w+;base64,/, ''), 'base64')
@@ -624,6 +635,9 @@ export async function updateProfile(
     } else if (typeof avatar === 'string' && avatar.length > 0) {
       throw new Error('Format de photo non supporté')
     }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'gallery_images')) {
+    await replaceUserGalleryImages(userId, body.gallery_images)
   }
   if (Object.prototype.hasOwnProperty.call(body, 'avatar_emoji')) {
     const emoji = String(body.avatar_emoji ?? '').trim().slice(0, 8)

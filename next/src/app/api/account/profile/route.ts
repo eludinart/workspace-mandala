@@ -24,10 +24,20 @@ export async function GET(req: NextRequest) {
 
 function profileJsonResponse(user: Awaited<ReturnType<typeof updateProfile>>) {
   // Ne pas renvoyer le base64 dans la réponse POST (souvent > 500 Ko → échec client / 500).
-  const { avatar: _a, ...rest } = user as Record<string, unknown> & { avatar?: string | null }
+  const {
+    avatar: _a,
+    gallery_images: gallery,
+    ...rest
+  } = user as Record<string, unknown> & {
+    avatar?: string | null
+    gallery_images?: string[]
+  }
+  const galleryCount = Array.isArray(gallery) ? gallery.length : 0
   return NextResponse.json({
     ...rest,
     has_avatar: !!(user.avatar && String(user.avatar).length > 0),
+    has_gallery: galleryCount > 0,
+    gallery_count: galleryCount,
   })
 }
 
