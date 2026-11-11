@@ -74,17 +74,17 @@ export function pilotageDrillTitle(params: {
     case 'registrations':
       return `Inscriptions (${days} j)`
     case 'joins':
-      return `Joins — rejoindre un lieu (${days} j)`
+      return `Rejoins un lieu (${days} j)`
     case 'continue_without_place':
       return 'Continuer sans lieu'
     case 'active_24h':
-      return 'Actifs (dernières 24 h)'
+      return 'Vus (dernières 24 h)'
     case 'dau':
-      return 'DAU — visiteurs uniques aujourd’hui'
+      return 'Actifs du jour'
     case 'wau':
-      return 'WAU — visiteurs uniques 7 j'
+      return 'Actifs 7 j'
     case 'mau':
-      return 'MAU — visiteurs uniques 30 j'
+      return 'Actifs 30 j'
     case 'funnel_registered':
       return `Funnel — inscrits (${days} j)`
     case 'funnel_place':
@@ -97,7 +97,7 @@ export function pilotageDrillTitle(params: {
       return `Funnel — actifs ≤ J+7 (${days} j)`
     case 'series_day': {
       const m =
-        metric === 'joins' ? 'Joins' : metric === 'dau' ? 'DAU' : 'Inscriptions'
+        metric === 'joins' ? 'Rejoins' : metric === 'dau' ? 'Actifs' : 'Inscriptions'
       return `${m} — ${day ?? 'jour'}`
     }
     case 'place':
