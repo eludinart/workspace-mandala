@@ -166,8 +166,8 @@ export function buildProductAlerts(params: {
       id: 'pilotage-zero-dau',
       level: 'info',
       source: 'system',
-      title: 'Aucun DAU aujourd’hui',
-      detail: 'Pas encore de session journalière (heartbeat) sur le jour civil Paris.',
+      title: 'Aucun actif aujourd’hui',
+      detail: 'Pas encore de connexion enregistrée sur le jour civil Paris.',
       href: '/app?page=admin&adminTab=pilotage',
     })
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { adminApi, type AdminManagedUser } from '@/api/admin'
 import { managerApi } from '@/api/manager'
 import { ApiError } from '@/lib/api-client'
@@ -103,6 +104,20 @@ export function AdminUserSheet({
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showRemoveConfirm) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [onClose, showRemoveConfirm])
 
   const saveProfile = async () => {
     setSaving(true)
@@ -264,8 +279,10 @@ export function AdminUserSheet({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" role="dialog" aria-modal="true">
+  if (typeof document === 'undefined') return null
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex justify-end bg-black/50" role="dialog" aria-modal="true">
       <button type="button" className="flex-1" aria-label="Fermer" onClick={onClose} />
       <aside className="w-full max-w-md h-full overflow-y-auto border-l border-slate-800 bg-slate-900 shadow-xl flex flex-col">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-3">
@@ -595,6 +612,7 @@ export function AdminUserSheet({
           onConfirm={() => void confirmRemove()}
         />
       )}
-    </div>
+    </div>,
+    document.body
   )
 }

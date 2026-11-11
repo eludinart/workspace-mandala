@@ -120,11 +120,22 @@ function userLabel(r: RowDataPacket): string | null {
   )
 }
 
+function normalizeAt(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`
+  }
+  const s = String(value).trim()
+  return s || null
+}
+
 function mapUserRows(rows: RowDataPacket[]): PilotageDrillItem[] {
   return rows.map((r) => ({
     user_id: r.user_id != null ? Number(r.user_id) : r.ID != null ? Number(r.ID) : null,
     label: userLabel(r),
-    at: r.at != null ? String(r.at) : r.user_registered != null ? String(r.user_registered) : null,
+    at: normalizeAt(r.at ?? r.user_registered),
     community_id: r.community_id != null ? Number(r.community_id) : null,
     community_name: r.community_name != null ? String(r.community_name) : null,
     meta: r.meta != null ? String(r.meta) : null,

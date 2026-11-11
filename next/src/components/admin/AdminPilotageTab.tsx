@@ -1,10 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { adminApi, type AdminPilotageDashboard } from '@/api/admin'
 import { ApiError } from '@/lib/api-client'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import type { PilotageDrillKind, PilotageSeriesMetric } from '@/lib/db-admin-pilotage-drill'
+import { formatMandalaDateTime } from '@/lib/format-datetime'
 
 type DrillState = {
   kind: PilotageDrillKind
@@ -118,6 +120,22 @@ export function AdminPilotageTab({
     const t = setInterval(() => void load({ soft: true }), 60_000)
     return () => clearInterval(t)
   }, [load])
+
+  // Tiroir au-dessus du header (z-50) : sinon le chrome reste clair et le centre grisé
+  // paraît « passé dessous », contenu inaccessible.
+  useEffect(() => {
+    if (!drill || typeof document === 'undefined') return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrill(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [drill])
 
   const openDrill = useCallback(
     async (state: DrillState, append = false) => {
@@ -259,7 +277,7 @@ export function AdminPilotageTab({
                     kind: 'registrations' as const,
                   },
                   {
-                    label: `Joins (${days} j)`,
+                    label: `Rejoins (${days} j)`,
                     value: data.kpis.joins,
                     kind: 'joins' as const,
                   },
@@ -269,23 +287,44 @@ export function AdminPilotageTab({
                     kind: 'continue_without_place' as const,
                   },
                   {
-                    label: 'Actifs 24 h',
+                    label: 'Vus (24 h)',
                     value: data.kpis.active_24h,
                     kind: 'active_24h' as const,
+                    hint: 'Dernière présence enregistrée sur 24 h',
                   },
-                  { label: 'DAU', value: data.kpis.dau, kind: 'dau' as const },
-                  { label: 'WAU', value: data.kpis.wau, kind: 'wau' as const },
-                  { label: 'MAU', value: data.kpis.mau, kind: 'mau' as const },
+                  {
+                    label: 'Actifs du jour',
+                    value: data.kpis.dau,
+                    kind: 'dau' as const,
+                    hint: 'Personnes connectées aujourd’hui (jour Paris)',
+                  },
+                  {
+                    label: 'Actifs 7 j',
+                    value: data.kpis.wau,
+                    kind: 'wau' as const,
+                    hint: 'Personnes connectées au moins une fois sur 7 jours',
+                  },
+                  {
+                    label: 'Actifs 30 j',
+                    value: data.kpis.mau,
+                    kind: 'mau' as const,
+                    hint: 'Personnes connectées au moins une fois sur 30 jours',
+                  },
                 ] as const
               ).map((k) => (
                 <button
-                  key={k.label}
+                  key={k.kind}
                   type="button"
-                  className={clickableCard}
+                  title={'hint' in k ? k.hint : undefined}
+                  className={`${clickableCard} min-h-[4.25rem]`}
                   onClick={() => void openDrill({ kind: k.kind })}
                 >
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">{k.label}</p>
-                  <p className="text-lg font-semibold text-slate-100 tabular-nums">{k.value}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500 leading-tight">
+                    {k.label}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-100 tabular-nums leading-none">
+                    {k.value}
+                  </p>
                 </button>
               ))}
             </div>
@@ -313,19 +352,18 @@ export function AdminPilotageTab({
               </button>
             </div>
             <p className="text-xs text-slate-400">
-              Inscriptions, rejoindre un lieu (joins) et visiteurs uniques (DAU) par jour civil
-              Paris. Cliquez un chiffre pour la liste.
+              Inscriptions, rejoindre un lieu, et personnes connectées (jour Paris). Cliquez un
+              chiffre pour la liste.
             </p>
             <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-600" /> Inscriptions
-                (I)
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-600" /> Joins (J)
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-sky-600" /> Rejoins
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" /> DAU (D)
+                <span className="inline-block h-2.5 w-2.5 rounded-sm bg-violet-600" /> Actifs
               </span>
             </div>
             {seriesAllZero && (
@@ -638,128 +676,140 @@ export function AdminPilotageTab({
         </>
       )}
 
-      {drill && (
-        <div className="fixed inset-0 z-40 flex justify-end bg-black/40" role="dialog">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-default"
-            aria-label="Fermer"
-            onClick={() => setDrill(null)}
-          />
-          <div className="relative z-10 flex h-full w-full max-w-md flex-col border-l border-slate-700 bg-slate-950 shadow-xl">
-            <div className="flex items-start gap-2 border-b border-slate-800 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] uppercase tracking-wide text-slate-500">Détail</p>
-                <h3 className="text-base font-medium text-slate-100 truncate">{drillTitle}</h3>
+      {drill &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[70] flex justify-end bg-black/50"
+            role="dialog"
+            aria-modal="true"
+            aria-label={drillTitle || 'Détail pilotage'}
+          >
+            <button
+              type="button"
+              className="absolute inset-0 cursor-default"
+              aria-label="Fermer le détail"
+              onClick={() => setDrill(null)}
+            />
+            <div className="relative z-10 flex h-full w-full max-w-md min-h-0 flex-col border-l border-slate-700 bg-slate-950 shadow-2xl">
+              <div className="shrink-0 flex items-start gap-2 border-b border-slate-800 px-4 py-3 bg-slate-950">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Détail</p>
+                  <h3 className="text-base font-medium text-slate-100 truncate">{drillTitle}</h3>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300"
+                  onClick={() => setDrill(null)}
+                >
+                  Fermer
+                </button>
               </div>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300"
-                onClick={() => setDrill(null)}
-              >
-                Retour
-              </button>
-            </div>
-            {drill.kind === 'series_day' && (
-              <div className="flex gap-1 border-b border-slate-800 px-4 py-2">
-                {(
-                  [
-                    ['registrations', 'Inscriptions'],
-                    ['joins', 'Joins'],
-                    ['dau', 'DAU'],
-                  ] as const
-                ).map(([m, label]) => (
+              {drill.kind === 'series_day' && (
+                <div className="shrink-0 flex gap-1 border-b border-slate-800 px-4 py-2 bg-slate-950">
+                  {(
+                    [
+                      ['registrations', 'Inscriptions'],
+                      ['joins', 'Rejoins'],
+                      ['dau', 'Actifs'],
+                    ] as const
+                  ).map(([m, label]) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`rounded-lg px-2 py-1 text-[11px] border ${
+                        (drill.metric ?? seriesMetric) === m
+                          ? 'border-violet-500 bg-violet-600/15 text-slate-100'
+                          : 'border-slate-700 text-slate-400'
+                      }`}
+                      onClick={() => {
+                        setSeriesMetric(m)
+                        void openDrill({ ...drill, metric: m })
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-3 space-y-2">
+                {drillMsg && <p className="text-sm text-amber-700">{drillMsg}</p>}
+                {drillLoading && drillItems.length === 0 && (
+                  <p className="text-sm text-slate-400">Chargement…</p>
+                )}
+                {!drillLoading && drillItems.length === 0 && !drillMsg && (
+                  <p className="text-sm text-slate-500">Aucun élément.</p>
+                )}
+                {drillItems.map((item, i) => {
+                  const title =
+                    (item.label && item.label.trim()) ||
+                    (item.user_id != null ? `Personne #${item.user_id}` : null) ||
+                    item.community_name ||
+                    '—'
+                  return (
                   <button
-                    key={m}
+                    key={`${item.user_id}-${item.community_id}-${item.at}-${i}`}
                     type="button"
-                    className={`rounded-lg px-2 py-1 text-[11px] border ${
-                      (drill.metric ?? seriesMetric) === m
-                        ? 'border-violet-500 text-violet-100'
-                        : 'border-slate-700 text-slate-400'
-                    }`}
+                    className="shrink-0 w-full rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2.5 text-left text-sm text-slate-200 hover:border-violet-600/50"
                     onClick={() => {
-                      setSeriesMetric(m)
-                      void openDrill({ ...drill, metric: m })
+                      if (item.user_id != null) {
+                        setSelectedUserId(item.user_id)
+                      } else if (item.community_id != null) {
+                        onOpenPlaces?.(item.community_id)
+                        setDrill(null)
+                      }
                     }}
                   >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-              {drillMsg && <p className="text-sm text-amber-200">{drillMsg}</p>}
-              {drillLoading && drillItems.length === 0 && (
-                <p className="text-sm text-slate-400">Chargement…</p>
-              )}
-              {!drillLoading && drillItems.length === 0 && !drillMsg && (
-                <p className="text-sm text-slate-500">Aucun élément.</p>
-              )}
-              {drillItems.map((item, i) => (
-                <button
-                  key={`${item.user_id}-${item.community_id}-${item.at}-${i}`}
-                  type="button"
-                  className="w-full rounded-lg border border-slate-800 px-3 py-2 text-left text-sm text-slate-200 hover:border-violet-600/50"
-                  onClick={() => {
-                    if (item.user_id != null) {
-                      setSelectedUserId(item.user_id)
-                    } else if (item.community_id != null) {
-                      onOpenPlaces?.(item.community_id)
-                      setDrill(null)
-                    }
-                  }}
-                >
-                  <div className="font-medium">
-                    {item.label ??
-                      (item.user_id != null
-                        ? `#${item.user_id}`
-                        : item.community_name ?? '—')}
-                  </div>
-                  <div className="mt-0.5 text-[11px] text-slate-500">
-                    {item.at && <span className="tabular-nums">{item.at}</span>}
-                    {item.community_name && item.user_id != null && (
-                      <span className="ml-2">· {item.community_name}</span>
+                    <div className="font-medium break-words">{title}</div>
+                    <div className="mt-0.5 text-[11px] text-slate-500 break-words">
+                      {item.at && (
+                        <span className="tabular-nums">{formatMandalaDateTime(item.at)}</span>
+                      )}
+                      {item.community_name && item.user_id != null && (
+                        <span className="ml-2">· {item.community_name}</span>
+                      )}
+                      {item.meta && <span className="ml-2">· {item.meta}</span>}
+                    </div>
+                    {item.user_id != null && (
+                      <span className="mt-1 inline-block text-[10px] text-violet-600">
+                        Fiche personne →
+                      </span>
                     )}
-                    {item.meta && <span className="ml-2">· {item.meta}</span>}
-                  </div>
-                  {item.user_id != null && (
-                    <span className="mt-1 inline-block text-[10px] text-violet-300">
-                      Fiche personne →
-                    </span>
-                  )}
-                  {item.user_id == null && item.community_id != null && (
-                    <span className="mt-1 inline-block text-[10px] text-violet-300">
-                      Ouvrir le lieu →
-                    </span>
-                  )}
-                </button>
-              ))}
-              {drillCursor && (
-                <button
-                  type="button"
-                  disabled={drillLoading}
-                  className="w-full rounded-lg border border-slate-700 py-2 text-xs text-slate-300 hover:bg-slate-900 disabled:opacity-50"
-                  onClick={() => drill && void openDrill(drill, true)}
-                >
-                  {drillLoading ? 'Chargement…' : 'Charger plus'}
-                </button>
-              )}
-              {drill.kind === 'place' && drill.community_id != null && (
-                <button
-                  type="button"
-                  className="w-full rounded-lg border border-violet-500/40 py-2 text-xs text-slate-100 hover:bg-violet-600/10"
-                  onClick={() => {
-                    onOpenPlaces?.(drill.community_id)
-                    setDrill(null)
-                  }}
-                >
-                  Ouvrir dans Lieux & communautés →
-                </button>
-              )}
+                    {item.user_id == null && item.community_id != null && (
+                      <span className="mt-1 inline-block text-[10px] text-violet-600">
+                        Ouvrir le lieu →
+                      </span>
+                    )}
+                  </button>
+                  )
+                })}
+                {drillCursor && (
+                  <button
+                    type="button"
+                    disabled={drillLoading}
+                    className="w-full rounded-lg border border-slate-700 py-2 text-xs text-slate-300 hover:bg-slate-900 disabled:opacity-50"
+                    onClick={() => drill && void openDrill(drill, true)}
+                  >
+                    {drillLoading ? 'Chargement…' : 'Charger plus'}
+                  </button>
+                )}
+                {drill.kind === 'place' && drill.community_id != null && (
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border border-violet-500/40 py-2 text-xs text-slate-100 hover:bg-violet-600/10"
+                    onClick={() => {
+                      onOpenPlaces?.(drill.community_id)
+                      setDrill(null)
+                    }}
+                  >
+                    Ouvrir dans Lieux & communautés →
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {selectedUserId != null && (
         <AdminUserSheet
