@@ -747,6 +747,24 @@ async function readBio(userId: number): Promise<string> {
   return String(rows[0]?.meta_value ?? '').trim()
 }
 
+async function readBiosForUsers(userIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>()
+  const ids = [...new Set(userIds.filter((id) => id > 0))]
+  if (!ids.length) return out
+  const pool = getPool()
+  const placeholders = ids.map(() => '?').join(',')
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    `SELECT user_id, meta_value FROM ${table('usermeta')}
+     WHERE meta_key = 'mdl_bio' AND user_id IN (${placeholders})`,
+    ids
+  )
+  for (const row of rows ?? []) {
+    const bio = String(row.meta_value ?? '').trim()
+    if (bio) out.set(Number(row.user_id), bio)
+  }
+  return out
+}
+
 async function readSharedBio(userId: number, viewerId: number): Promise<string> {
   const pool = getPool()
   const tMeta = table('usermeta')
@@ -881,6 +899,7 @@ export async function listSkillDirectory(params: {
   const tagKey = skillLabelKey(params.tag ?? '')
   const identities = await displayIdentity(userIds)
   const proFlags = await getProBoostFlagsForUsers(userIds)
+  const bios = await readBiosForUsers(userIds)
   const cards: SkillCard[] = []
 
   for (const userId of userIds) {
@@ -889,6 +908,7 @@ export async function listSkillDirectory(params: {
     if (tagKey && !profile.tags.some((t) => skillLabelKey(t.label) === tagKey)) continue
     const identity = identities.get(userId)
     if (!identity) continue
+    const bio = bios.get(userId) ?? ''
     if (q) {
       const hay = [
         identity.pseudo,
@@ -896,6 +916,7 @@ export async function listSkillDirectory(params: {
         profile.offer_text,
         profile.seek_text,
         profile.frame_text,
+        bio,
         profile.residence_city,
         ...practicePlaceLabels(profile.practice_locations),
         ...profile.tags.map((t) => t.label),
@@ -912,7 +933,7 @@ export async function listSkillDirectory(params: {
       : params.view === 'mandala'
         ? toPlaceRefs(memberships)
         : profile.places.filter((p) => viewerPlaceIds.has(p.id))
-    const card = cardFromProfile(profile, identity, params.viewerId, places)
+    const card = cardFromProfile(profile, identity, params.viewerId, places, { bio })
     card.shares_place = params.viewerId !== userId && !!shared
     card.shared_place_slug = shared?.slug ?? null
     applyProFlags(card, proFlags.get(userId))

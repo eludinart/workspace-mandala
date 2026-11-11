@@ -267,13 +267,17 @@ export function SkillsDirectory({
   useEffect(() => {
     if (!initialUserId) return
     setSelectedId(initialUserId)
-    const t = window.setTimeout(() => {
-      document
-        .getElementById('annuaire-fiche')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 80)
-    return () => window.clearTimeout(t)
   }, [initialUserId])
+
+  useEffect(() => {
+    if (!selectedId || typeof document === 'undefined') return
+    const prev = document.body.style.overflow
+    const isMobileSheet = window.matchMedia('(max-width: 1023px)').matches
+    if (isMobileSheet) document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [selectedId])
 
   useEffect(() => {
     if (selectedId == null || variant !== 'app') return
@@ -723,7 +727,7 @@ export function SkillsDirectory({
       {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] items-start">
-        <ul className={`grid min-w-0 gap-3 ${selected ? 'order-2 lg:order-1' : ''}`}>
+        <ul className="grid min-w-0 gap-3 lg:order-1">
           {!loading && !refreshing && visible.length === 0 && (
             <li className="sm:col-span-2 rounded-2xl border border-dashed border-slate-800 p-8 text-center text-sm text-slate-500">
               Aucune fiche ne correspond. Les personnes choisissent elles-mêmes d’apparaître ici.
@@ -782,9 +786,9 @@ export function SkillsDirectory({
                       )}
                     </div>
                   </div>
-                  {(card.pro_tagline || card.offer_text) && (
+                  {(card.bio || card.pro_tagline || card.offer_text) && (
                     <p className="min-w-0 text-sm leading-relaxed text-slate-400 line-clamp-3 break-words">
-                      {(card.pro_tagline || card.offer_text || '')
+                      {(card.bio || card.pro_tagline || card.offer_text || '')
                         .replace(/\s+/g, ' ')
                         .trim()}
                     </p>
@@ -807,15 +811,27 @@ export function SkillsDirectory({
 
         <article
           id="annuaire-fiche"
-          className={`relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] scroll-mt-24 ${
-            selected ? 'order-1 lg:order-2' : 'order-2'
+          className={`min-w-0 border border-slate-800 bg-slate-900 scroll-mt-24 ${
+            selected
+              ? 'fixed inset-0 z-[70] overflow-y-auto p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 lg:relative lg:inset-auto lg:z-10 lg:overflow-hidden lg:rounded-3xl lg:p-7 lg:min-h-[16rem] order-2'
+              : 'relative z-10 hidden lg:block overflow-hidden rounded-3xl p-5 sm:p-7 min-h-[16rem] order-2'
           } ${selected?.pro_verified ? 'm-pro-card' : ''}`}
         >
           {!selected && (
             <p className="text-sm text-slate-500">Sélectionnez une personne pour lire sa fiche.</p>
           )}
           {selected && (
-            <div className="space-y-7">
+            <div className="space-y-7 max-w-3xl mx-auto lg:max-w-none">
+              <div className="sticky top-0 z-10 -mx-4 sm:-mx-6 lg:mx-0 px-4 sm:px-6 lg:px-0 py-2 mb-1 flex items-center justify-between gap-3 bg-slate-900/95 backdrop-blur border-b border-slate-800 lg:static lg:border-0 lg:bg-transparent lg:backdrop-blur-none lg:py-0 lg:mb-0">
+                <p className="text-xs uppercase tracking-wider text-slate-500 lg:hidden">Fiche</p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-slate-600 text-slate-200 hover:bg-slate-800 lg:hidden"
+                >
+                  Fermer
+                </button>
+              </div>
               <header className="flex items-start gap-4">
                 <UserAvatar
                   avatar={selected.avatar}

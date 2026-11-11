@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { ChannelMessage } from '@/store/useSocialStore'
 import type { MessageReactionSummary } from '@/lib/message-reactions'
 import { MESSAGE_REACTION_EMOJIS } from '@/lib/message-reactions'
@@ -363,6 +364,9 @@ function ReactionChip({
   onToggle: () => void
 }) {
   const [open, setOpen] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [panelStyle, setPanelStyle] = useState<CSSProperties>({})
   const count = reaction.userIds.length
   const namesLabel = reactionNamesLabel(reaction, meId)
   const people =
@@ -372,9 +376,46 @@ function ReactionChip({
       display_name: meId != null && id === meId ? 'Vous' : `Membre #${id}`,
     }))
 
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return
+    const pad = 8
+    const width = Math.min(288, window.innerWidth - pad * 2)
+    const rect = btnRef.current.getBoundingClientRect()
+    const panelH = panelRef.current?.offsetHeight ?? 180
+    let left = rect.left
+    if (left + width > window.innerWidth - pad) left = window.innerWidth - pad - width
+    if (left < pad) left = pad
+    const spaceAbove = rect.top - pad
+    const spaceBelow = window.innerHeight - rect.bottom - pad
+    const placeAbove = spaceAbove >= panelH || spaceAbove >= spaceBelow
+    const top = placeAbove
+      ? Math.max(pad, rect.top - panelH - 6)
+      : Math.min(window.innerHeight - pad - panelH, rect.bottom + 6)
+    setPanelStyle({ position: 'fixed', top, left, width, zIndex: 80 })
+  }, [open, people.length])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    const onPointer = (e: PointerEvent) => {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || panelRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onPointer)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onPointer)
+    }
+  }, [open])
+
   return (
     <div className="relative">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-sm border transition-colors ${
@@ -389,33 +430,38 @@ function ReactionChip({
         <span aria-hidden>{reaction.emoji}</span>
         {count > 1 && <span className="text-[10px] text-slate-400">{count}</span>}
       </button>
-      {open && (
-        <div
-          role="dialog"
-          className="absolute z-20 bottom-full left-0 mb-1 min-w-[10rem] max-w-[16rem] rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 shadow-xl"
-        >
-          <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
-            {reaction.emoji} · {count} réaction{count > 1 ? 's' : ''}
-          </p>
-          <ul className="space-y-1 max-h-40 overflow-y-auto">
-            {people.map((u) => (
-              <li key={u.id} className="text-xs text-slate-200 truncate">
-                {meId != null && u.id === meId ? 'Vous' : u.display_name}
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            onClick={() => {
-              setOpen(false)
-              onToggle()
-            }}
-            className="mt-2 w-full text-[11px] rounded-lg border border-slate-700 px-2 py-1 text-slate-300 hover:bg-slate-900"
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="dialog"
+            style={panelStyle}
+            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 shadow-xl max-h-[min(50vh,18rem)] overflow-y-auto"
           >
-            {active ? 'Retirer ma réaction' : 'Réagir aussi'}
-          </button>
-        </div>
-      )}
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">
+              {reaction.emoji} · {count} réaction{count > 1 ? 's' : ''}
+            </p>
+            <ul className="space-y-1">
+              {people.map((u) => (
+                <li key={u.id} className="text-xs text-slate-200 truncate">
+                  {meId != null && u.id === meId ? 'Vous' : u.display_name}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                onToggle()
+              }}
+              className="mt-2 w-full text-[11px] rounded-lg border border-slate-700 px-2 py-1 text-slate-300 hover:bg-slate-900"
+            >
+              {active ? 'Retirer ma réaction' : 'Réagir aussi'}
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

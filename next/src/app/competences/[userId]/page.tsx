@@ -24,6 +24,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     card.places[0]?.name != null ? ` · ${card.places[0].name}` : ''
   const title = `${name}${placeHint} — compétences Mandala`
   const description =
+    card.bio?.trim().slice(0, 155) ||
     card.pro_tagline?.trim() ||
     card.offer_text?.trim().slice(0, 155) ||
     `Fiche compétences de ${name} sur le réseau Mandala${tags ? ` : ${tags}` : ''}.`
@@ -76,15 +77,16 @@ export default async function PublicSkillProfilePage({ params }: Props) {
               {card.places.map((p) => p.name).join(' · ')}
             </p>
           )}
+          {card.residence_city && (
+            <p className="text-sm text-emerald-300/90">Habite à {card.residence_city}</p>
+          )}
         </header>
 
-        {card.offer_text && (
+        {!!card.bio?.trim() && (
           <section className="space-y-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-              Ce que je peux apporter
-            </h2>
-            <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap">
-              {card.offer_text}
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Bio</h2>
+            <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap max-w-[68ch]">
+              {card.bio.trim()}
             </p>
           </section>
         )}
@@ -104,6 +106,39 @@ export default async function PublicSkillProfilePage({ params }: Props) {
                 </li>
               ))}
             </ul>
+          </section>
+        )}
+
+        {card.offer_text && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Ce que je peux apporter
+            </h2>
+            <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap">
+              {card.offer_text}
+            </p>
+          </section>
+        )}
+
+        {card.seek_text && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Ce que je cherche
+            </h2>
+            <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap">
+              {card.seek_text}
+            </p>
+          </section>
+        )}
+
+        {card.frame_text && (
+          <section className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
+              Mon cadre
+            </h2>
+            <p className="text-[15px] leading-7 text-slate-300 whitespace-pre-wrap">
+              {card.frame_text}
+            </p>
           </section>
         )}
 
