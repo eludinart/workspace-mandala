@@ -185,7 +185,7 @@ export async function ensureReturnTables(): Promise<void> {
       pool,
       `CREATE TABLE IF NOT EXISTS ${table('return_opt_ins')} (
         user_id INT NOT NULL PRIMARY KEY,
-        is_open TINYINT(1) NOT NULL DEFAULT 0,
+        is_open TINYINT(1) NOT NULL DEFAULT 1,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`
     )
@@ -667,7 +667,9 @@ export async function getReturnsOpen(userId: number): Promise<boolean> {
     `SELECT is_open FROM ${table('return_opt_ins')} WHERE user_id = ? LIMIT 1`,
     [userId]
   )
-  return Number(rows[0]?.is_open ?? 0) === 1
+  // Pas de ligne = ouvert par défaut ; opt-out explicite (is_open = 0) reste fermé.
+  if (!rows[0]) return true
+  return Number(rows[0].is_open) === 1
 }
 
 export async function setReturnsOpen(userId: number, open: boolean): Promise<boolean> {

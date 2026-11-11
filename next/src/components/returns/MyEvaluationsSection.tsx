@@ -7,7 +7,7 @@ import { WriteSlotForm } from '@/components/returns/ReturnsBlock'
 
 export function MyEvaluationsSection() {
   const [inbox, setInbox] = useState<Inbox | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [writing, setWriting] = useState<string | null>(null)

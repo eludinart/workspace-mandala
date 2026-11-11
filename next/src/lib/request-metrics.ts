@@ -111,7 +111,12 @@ export function recordApiRequest(input: {
   const path = normalizeApiPath(input.path)
   if (!path.startsWith('/api')) return
   // Ne pas compter le endpoint de métriques lui-même (poll admin).
-  if (path.startsWith('/api/admin/load') || path === '/api/health' || path === '/api/health/live') {
+  if (
+    path.startsWith('/api/admin/load') ||
+    path === '/api/health' ||
+    path === '/api/health/live' ||
+    path === '/api/public/stats'
+  ) {
     return
   }
 

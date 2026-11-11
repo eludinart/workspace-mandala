@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { communitiesApi, type PublicCommunityCard } from '@/api/communities'
+import { publicApi } from '@/api/public'
 import { useAuth } from '@/contexts/AuthContext'
 import { WallDiscoverSection } from '@/components/wall/WallDiscoverSection'
 import { PublicSiteChrome } from '@/components/landing/PublicSiteChrome'
@@ -40,6 +41,9 @@ export function PublicLandingPage() {
   const { user, loading: authLoading } = useAuth()
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
+  const [networkStats, setNetworkStats] = useState<{ places: number; people: number } | null>(
+    null
+  )
 
   const loadPlaces = useCallback(async () => {
     setLoading(true)
@@ -56,6 +60,21 @@ export function PublicLandingPage() {
   useEffect(() => {
     void loadPlaces()
   }, [loadPlaces])
+
+  useEffect(() => {
+    let cancelled = false
+    void publicApi
+      .stats()
+      .then((s) => {
+        if (!cancelled) setNetworkStats({ places: s.places ?? 0, people: s.people ?? 0 })
+      })
+      .catch(() => {
+        if (!cancelled) setNetworkStats(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const scrollToMur = useCallback(() => {
     document.getElementById('mur')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -99,7 +118,23 @@ export function PublicLandingPage() {
                 {user ? 'Ouvrir mon profil' : 'Rejoindre un lieu'}
               </Link>
             </div>
-            {!loading && places.length > 0 && (
+            {networkStats && (networkStats.places > 0 || networkStats.people > 0) && (
+              <p className="m-landing-hero-meta" aria-live="polite">
+                <span className="text-[rgb(var(--accent-400))] font-semibold">
+                  {networkStats.places}
+                </span>{' '}
+                {networkStats.places > 1 ? 'lieux' : 'lieu'}
+                <span className="mx-2 text-slate-600" aria-hidden>
+                  ·
+                </span>
+                <span className="text-[rgb(var(--accent-400))] font-semibold">
+                  {networkStats.people}
+                </span>{' '}
+                {networkStats.people > 1 ? 'personnes' : 'personne'}
+                <span className="ml-2 text-slate-500">sur le réseau</span>
+              </p>
+            )}
+            {!networkStats && !loading && places.length > 0 && (
               <p className="m-landing-hero-meta">
                 <span className="text-[rgb(var(--accent-400))] font-semibold">{places.length}</span>{' '}
                 {places.length > 1 ? 'lieux actifs' : 'lieu actif'} · fil mis à jour en continu
