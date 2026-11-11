@@ -7,7 +7,7 @@ import { ApiError } from '@/lib/api-client'
 import { AdminUserSheet } from '@/components/admin/AdminUserSheet'
 import { PilotageLoadChart } from '@/components/admin/PilotageLoadChart'
 import { PilotageSeriesChart } from '@/components/admin/PilotageSeriesChart'
-import { PILOTAGE_DAY_OPTIONS } from '@/lib/db-admin-pilotage'
+import { PILOTAGE_DAY_OPTIONS } from '@/lib/pilotage-days'
 import type { PilotageDrillKind, PilotageSeriesMetric } from '@/lib/db-admin-pilotage-drill'
 import { formatMandalaDateTime } from '@/lib/format-datetime'
 
