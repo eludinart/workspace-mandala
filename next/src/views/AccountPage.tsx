@@ -71,6 +71,9 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
   const { communities, refresh: refreshCommunities, setActiveSlug } = useCommunity()
   const { can: canDoor, loading: doorsLoading } = useFeatureDoors()
   const [showOnMembersMap, setShowOnMembersMap] = useState(false)
+  /** Évite qu’un `load()` tardif écrase un décochage / coches en cours. */
+  const mapOptInTouchedRef = useRef(false)
+  const [mapOptInSaving, setMapOptInSaving] = useState(false)
   const u = user as {
     email?: string
     name?: string
@@ -175,9 +178,11 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
         const cityRes = (await api.get('/api/members/city')) as {
           profile?: { show_on_map?: boolean }
         }
-        setShowOnMembersMap(Boolean(cityRes.profile?.show_on_map))
+        if (!mapOptInTouchedRef.current) {
+          setShowOnMembersMap(cityRes.profile?.show_on_map === true)
+        }
       } catch {
-        setShowOnMembersMap(false)
+        if (!mapOptInTouchedRef.current) setShowOnMembersMap(false)
       }
     } catch {
       setFirstName(u?.first_name ?? '')
@@ -234,6 +239,39 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
     }
   }
 
+  const persistMapOptIn = useCallback(
+    async (next: boolean, opts?: { city?: string }) => {
+      const cityPayload: { city?: string; show_on_map: boolean } = {
+        show_on_map: next,
+      }
+      const city = (opts?.city ?? location.residence_city).trim()
+      if (city) cityPayload.city = city
+      await api.put('/api/members/city', cityPayload)
+      emitMandalaMapChanged()
+    },
+    [location.residence_city]
+  )
+
+  const onToggleMapOptIn = async (next: boolean) => {
+    mapOptInTouchedRef.current = true
+    setShowOnMembersMap(next)
+    setMapOptInSaving(true)
+    setErr(null)
+    try {
+      await persistMapOptIn(next)
+      setMsg(next ? 'Visible sur la carte des membres' : 'Retiré de la carte des membres')
+    } catch (e: unknown) {
+      setShowOnMembersMap(!next)
+      setErr(
+        e instanceof ApiError
+          ? e.detail
+          : 'Impossible de mettre à jour la visibilité sur la carte'
+      )
+    } finally {
+      setMapOptInSaving(false)
+    }
+  }
+
   const save = async () => {
     setSaving(true)
     setMsg(null)
@@ -285,23 +323,26 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
             practicePlaces.some((p) => p.mode === 'address'),
           practice_locations: practicePlaces,
         })
-        try {
-          const cityPayload: { city?: string; show_on_map: boolean } = {
-            show_on_map: showOnMembersMap,
-          }
-          if (location.residence_city.trim()) {
-            cityPayload.city = location.residence_city.trim()
-          }
-          await api.put('/api/members/city', cityPayload)
-        } catch {
-          /* opt-in carte optionnel */
-        }
         emitMandalaMapChanged()
       } catch {
         /* profil identité déjà sauvé */
       }
+      // Opt-in carte : indépendant de la fiche compétences (sinon un échec skills
+      // empêchait de décocher « Apparaître sur la carte des membres »).
+      let mapSaved = true
+      try {
+        await persistMapOptIn(showOnMembersMap)
+        mapOptInTouchedRef.current = false
+      } catch (e: unknown) {
+        mapSaved = false
+        setErr(
+          e instanceof ApiError
+            ? e.detail
+            : 'Profil enregistré, mais la visibilité carte n’a pas pu être mise à jour'
+        )
+      }
       await refreshUser()
-      setMsg('Profil enregistré')
+      if (mapSaved) setMsg('Profil enregistré')
     } catch (e: unknown) {
       setErr(e instanceof ApiError ? e.detail : (e as { message?: string })?.message ?? 'Erreur')
     } finally {
@@ -546,11 +587,16 @@ export function AccountPage({ onNavigate }: { onNavigate?: MandalaNavigate }) {
               <input
                 type="checkbox"
                 checked={showOnMembersMap}
-                onChange={(e) => setShowOnMembersMap(e.target.checked)}
+                onChange={(e) => void onToggleMapOptIn(e.target.checked)}
                 className="rounded"
-                disabled={saving}
+                disabled={saving || mapOptInSaving}
               />
-              <span>Apparaître sur la carte des membres</span>
+              <span>
+                Apparaître sur la carte des membres
+                {mapOptInSaving ? (
+                  <span className="ml-2 text-xs text-slate-500">Enregistrement…</span>
+                ) : null}
+              </span>
             </label>
           )}
           <label className="flex items-center gap-2 text-sm cursor-pointer">

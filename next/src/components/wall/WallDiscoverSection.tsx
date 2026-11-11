@@ -27,6 +27,7 @@ const DEFAULT_MAP_HEIGHT =
 export function WallDiscoverSection({
   mapHeightClass = DEFAULT_MAP_HEIGHT,
   feedLimit = 24,
+  showFeed = true,
   showPlacesList = true,
   showRelier = true,
   showJoin = false,
@@ -35,9 +36,14 @@ export function WallDiscoverSection({
   onEventClick,
   onOpenProfile,
   initialSort = 'date',
+  /** Pages qui déclenchent un soft-refresh lieux (pull-to-refresh). */
+  pullRefreshPages = ['places-map'],
+  compactHeader = false,
 }: {
   mapHeightClass?: string
   feedLimit?: number
+  /** Mur d’actu sous la carte (Découvrir). Désactiver pour ne garder que carte + lieux. */
+  showFeed?: boolean
   showPlacesList?: boolean
   showRelier?: boolean
   showJoin?: boolean
@@ -46,7 +52,11 @@ export function WallDiscoverSection({
   onEventClick?: (eventId: number) => void
   onOpenProfile?: (userId: number) => void
   initialSort?: WallFeedSort
+  pullRefreshPages?: readonly string[]
+  /** Titres plus discrets (ex. onglet Annuaire). */
+  compactHeader?: boolean
 }) {
+  const pullRefreshKey = pullRefreshPages.join('|')
   const [places, setPlaces] = useState<PublicCommunityCard[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
@@ -71,14 +81,16 @@ export function WallDiscoverSection({
   }, [loadPlaces])
 
   useEffect(() => {
+    if (!pullRefreshKey) return
+    const allowed = new Set(pullRefreshKey.split('|').filter(Boolean))
     const onPull = (ev: Event) => {
       const page = (ev as CustomEvent<{ page?: string }>).detail?.page
-      if (page !== 'places-map') return
+      if (!page || !allowed.has(page)) return
       void loadPlaces({ soft: true })
     }
     window.addEventListener('mandala-pull-refresh', onPull)
     return () => window.removeEventListener('mandala-pull-refresh', onPull)
-  }, [loadPlaces])
+  }, [loadPlaces, pullRefreshKey])
 
   useEffect(() => {
     if (!selectedSlug) {
@@ -124,16 +136,24 @@ export function WallDiscoverSection({
   }, [])
 
   return (
-    <div className="space-y-10">
+    <div className={compactHeader ? 'space-y-6' : 'space-y-10'}>
       <section className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="m-landing-eyebrow mb-2">Carte</p>
-            <h2 className="text-2xl sm:text-3xl text-slate-100">Le réseau</h2>
-            <p className="text-sm text-slate-400 mt-2">
+            {!compactHeader && <p className="m-landing-eyebrow mb-2">Carte</p>}
+            <h2
+              className={
+                compactHeader
+                  ? 'text-lg sm:text-xl font-semibold text-slate-100'
+                  : 'text-2xl sm:text-3xl text-slate-100'
+              }
+            >
+              Le réseau
+            </h2>
+            <p className={`text-sm text-slate-400 ${compactHeader ? 'mt-1' : 'mt-2'}`}>
               {loading
                 ? 'Chargement…'
-                : `${places.length} lieu${places.length > 1 ? 'x' : ''} — cliquez pour explorer`}
+                : `${places.length} lieu${places.length > 1 ? 'x' : ''} — cliquez pour explorer · liens entre lieux amis`}
             </p>
           </div>
           <button
@@ -170,20 +190,24 @@ export function WallDiscoverSection({
         </div>
       </section>
 
-      <section className="min-w-0 pt-2 border-t border-slate-800/60">
-        <WallFeed
-          initialSort={initialSort}
-          limit={feedLimit}
-          onEventClick={onEventClick}
-          onOpenProfile={onOpenProfile}
-        />
-      </section>
+      {showFeed && (
+        <section className="min-w-0 pt-2 border-t border-slate-800/60">
+          <WallFeed
+            initialSort={initialSort}
+            limit={feedLimit}
+            onEventClick={onEventClick}
+            onOpenProfile={onOpenProfile}
+          />
+        </section>
+      )}
 
       {showPlacesList && places.length > 0 && (
         <section id="lieux" className="space-y-5 pt-6 border-t border-slate-800/70 scroll-mt-16">
           <div className="text-center sm:text-left space-y-2">
-            <p className="m-landing-eyebrow">Communautés</p>
-            <h2 className="text-2xl sm:text-3xl">Tous les lieux</h2>
+            {!compactHeader && <p className="m-landing-eyebrow">Communautés</p>}
+            <h2 className={compactHeader ? 'text-lg sm:text-xl font-semibold' : 'text-2xl sm:text-3xl'}>
+              Tous les lieux
+            </h2>
             <p className="text-sm text-slate-500">
               Glissez horizontalement pour parcourir les lieux.
             </p>

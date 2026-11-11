@@ -13,7 +13,8 @@ export function MemberCityPrompt() {
   const { can, loading: doorsLoading } = useFeatureDoors()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [city, setCity] = useState('')
-  const [showOnMap, setShowOnMap] = useState(true)
+  /** Suite : case décochée par défaut — opt-in explicite. */
+  const [showOnMap, setShowOnMap] = useState(false)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState(false)
 
@@ -30,7 +31,7 @@ export function MemberCityPrompt() {
       const p = res.profile ?? { city: '', show_on_map: false, prompt_done: false }
       setProfile(p)
       setCity(p.city)
-      setShowOnMap(p.prompt_done ? p.show_on_map : true)
+      setShowOnMap(p.prompt_done ? p.show_on_map : false)
       setOpen(Boolean(res.door_open) && !p.prompt_done)
     } catch {
       setOpen(false)
