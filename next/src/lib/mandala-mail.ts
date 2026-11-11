@@ -201,10 +201,43 @@ export function buildPlaceLinkRequestEmailBody(params: {
   return { subject, text }
 }
 
+const PROD_PUBLIC_ORIGIN = 'https://mandala.eludein.art'
+
+function normalizeOrigin(value: string | null | undefined): string {
+  return (value ?? '').replace(/\/$/, '').trim()
+}
+
+/** Origins that must never ship in production transactional e-mails. */
+export function isLocalDevOrigin(origin: string): boolean {
+  if (!origin) return false
+  try {
+    const host = new URL(origin).hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1'
+  } catch {
+    return /localhost|127\.0\.0\.1|0\.0\.0\.0|::1/i.test(origin)
+  }
+}
+
+/**
+ * Public site origin for links in e-mails (reset, invites, …).
+ * Prefer runtime `APP_PUBLIC_URL` (not baked by Next), then a non-localhost
+ * `NEXT_PUBLIC_APP_URL`, then the request origin. Never fall back to localhost
+ * in production — Coolify builds often bake `localhost:3002` when the build arg
+ * is missing even if the runtime env is correct.
+ */
 export function resolvePublicAppOrigin(reqOrigin?: string | null): string {
-  const configured = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '').trim()
+  const runtime = normalizeOrigin(process.env.APP_PUBLIC_URL)
+  const configured = normalizeOrigin(process.env.NEXT_PUBLIC_APP_URL)
+  const fromReq = normalizeOrigin(reqOrigin)
+
+  const candidates = [runtime, configured, fromReq].filter(Boolean)
+  const publicOrigin = candidates.find((origin) => !isLocalDevOrigin(origin))
+  if (publicOrigin) return publicOrigin
+
+  if (process.env.NODE_ENV === 'production') return PROD_PUBLIC_ORIGIN
+
+  if (runtime) return runtime
   if (configured) return configured
-  const fromReq = (reqOrigin ?? '').replace(/\/$/, '').trim()
   if (fromReq) return fromReq
-  return 'https://localhost:3002'
+  return 'http://localhost:3002'
 }

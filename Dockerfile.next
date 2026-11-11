@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 FROM node:22-slim AS next-build
 WORKDIR /app
-ARG NEXT_PUBLIC_APP_URL=http://localhost:3002
+# Prod-safe default: Coolify must still pass the real URL as build arg when possible.
+# A localhost default gets inlined by Next into forgot-password / invite e-mails.
+ARG NEXT_PUBLIC_APP_URL=https://mandala.eludein.art
 ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
