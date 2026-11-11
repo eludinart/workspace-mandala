@@ -24,7 +24,6 @@ import {
 import { ExplainCard } from '@/components/help/ExplainCard'
 import { MandalaProBadge } from '@/components/pro/MandalaProBadge'
 import type { MandalaPage } from '@/components/MandalaApp'
-import { useCommunityOptional } from '@/contexts/CommunityContext'
 import { registerPullRefreshHandler } from '@/lib/pull-refresh'
 import { onMandalaMapChanged } from '@/lib/map-changed'
 
@@ -131,28 +130,10 @@ export function SkillsDirectory({
   onEditProfile?: () => void
   pullRefreshPage?: MandalaPage
 }) {
-  const communityCtx = useCommunityOptional()
-  const communities = communityCtx?.communities ?? []
-  const communitiesLoading = communityCtx?.loading ?? false
   const [view, setView] = useState<'place' | 'mandala'>(
     peopleDirectory ? 'mandala' : lockToPlace || communitySlug ? 'place' : 'mandala'
   )
-  const [placeFilter, setPlaceFilter] = useState<'all' | 'mine' | 'unattached'>(
-    peopleDirectory ? 'mine' : 'all'
-  )
-  /** Évite d’écraser un choix manuel quand les lieux finissent de charger. */
-  const [placeFilterTouched, setPlaceFilterTouched] = useState(false)
-
-  useEffect(() => {
-    if (!peopleDirectory || !communityCtx || placeFilterTouched || communitiesLoading) return
-    setPlaceFilter(communities.length === 0 ? 'unattached' : 'mine')
-  }, [
-    peopleDirectory,
-    communityCtx,
-    placeFilterTouched,
-    communitiesLoading,
-    communities.length,
-  ])
+  const [placeFilter, setPlaceFilter] = useState<'all' | 'mine' | 'unattached'>('all')
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
@@ -488,7 +469,6 @@ export function SkillsDirectory({
                   role="tab"
                   aria-selected={placeFilter === id}
                   onClick={() => {
-                    setPlaceFilterTouched(true)
                     setPlaceFilter(id)
                     setSelectedId(null)
                   }}
