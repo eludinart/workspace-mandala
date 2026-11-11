@@ -11,6 +11,10 @@ type Props = {
   onSelect?: () => void
   /** Affiche la proposition de lien lieu → lieu (carte / Découvrir connecté). */
   showRelier?: boolean
+  /** CTA Rejoindre (accueil Explorer / hors appartenance). */
+  showJoin?: boolean
+  onJoin?: () => void
+  joinBusy?: boolean
   /** Description tronquée — adapté au carrousel landing. */
   compact?: boolean
 }
@@ -44,6 +48,9 @@ export function PlacePublicCard({
   selected,
   onSelect,
   showRelier,
+  showJoin = false,
+  onJoin,
+  joinBusy = false,
   compact = false,
 }: Props) {
   const website = place.website?.trim()
@@ -94,10 +101,32 @@ export function PlacePublicCard({
       )}
 
       <div className={`mt-4 flex flex-wrap gap-2 items-center ${compact ? 'mt-auto pt-2' : ''}`}>
+        {showJoin && place.join_mode !== 'closed' && (
+          <button
+            type="button"
+            disabled={joinBusy}
+            onClick={(e) => {
+              e.stopPropagation()
+              onJoin?.()
+            }}
+            className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white font-medium disabled:opacity-50"
+          >
+            {joinBusy ? '…' : place.join_mode === 'invite' ? 'Rejoindre (code)' : 'Rejoindre'}
+          </button>
+        )}
+        {showJoin && place.join_mode === 'closed' && (
+          <span className="inline-flex items-center text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500">
+            Adhésions fermées
+          </span>
+        )}
         {place.profile_public !== false ? (
           <Link
             href={`/lieux/${encodeURIComponent(place.slug)}`}
-            className="inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full bg-violet-600 hover:bg-violet-500 text-white font-medium"
+            className={`inline-flex items-center gap-1.5 text-xs px-4 py-2 rounded-full font-medium ${
+              showJoin
+                ? 'border border-slate-600 text-slate-200 hover:bg-slate-800'
+                : 'bg-violet-600 hover:bg-violet-500 text-white'
+            }`}
           >
             Voir le profil →
           </Link>

@@ -28,7 +28,7 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
   useEffect(() => {
     if (typeof document === 'undefined') return
     if (!active?.name) {
-      document.title = 'Mandala'
+      document.title = 'Explorer Mandala · Mandala'
       return
     }
     const pagePart = page && page !== 'home' ? ` — ${PAGE_LABELS[page]}` : ''
@@ -47,16 +47,20 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
             ? 'border-transparent hover:bg-slate-900/80 px-2 py-1.5 -ml-1'
             : 'border-slate-700/80 bg-slate-900/70 hover:border-violet-500/40 p-2.5'
         } ${className}`}
-        aria-label={`Lieu actif : ${active?.name ?? 'aucun'}. Changer de lieu${
-          otherUnread ? '. D’autres lieux ont des messages non lus' : ''
-        }`}
+        aria-label={
+          active
+            ? `Lieu actif : ${active.name}. Changer de lieu${
+                otherUnread ? '. D’autres lieux ont des messages non lus' : ''
+              }`
+            : 'Explorer Mandala. Rejoindre un lieu'
+        }
       >
         <p
           className={`uppercase tracking-widest font-semibold ${
             isHeader ? 'text-[10px] text-slate-500' : 'text-[10px] text-violet-400/90'
           }`}
         >
-          Lieu actif
+          {active ? 'Lieu actif' : 'Exploration'}
         </p>
         <div className={`flex items-center gap-2 min-w-0 ${isHeader ? 'mt-0.5' : 'mt-1.5'}`}>
           <CommunityAvatar
@@ -71,7 +75,7 @@ export function ActivePlaceBar({ page, className = '', variant = 'sidebar' }: Ac
               className={`font-semibold truncate ${isHeader ? 'text-base sm:text-lg' : 'text-sm'}`}
               style={{ color: accent }}
             >
-              {active?.name ?? 'Sans lieu'}
+              {active?.name ?? 'Explorer Mandala'}
             </p>
             <p className="text-[10px] text-slate-500 truncate">
               {active ? (

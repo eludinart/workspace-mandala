@@ -28,6 +28,10 @@ export function WallDiscoverSection({
   mapHeightClass = DEFAULT_MAP_HEIGHT,
   feedLimit = 24,
   showPlacesList = true,
+  showRelier = true,
+  showJoin = false,
+  onJoinPlace,
+  joinBusySlug = null,
   onEventClick,
   onOpenProfile,
   initialSort = 'date',
@@ -35,6 +39,10 @@ export function WallDiscoverSection({
   mapHeightClass?: string
   feedLimit?: number
   showPlacesList?: boolean
+  showRelier?: boolean
+  showJoin?: boolean
+  onJoinPlace?: (place: PublicCommunityCard) => void
+  joinBusySlug?: string | null
   onEventClick?: (eventId: number) => void
   onOpenProfile?: (userId: number) => void
   initialSort?: WallFeedSort
@@ -184,7 +192,10 @@ export function WallDiscoverSection({
             places={places}
             selectedSlug={selectedSlug}
             onSelect={setSelectedSlug}
-            showRelier
+            showRelier={showRelier}
+            showJoin={showJoin}
+            onJoinPlace={onJoinPlace}
+            joinBusySlug={joinBusySlug}
           />
         </section>
       )}

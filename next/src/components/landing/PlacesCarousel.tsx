@@ -9,6 +9,9 @@ type Props = {
   selectedSlug?: string | null
   onSelect?: (slug: string) => void
   showRelier?: boolean
+  showJoin?: boolean
+  onJoinPlace?: (place: PublicCommunityCard) => void
+  joinBusySlug?: string | null
 }
 
 export function PlacesCarousel({
@@ -16,6 +19,9 @@ export function PlacesCarousel({
   selectedSlug,
   onSelect,
   showRelier = false,
+  showJoin = false,
+  onJoinPlace,
+  joinBusySlug = null,
 }: Props) {
   const [index, setIndex] = useState(0)
   const count = places.length
@@ -94,6 +100,9 @@ export function PlacesCarousel({
                 selected={selectedSlug === p.slug}
                 onSelect={() => onSelect?.(p.slug)}
                 showRelier={showRelier}
+                showJoin={showJoin}
+                onJoin={onJoinPlace ? () => onJoinPlace(p) : undefined}
+                joinBusy={joinBusySlug === p.slug}
                 compact
               />
             </div>

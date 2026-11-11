@@ -41,7 +41,7 @@ export function useNavAccess() {
     }
 
     if (!communitiesLoading && communities.length === 0 && roleLabel === 'Membre') {
-      roleLabel = 'Sans lieu'
+      roleLabel = 'Explorer Mandala'
     }
 
     const managedCommunities = managedPlaces.map((p) => ({
