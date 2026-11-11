@@ -169,8 +169,8 @@ export function PlacePublicProfile({ place }: { place: PublicCommunityProfile })
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold">Compétences du lieu</h2>
                 <p className="text-sm text-slate-400">
-                  Les Mandala Pro endossés apparaissent en tête — une mise en avant
-                  liée à ce lieu, pas à la publicité.
+                  Membres du lieu, ou Mandala Pro endossés — filtrez selon ce que vous
+                  cherchez. La mise en avant Pro est liée à ce lieu, pas à la publicité.
                 </p>
               </div>
               <SkillsDirectory

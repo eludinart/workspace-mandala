@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   skillsApi,
@@ -75,7 +75,7 @@ export function SkillsDirectory({
   /** Annuaire des personnes, y compris sans lieu. */
   peopleDirectory?: boolean
   initialUserId?: number | null
-  /** Contrôle externe du filtre Tous / Pro / Membres (ex. sync carte). */
+  /** Contrôle externe du filtre Pro / Membres (/ Tous hors fiche lieu) — sync carte. */
   audience?: 'all' | 'pro' | 'members'
   onAudienceChange?: (audience: 'all' | 'pro' | 'members') => void
   onOpenMessages?: (userId: string, communitySlug?: string) => void
@@ -91,8 +91,10 @@ export function SkillsDirectory({
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState('')
   const [register, setRegister] = useState<SkillRegister | ''>('')
-  /** Double vision : tout l’annuaire, Mandala Pro, ou membres sans badge Pro. */
-  const [audienceInternal, setAudienceInternal] = useState<'all' | 'pro' | 'members'>('all')
+  /** Sur un lieu : défaut Membres (Tous n’a pas de sens). Sinon double vision globale. */
+  const [audienceInternal, setAudienceInternal] = useState<'all' | 'pro' | 'members'>(() =>
+    lockToPlace || (!peopleDirectory && !!communitySlug) ? 'members' : 'all'
+  )
   const audience = audienceProp ?? audienceInternal
   const setAudience = (next: 'all' | 'pro' | 'members') => {
     if (audienceProp === undefined) setAudienceInternal(next)
@@ -110,6 +112,7 @@ export function SkillsDirectory({
   const [mapMarkers, setMapMarkers] = useState<AnnuaireMapMarker[]>([])
   const [mapLoading, setMapLoading] = useState(false)
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
+  const mobileFicheScrollRef = useRef<HTMLDivElement | null>(null)
 
   /** Carte sur l’annuaire app (Ce lieu / Mandala) et sur la fiche publique d’un lieu — pas sur /competences (déjà une carte au-dessus). */
   const showMap =
@@ -117,6 +120,17 @@ export function SkillsDirectory({
 
   const placeScoped =
     lockToPlace || (variant === 'app' && !peopleDirectory && view === 'place')
+
+  /** Sur un lieu : seulement Pro / Membres — « Tous » mélange les deux sans apport. */
+  const audienceTabs = placeScoped
+    ? ([['pro', 'Mandala Pro'], ['members', 'Membres']] as const)
+    : ([['all', 'Tous'], ['pro', 'Mandala Pro'], ['members', 'Membres']] as const)
+
+  useEffect(() => {
+    if (!placeScoped || audience !== 'all') return
+    if (audienceProp === undefined) setAudienceInternal('members')
+    onAudienceChange?.('members')
+  }, [placeScoped, audience, audienceProp, onAudienceChange])
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -213,6 +227,22 @@ export function SkillsDirectory({
     return () => {
       document.body.style.overflow = prev
     }
+  }, [selectedId])
+
+  /** Au clic fiche : remonter au début (desktop) / haut de la feuille (mobile). */
+  useEffect(() => {
+    if (!selectedId || typeof document === 'undefined') return
+    const mobile = window.matchMedia('(max-width: 1023px)').matches
+    if (mobile) {
+      requestAnimationFrame(() => {
+        mobileFicheScrollRef.current?.scrollTo({ top: 0 })
+      })
+      return
+    }
+    const el = document.getElementById('annuaire-fiche')
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.focus({ preventScroll: true })
   }, [selectedId])
 
   useEffect(() => {
@@ -384,13 +414,7 @@ export function SkillsDirectory({
             role="tablist"
             aria-label="Filtrer pros et membres"
           >
-            {(
-              [
-                ['all', 'Tous'],
-                ['pro', 'Mandala Pro'],
-                ['members', 'Membres'],
-              ] as const
-            ).map(([id, label]) => (
+            {audienceTabs.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -741,7 +765,8 @@ export function SkillsDirectory({
 
         <article
           id="annuaire-fiche"
-          className={`hidden lg:block relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] order-2 scroll-mt-24 ${
+          tabIndex={-1}
+          className={`hidden lg:block relative z-10 min-w-0 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 p-5 sm:p-7 min-h-[16rem] order-2 scroll-mt-24 outline-none focus-visible:ring-2 focus-visible:ring-violet-500/60 ${
             selected?.pro_verified ? 'm-pro-card' : ''
           }`}
         >
@@ -780,7 +805,10 @@ export function SkillsDirectory({
                 Fermer
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <div
+              ref={mobileFicheScrollRef}
+              className="flex-1 min-h-0 overflow-y-auto px-4 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+            >
               <SkillFicheContent
                 selected={selected}
                 variant={variant}
