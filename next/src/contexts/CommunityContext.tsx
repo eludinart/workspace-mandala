@@ -170,3 +170,8 @@ export function useCommunity() {
   if (!ctx) throw new Error('useCommunity hors CommunityProvider')
   return ctx
 }
+
+/** Safe hors provider (ex. `/competences` public qui réutilise SkillsDirectory). */
+export function useCommunityOptional() {
+  return useContext(CommunityContext)
+}
