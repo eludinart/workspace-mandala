@@ -155,6 +155,40 @@ export const adminApi = {
     api.get(`/api/admin/pilotage?days=${days}`) as Promise<AdminPilotageDashboard>,
   pilotageExportUrl: (days: 7 | 30 | 90, kind: 'activity' | 'series') =>
     `/api/admin/pilotage/export?days=${days}&kind=${kind}`,
+  pilotageDrill: (params: {
+    kind: string
+    days?: 7 | 30 | 90
+    day?: string
+    metric?: 'registrations' | 'joins' | 'dau'
+    community_id?: number
+    alert_id?: string
+    cursor?: string | null
+    limit?: number
+  }) => {
+    const p = new URLSearchParams()
+    p.set('kind', params.kind)
+    if (params.days) p.set('days', String(params.days))
+    if (params.day) p.set('day', params.day)
+    if (params.metric) p.set('metric', params.metric)
+    if (params.community_id != null) p.set('community_id', String(params.community_id))
+    if (params.alert_id) p.set('alert_id', params.alert_id)
+    if (params.cursor) p.set('cursor', params.cursor)
+    if (params.limit) p.set('limit', String(params.limit))
+    return api.get(`/api/admin/pilotage/drill?${p}`) as Promise<{
+      ok: boolean
+      title: string
+      kind: string
+      items: Array<{
+        user_id: number | null
+        label: string | null
+        at: string | null
+        community_id: number | null
+        community_name: string | null
+        meta: string | null
+      }>
+      next_cursor: string | null
+    }>
+  },
   users: {
     get: (userId: number, communitySlug?: string) => {
       const qs = communitySlug ? `?community_slug=${encodeURIComponent(communitySlug)}` : ''

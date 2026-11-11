@@ -603,7 +603,16 @@ export function AdminPage({
         </div>
       )}
 
-      {tab === 'pilotage' && <AdminPilotageTab />}
+      {tab === 'pilotage' && (
+        <AdminPilotageTab
+          onOpenLoad={() => setTab('load')}
+          onOpenPush={() => setTab('push')}
+          onOpenPlaces={(communityId) => {
+            if (communityId != null) setFocusCommunityId(communityId)
+            setTab('places')
+          }}
+        />
+      )}
 
       {tab === 'load' && <AdminLoadTab />}
 
